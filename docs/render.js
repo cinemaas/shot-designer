@@ -1,9 +1,9 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=6b085b29";
-import { KEY_TO_FXG } from "./catalog.js?v=6b085b29";
-import * as H from "./hcw.js?v=6b085b29";
+import { FXG } from "./assets.js?v=3711bccd";
+import { KEY_TO_FXG } from "./catalog.js?v=3711bccd";
+import * as H from "./hcw.js?v=3711bccd";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -223,11 +223,20 @@ function offsetPoints(pts, off) {
   });
 }
 
+// Scenes store pictures as bare base64 with no hint of what they are; browsers
+// mostly sniff it, but a correct type is one less thing to go wrong.
+function mimeOf(b64) {
+  if (b64.startsWith("iVBORw0KGgo")) return "image/png";
+  if (b64.startsWith("R0lGOD")) return "image/gif";
+  if (b64.startsWith("UklGR")) return "image/webp";
+  return "image/jpeg";
+}
+
 function drawBackground(obj, pictures) {
   const g = el("g");
   const data = pictures[H.get(obj, "pictureUniqueID")];
   if (!data) return g;
-  const href = data.startsWith("data:") ? data : "data:image/jpeg;base64," + data;
+  const href = data.startsWith("data:") ? data : `data:${mimeOf(data)};base64,` + data;
   const img = el("image", { href, x: -400, y: -300, width: 800, height: 600 });
   g.append(img);
   // Swap in the picture's real dimensions as soon as the browser knows them.

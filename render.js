@@ -223,11 +223,20 @@ function offsetPoints(pts, off) {
   });
 }
 
+// Scenes store pictures as bare base64 with no hint of what they are; browsers
+// mostly sniff it, but a correct type is one less thing to go wrong.
+function mimeOf(b64) {
+  if (b64.startsWith("iVBORw0KGgo")) return "image/png";
+  if (b64.startsWith("R0lGOD")) return "image/gif";
+  if (b64.startsWith("UklGR")) return "image/webp";
+  return "image/jpeg";
+}
+
 function drawBackground(obj, pictures) {
   const g = el("g");
   const data = pictures[H.get(obj, "pictureUniqueID")];
   if (!data) return g;
-  const href = data.startsWith("data:") ? data : "data:image/jpeg;base64," + data;
+  const href = data.startsWith("data:") ? data : `data:${mimeOf(data)};base64,` + data;
   const img = el("image", { href, x: -400, y: -300, width: 800, height: 600 });
   g.append(img);
   // Swap in the picture's real dimensions as soon as the browser knows them.
