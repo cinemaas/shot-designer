@@ -1,18 +1,18 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=9542faad";
-import * as R from "./render.js?v=9542faad";
-import { FXG } from "./assets.js?v=9542faad";
-import * as B from "./blocking.js?v=9542faad";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=9542faad";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=9542faad";
-import { Library } from "./library.js?v=9542faad";
+import * as H from "./hcw.js?v=b6dbdcf3";
+import * as R from "./render.js?v=b6dbdcf3";
+import { FXG } from "./assets.js?v=b6dbdcf3";
+import * as B from "./blocking.js?v=b6dbdcf3";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=b6dbdcf3";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=b6dbdcf3";
+import { Library } from "./library.js?v=b6dbdcf3";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=9542faad";
+} from "./catalog.js?v=b6dbdcf3";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");

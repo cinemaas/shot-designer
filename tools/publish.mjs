@@ -24,8 +24,27 @@ const ROOT = dirname(HERE);
 const DOCS = join(ROOT, "docs");
 const SCENES = join(process.env.HOME, "Documents", "Shot Designer Scenes");
 
-const APP_FILES = ["index.html", "style.css", "app.js", "hcw.js", "render.js",
-                   "catalog.js", "assets.js", "blocking.js", "storage.js", "library.js"];
+/**
+ * Which files the app is made of, worked out by following imports from the
+ * entry point rather than kept as a list somebody has to remember to update.
+ * A hardcoded list shipped a broken site once already.
+ */
+function appFiles() {
+  const seen = new Set(["index.html", "style.css"]);
+  const queue = ["app.js"];
+  while (queue.length) {
+    const f = queue.shift();
+    if (seen.has(f)) continue;
+    seen.add(f);
+    const src = readFileSync(join(ROOT, f), "utf8");
+    for (const m of src.matchAll(/(?:from|import)\s*\(?\s*["']\.\/([\w.-]+\.js)["']/g)) {
+      if (!seen.has(m[1])) queue.push(m[1]);
+    }
+  }
+  return [...seen];
+}
+
+const APP_FILES = appFiles();
 
 const ITERATIONS = 250_000;
 const STATE = join(DOCS, ".publish-state.json");   // gitignored; makes re-publishing cheap
