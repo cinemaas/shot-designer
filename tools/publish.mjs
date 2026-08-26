@@ -108,6 +108,17 @@ for (const [f, text] of sources) {
   writeFileSync(join(DOCS, f), out);
 }
 writeFileSync(join(DOCS, "build.json"), JSON.stringify({ build, at: Date.now() }));
+
+// Belt and braces: every import in what we just staged has to resolve in docs/.
+for (const f of APP_FILES.filter((n) => n.endsWith(".js"))) {
+  const src = readFileSync(join(DOCS, f), "utf8");
+  for (const m of src.matchAll(/["']\.\/([\w.-]+\.js)(?:\?[^"']*)?["']/g)) {
+    if (!existsSync(join(DOCS, m[1]))) {
+      console.error(`\nBROKEN: ${f} imports ${m[1]}, which isn't staged.`);
+      process.exit(1);
+    }
+  }
+}
 writeFileSync(join(DOCS, ".nojekyll"), "");
 console.log(`app: ${APP_FILES.length} files -> docs/  (build ${build})`);
 
