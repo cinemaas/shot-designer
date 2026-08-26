@@ -1,0 +1,21 @@
+name = "shot-designer"
+main = "src/worker.js"
+compatibility_date = "2026-05-14"
+
+# The whole app ships to the edge, so any device just opens the URL.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[durable_objects.bindings]]
+name = "SCENE"
+class_name = "Scene"
+
+# SQLite-backed Durable Objects are the free-plan flavour.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Scene"]
+
+[vars]
+APP_NAME = "Shot Designer"

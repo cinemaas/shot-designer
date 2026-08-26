@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Shot Designer</title>
+<link rel="stylesheet" href="style.css">
+
+<div id="app">
+  <svg id="stage" tabindex="0">
+    <defs>
+      <marker id="arrowEnd" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
+      </marker>
+      <marker id="arrowStart" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="5" markerHeight="5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
+      </marker>
+    </defs>
+    <g id="world">
+      <g id="l-grid"></g>
+      <g id="l-background"></g>
+      <g id="l-set"></g>
+      <g id="l-track"></g>
+      <g id="l-prop"></g>
+      <g id="l-lighting"></g>
+      <g id="l-lines"></g>
+      <g id="l-walk"></g>
+      <g id="l-character"></g>
+      <g id="l-camera"></g>
+      <g id="l-caption"></g>
+      <g id="l-overlay"></g>
+    </g>
+    <g id="hud"></g>
+  </svg>
+
+  <button id="shotListToggle" class="chevron" title="Shot List">&#171;</button>
+  <aside id="shotList" hidden></aside>
+  <aside id="beatPanel" hidden></aside>
+
+  <div id="toolbar">
+    <div class="tb-left">
+      <button data-act="menu"      title="Menu"></button>
+      <button data-act="add"       title="Add New"></button>
+      <button data-act="label"     title="Add Label"></button>
+      <button data-act="layers"    title="Layers"></button>
+      <button data-act="undo"      title="Undo (&#8984;Z)"></button>
+      <button data-act="redo"      title="Redo (&#8679;&#8984;Z)"></button>
+      <button data-act="wall"      title="Wall Tool"></button>
+    </div>
+    <div class="tb-right">
+      <button data-act="blocking"  title="Blocking Mode (B)"></button>
+      <button data-act="templates" title="Templates"></button>
+      <button data-act="pause"     title="Pause"></button>
+      <button data-act="play"      title="Play"></button>
+      <span id="slices"></span>
+      <button data-act="collapse"  title="Hide Toolbar" class="chev">&#171;</button>
+    </div>
+  </div>
+
+  <div id="status"></div>
+  <div id="popover" hidden></div>
+  <div id="modal" hidden><div class="sheet"></div></div>
+  <div id="toast" hidden></div>
+</div>
+
+<script type="module" src="app.js"></script>
