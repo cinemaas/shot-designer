@@ -1,17 +1,17 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js";
-import * as R from "./render.js";
-import { FXG } from "./assets.js";
-import * as B from "./blocking.js";
-import { Cloud, sceneId, connectLive } from "./storage.js";
-import { Library } from "./library.js";
+import * as H from "./hcw.js?v=f3beea6b";
+import * as R from "./render.js?v=f3beea6b";
+import { FXG } from "./assets.js?v=f3beea6b";
+import * as B from "./blocking.js?v=f3beea6b";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=f3beea6b";
+import { Library } from "./library.js?v=f3beea6b";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js";
+} from "./catalog.js?v=f3beea6b";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");

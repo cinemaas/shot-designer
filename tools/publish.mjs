@@ -53,11 +53,25 @@ if (!rekey && existsSync(STATE)) {
 // --- app -------------------------------------------------------------------
 
 mkdirSync(DOCS, { recursive: true });
-for (const f of APP_FILES) {
-  writeFileSync(join(DOCS, f), readFileSync(join(ROOT, f)));
+
+// Pages caches modules for ten minutes, which is long enough to serve a mix of
+// old and new files after a publish. Stamping every import with a build id
+// derived from the contents means a changed file is always fetched fresh.
+const sources = new Map(APP_FILES.map((f) => [f, readFileSync(join(ROOT, f), "utf8")]));
+const build = crypto.createHash("sha256")
+  .update([...sources.values()].join("\0")).digest("hex").slice(0, 8);
+
+const stamp = (text) => text
+  .replace(/(from\s+["']\.\/[\w.-]+\.js)(["'])/g, `$1?v=${build}$2`)
+  .replace(/(import\(["']\.\/[\w.-]+\.js)(["'])/g, `$1?v=${build}$2`)
+  .replace(/(src="[\w.-]+\.js)(")/g, `$1?v=${build}$2`)
+  .replace(/(href="[\w.-]+\.css)(")/g, `$1?v=${build}$2`);
+
+for (const [f, text] of sources) {
+  writeFileSync(join(DOCS, f), /\.(js|html)$/.test(f) ? stamp(text) : text);
 }
 writeFileSync(join(DOCS, ".nojekyll"), "");
-console.log(`app: ${APP_FILES.length} files -> docs/`);
+console.log(`app: ${APP_FILES.length} files -> docs/  (build ${build})`);
 
 if (appOnly) {
   mkdirSync(join(DOCS, "library"), { recursive: true });
