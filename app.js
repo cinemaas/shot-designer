@@ -204,10 +204,19 @@ function declutterLabels() {
 
   const items = [];
   for (const n of nodes) {
-    let b;
-    try { b = n.getBBox(); } catch { continue; }
-    if (!b.width && !b.height) continue;
-    items.push({ n, x: b.x, y: b.y, w: b.width, h: b.height, dy: 0 });
+    // Measure the chip and the text only. The leader line runs all the way to
+    // the camera, so including it makes every label look enormous and they end
+    // up shoving each other across the frame.
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const child of n.querySelectorAll("rect, text")) {
+      let b;
+      try { b = child.getBBox(); } catch { continue; }
+      if (!b.width && !b.height) continue;
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+    }
+    if (!Number.isFinite(x0)) continue;
+    items.push({ n, x: x0, y: y0, w: x1 - x0, h: y1 - y0, dy: 0 });
   }
   items.sort((a, b) => (a.y + a.dy) - (b.y + b.dy));
 

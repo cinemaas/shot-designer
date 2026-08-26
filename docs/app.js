@@ -1,17 +1,17 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=f3beea6b";
-import * as R from "./render.js?v=f3beea6b";
-import { FXG } from "./assets.js?v=f3beea6b";
-import * as B from "./blocking.js?v=f3beea6b";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=f3beea6b";
-import { Library } from "./library.js?v=f3beea6b";
+import * as H from "./hcw.js?v=6b085b29";
+import * as R from "./render.js?v=6b085b29";
+import { FXG } from "./assets.js?v=6b085b29";
+import * as B from "./blocking.js?v=6b085b29";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=6b085b29";
+import { Library } from "./library.js?v=6b085b29";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=f3beea6b";
+} from "./catalog.js?v=6b085b29";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -204,10 +204,19 @@ function declutterLabels() {
 
   const items = [];
   for (const n of nodes) {
-    let b;
-    try { b = n.getBBox(); } catch { continue; }
-    if (!b.width && !b.height) continue;
-    items.push({ n, x: b.x, y: b.y, w: b.width, h: b.height, dy: 0 });
+    // Measure the chip and the text only. The leader line runs all the way to
+    // the camera, so including it makes every label look enormous and they end
+    // up shoving each other across the frame.
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const child of n.querySelectorAll("rect, text")) {
+      let b;
+      try { b = child.getBBox(); } catch { continue; }
+      if (!b.width && !b.height) continue;
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+    }
+    if (!Number.isFinite(x0)) continue;
+    items.push({ n, x: x0, y: y0, w: x1 - x0, h: y1 - y0, dy: 0 });
   }
   items.sort((a, b) => (a.y + a.dy) - (b.y + b.dy));
 
