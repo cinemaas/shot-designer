@@ -45,6 +45,7 @@ The point of the exercise. All of it works.
 | `⌫` | Delete |
 | Arrows | Nudge 2 units, `⇧` for 20 |
 | `[` `]` | Rotate 15° |
+| Drag box edges | Squeeze / stretch one axis (corner + `⇧` keeps the shape) |
 | `⌘S` `⇧⌘S` `⌘O` `⌘N` | Save, Save As, Open, New |
 | `⌘E` | Export PNG |
 | `⌘0` `⌘+` `⌘−` | Fit, zoom in, zoom out |
@@ -76,6 +77,13 @@ stretched to keep pointing at its camera — the scene itself is untouched. In
 blocking mode a shot label only appears when that camera is actually pointed at
 somebody who is live on the current beat, which on a real scene cuts twenty-two
 labels down to about nine.
+
+**Squeeze and stretch.** Props scale on each axis independently — a table can
+be made long and narrow without changing its depth. Selected objects get a box
+in their own rotated frame with three handles: one edge for width, one for
+depth, the corner for both (hold `⇧` on the corner to keep the shape). The
+group box stretches a whole selection the same way, and **Size…** on any prop
+takes exact dimensions in feet.
 
 **Group edits.** `⌘`-click or marquee to select several things, then right-click:
 align six ways, distribute, rotate and flip about the group centre, spread apart
@@ -137,3 +145,41 @@ your own props and lighting units, and a movable/scalable background image.
 | `storage.js` | Local folder vs cloud, and the live-room client |
 | `cloud/` | The Cloudflare Worker — see `cloud/DEPLOY.md` |
 | `app.js` | State, interaction, menus, files, export |
+
+## Online
+
+The app is hosted at **https://cinemaas.github.io/shot-designer/** — nothing to
+install, works on a phone.
+
+The whole scene library goes up with it, but a GitHub Pages site is public, so
+nothing readable is published. Every scene, every floorplan, and the list of
+scene names — which gives away episodes and locations on its own — is encrypted
+with AES-256-GCM before it leaves the Mac. The passphrase derives the key in the
+browser (PBKDF2-SHA256, 250k iterations) and never goes anywhere.
+
+```bash
+node tools/publish.mjs "your passphrase"          # everything
+node tools/publish.mjs "your passphrase" PN       # one folder
+node tools/publish.mjs --app-only                 # code only, no scenes
+git add -A && git commit -m "republish" && git push
+```
+
+Re-publishing only re-encrypts scenes whose files actually changed, so pushing
+an update is small. `--rekey` changes the passphrase and rewrites everything.
+
+Backgrounds are the reason the library is 296 MB on disk: the same floorplan
+photo is base64'd into every scene that uses it. For the hosted copy they're
+pulled out, deduplicated, and downscaled — 296 MB becomes about 57 MB. **Your
+own files are never touched.**
+
+### What works where
+
+| | On the Mac (`:8769`) | Hosted |
+|---|---|---|
+| Open, edit, draw, blocking mode | yes | yes |
+| Save back to the Scenes folder | yes | downloads the `.hcw` |
+| Live collaboration, share links | needs the Worker | needs the Worker |
+
+Editing away from the Mac gives you the scene file to drop back into the folder.
+Live collaboration and read-only crew links need the Cloudflare Worker deployed
+— `wrangler login`, then `cloud/DEPLOY.md`.

@@ -269,6 +269,20 @@ function drawSelection() {
         stroke: "#fff", "stroke-width": 1.5 / S.view.k,
         class: "handle", "data-group": "rotate",
       }));
+      const hs = 5 / S.view.k;
+      const spots = [
+        ["x", b.maxX + pad, (b.minY + b.maxY) / 2],
+        ["y", (b.minX + b.maxX) / 2, b.maxY + pad],
+        ["both", b.maxX + pad, b.maxY + pad],
+      ];
+      for (const [axis, ax, ay] of spots) {
+        g.append(R.el("rect", {
+          x: ax - hs, y: ay - hs, width: hs * 2, height: hs * 2,
+          fill: axis === "both" ? "var(--sel)" : "#fff",
+          stroke: "var(--sel)", "stroke-width": 2 / S.view.k,
+          class: "handle", "data-group": "stretch", "data-axis": axis,
+        }));
+      }
     }
   }
 
@@ -288,10 +302,14 @@ function drawSelection() {
     }
     const x = H.getNum(obj, "x"), y = H.getNum(obj, "y");
     const r = R.radiusOf(obj) + 7 / S.view.k;
-    g.append(R.el("circle", {
-      cx: x, cy: y, r, fill: "none", stroke: "var(--sel)",
-      "stroke-width": 1.5 / S.view.k, "stroke-dasharray": `${5 / S.view.k} ${4 / S.view.k}`,
-    }));
+    // Anything with a stretch box already reads as selected; a ring on top of
+    // it is just a big dashed circle in the way.
+    if (!R.hasScaler(obj)) {
+      g.append(R.el("circle", {
+        cx: x, cy: y, r, fill: "none", stroke: "var(--sel)",
+        "stroke-width": 1.5 / S.view.k, "stroke-dasharray": `${5 / S.view.k} ${4 / S.view.k}`,
+      }));
+    }
     if (R.hasRotator(obj)) {
       const a = R.angleOf(obj);
       const hx = x + Math.cos(a) * (r + 16 / S.view.k);
@@ -305,15 +323,7 @@ function drawSelection() {
         class: "handle", "data-id": id, "data-rotate": "1",
       }));
     }
-    if (R.hasScaler(obj)) {
-      const sx = x + r * 0.72, sy = y + r * 0.72;
-      g.append(R.el("rect", {
-        x: sx - 5 / S.view.k, y: sy - 5 / S.view.k,
-        width: 10 / S.view.k, height: 10 / S.view.k,
-        fill: "#fff", stroke: "var(--sel)", "stroke-width": 2 / S.view.k,
-        class: "handle", "data-id": id, "data-scale": "1",
-      }));
-    }
+    if (R.hasScaler(obj)) drawStretchBox(g, obj, id);
   }
   if (S.draft) {
     for (const p of S.draft.committed) {
@@ -351,6 +361,46 @@ function drawSelection() {
       fill: "#1f8cff18", stroke: "var(--sel)", "stroke-width": 1 / S.view.k,
     }));
   }
+}
+
+/**
+ * A box in the object's own frame with handles that squeeze one axis or both,
+ * so a table can be made long and narrow without touching its depth.
+ */
+function drawStretchBox(g, obj, id) {
+  const b = R.artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
+  if (!b.width && !b.height) return;
+  const x = H.getNum(obj, "x"), y = H.getNum(obj, "y");
+  const sx = H.getNum(obj, "objectScaleX", 1), sy = H.getNum(obj, "objectScaleY", 1);
+  const a = R.angleOf(obj);
+  const frame = R.el("g", {
+    transform: `translate(${x},${y}) rotate(${a * 180 / Math.PI}) scale(${sx},${sy})`,
+  });
+  // Handles live in art space but must not grow with the object's scale.
+  const hx = 1 / (S.view.k * Math.abs(sx) || 1);
+  const hy = 1 / (S.view.k * Math.abs(sy) || 1);
+
+  frame.append(R.el("rect", {
+    x: b.x, y: b.y, width: b.width, height: b.height,
+    fill: "none", stroke: "var(--sel)", "stroke-width": 1.2 * hx,
+    "stroke-dasharray": `${5 * hx} ${4 * hx}`, opacity: .75,
+    "vector-effect": "non-scaling-stroke",
+  }));
+
+  const spots = [
+    ["x", b.x + b.width, b.y + b.height / 2],
+    ["y", b.x + b.width / 2, b.y + b.height],
+    ["both", b.x + b.width, b.y + b.height],
+  ];
+  for (const [axis, ax, ay] of spots) {
+    frame.append(R.el("rect", {
+      x: ax - 5 * hx, y: ay - 5 * hy, width: 10 * hx, height: 10 * hy,
+      fill: axis === "both" ? "var(--sel)" : "#fff",
+      stroke: "var(--sel)", "stroke-width": 2 * hx,
+      class: "handle", "data-id": id, "data-stretch": axis,
+    }));
+  }
+  g.append(frame);
 }
 
 function applyView() {
@@ -453,6 +503,18 @@ stage.addEventListener("pointerdown", (ev) => {
   if (S.tool) return toolClick(pt, ev);
 
   const handle = ev.target.closest(".handle");
+  if (handle && handle.dataset.group === "stretch") {
+    const b = groupBounds();
+    mark("stretch group");
+    drag = { mode: "groupstretch", b, axis: handle.dataset.axis,
+      origins: selected().map(snapshotPos).map((o) => ({
+        ...o,
+        sx: H.getNum(o.obj, "objectScaleX", 1),
+        sy: H.getNum(o.obj, "objectScaleY", 1),
+      })) };
+    stage.setPointerCapture(ev.pointerId);
+    return;
+  }
   if (handle && handle.dataset.group === "rotate") {
     const b = groupBounds();
     mark("rotate group");
@@ -463,7 +525,15 @@ stage.addEventListener("pointerdown", (ev) => {
   }
   if (handle) {
     const obj = byID(handle.dataset.id);
-    if (handle.dataset.rotate) drag = { mode: "rotate", obj, start: pt };
+    if (handle.dataset.stretch) {
+      const b = R.artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
+      drag = {
+        mode: "stretch", obj, axis: handle.dataset.stretch,
+        anchor: { x: b.x + b.width, y: b.y + b.height },
+        aspect: H.getNum(obj, "objectScaleX", 1) / (H.getNum(obj, "objectScaleY", 1) || 1),
+      };
+    }
+    else if (handle.dataset.rotate) drag = { mode: "rotate", obj, start: pt };
     else if (handle.dataset.scale) drag = { mode: "scale", obj, start: pt,
       s0: H.getNum(obj, "objectScaleX", 1), r0: Math.hypot(pt.x - H.getNum(obj, "x"), pt.y - H.getNum(obj, "y")) };
     else drag = { mode: "point", obj, index: +handle.dataset.point };
@@ -551,6 +621,51 @@ stage.addEventListener("pointermove", (ev) => {
       drag.applied = want;
     }
     return;
+  }
+  if (drag.mode === "groupstretch") {
+    const b = drag.b;
+    const halfW = (b.maxX - b.minX) / 2 || 1;
+    const halfH = (b.maxY - b.minY) / 2 || 1;
+    const clamp = (v) => Math.max(0.05, Math.min(20, Math.abs(v)));
+    const fx = drag.axis === "y" ? 1 : clamp((pt.x - b.cx) / halfW);
+    const fy = drag.axis === "x" ? 1 : clamp((pt.y - b.cy) / halfH);
+    for (const o of drag.origins) {
+      if (o.pts) {
+        R.setPoints(o.obj, o.pts.map((p) => ({
+          x: round(b.cx + (p.x - b.cx) * fx),
+          y: round(b.cy + (p.y - b.cy) * fy),
+        })));
+      } else {
+        H.set(o.obj, "x", round(b.cx + (o.x - b.cx) * fx));
+        H.set(o.obj, "y", round(b.cy + (o.y - b.cy) * fy));
+        if (R.hasScaler(o.obj)) {
+          H.set(o.obj, "objectScaleX", o.sx * fx);
+          H.set(o.obj, "objectScaleY", o.sy * fy);
+        }
+      }
+    }
+    sendLiveEdit();
+    return draw();
+  }
+  if (drag.mode === "stretch") {
+    const o = drag.obj;
+    const a = -R.angleOf(o);
+    const dx = pt.x - H.getNum(o, "x"), dy = pt.y - H.getNum(o, "y");
+    const ux = dx * Math.cos(a) - dy * Math.sin(a);
+    const uy = dx * Math.sin(a) + dy * Math.cos(a);
+    const clamp = (v) => Math.max(0.05, Math.min(40, Math.abs(v)));
+    if (drag.axis !== "y" && Math.abs(drag.anchor.x) > 1) {
+      H.set(o, "objectScaleX", clamp(ux / drag.anchor.x));
+    }
+    if (drag.axis !== "x" && Math.abs(drag.anchor.y) > 1) {
+      H.set(o, "objectScaleY", clamp(uy / drag.anchor.y));
+    }
+    // Shift keeps the shape it had; without it the axes move independently.
+    if (ev.shiftKey && drag.axis === "both") {
+      H.set(o, "objectScaleY", H.getNum(o, "objectScaleX", 1) / (drag.aspect || 1));
+    }
+    sendLiveEdit();
+    return draw();
   }
   if (drag.mode === "scale") {
     const r = Math.hypot(pt.x - H.getNum(drag.obj, "x"), pt.y - H.getNum(drag.obj, "y"));
@@ -1671,6 +1786,7 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "mirror") ? "Unflip Horizontally" : "Flip Horizontally", run: () => {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
+      { label: "Size…", run: () => sizeDialog(obj) },
       { label: "Reset Size", run: () => {
         mark("size");
         H.set(obj, "objectScaleX", 1); H.set(obj, "objectScaleY", 1); draw();
@@ -1755,6 +1871,30 @@ function startFromHere(tool, obj) {
   reindex();
   toast(`Click where ${tool === "track" ? "the camera travels" : "they walk"} to`);
   draw(); syncChrome();
+}
+
+/** Type an exact size. Props are drawn to no particular scale, so this works
+ *  in feet using the same 20-units-to-the-foot the grid implies. */
+function sizeDialog(obj) {
+  const b = R.artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
+  const asFeet = (units) => (units / UNITS_PER_FOOT).toFixed(2);
+  sheet({
+    title: "Size",
+    sub: `${KEY_TO_LABEL[H.get(obj, "objectKey")] || "Object"} — across and deep, in feet.`,
+    fields: [
+      { name: "w", label: "Width", type: "text",
+        value: asFeet(b.width * H.getNum(obj, "objectScaleX", 1)) },
+      { name: "d", label: "Depth", type: "text",
+        value: asFeet(b.height * H.getNum(obj, "objectScaleY", 1)) },
+    ],
+    onOK: ({ w, d }) => {
+      const wf = parseFloat(w), df = parseFloat(d);
+      mark("size");
+      if (wf > 0 && b.width) H.set(obj, "objectScaleX", (wf * UNITS_PER_FOOT) / b.width);
+      if (df > 0 && b.height) H.set(obj, "objectScaleY", (df * UNITS_PER_FOOT) / b.height);
+      draw(); syncChrome();
+    },
+  });
 }
 
 function attachLabel(obj) {
@@ -2470,7 +2610,9 @@ function unlockDialog(wanted) {
 async function openFromLibrary(id) {
   const entry = Library.scenes.find((s) => s.id === id);
   try {
-    const xml = await Library.scene(id);
+    toast("Opening…");
+    const xml = await Library.scene(id, (n, total) =>
+      total > 1 && toast(`Loading floorplan ${n}/${total}…`));
     S.doc = H.parseXML(xml);
     S.path = entry ? entry.name : null;
     S.dirty = false; S.sel.clear(); S.slice = 0;

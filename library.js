@@ -46,13 +46,42 @@ export const Library = {
     return true;
   },
 
-  async scene(id) {
+  async scene(id, onProgress) {
     if (!this.key) throw new Error("locked");
     const r = await fetch(`library/${id}.enc`, { cache: "no-cache" });
     if (!r.ok) throw new Error("scene not found");
-    return open(this.key, (await r.text()).trim());
+    const xml = await open(this.key, (await r.text()).trim());
+    return this.resolveImages(xml, onProgress);
+  },
+
+  /**
+   * Background floorplans are stored once and shared between the scenes that
+   * use them, so a scene arrives holding a reference. Put the real picture back
+   * before anything tries to parse it.
+   */
+  async resolveImages(xml, onProgress) {
+    const refs = [...new Set(
+      [...xml.matchAll(/<base64Data>ref:([0-9a-f]+)<\/base64Data>/g)].map((m) => m[1]))];
+    if (!refs.length) return xml;
+
+    let done = 0;
+    const fetched = new Map();
+    await Promise.all(refs.map(async (hash) => {
+      if (!imageCache.has(hash)) {
+        const r = await fetch(`library/img/${hash}.enc`, { cache: "force-cache" });
+        if (r.ok) imageCache.set(hash, await open(this.key, (await r.text()).trim()));
+      }
+      fetched.set(hash, imageCache.get(hash) || "");
+      onProgress?.(++done, refs.length);
+    }));
+
+    return xml.replace(/<base64Data>ref:([0-9a-f]+)<\/base64Data>/g,
+      (whole, hash) => `<base64Data>${fetched.get(hash) ?? ""}</base64Data>`);
   },
 };
+
+// Floorplans are reused across a location's scenes; decrypt each one once.
+const imageCache = new Map();
 
 const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 

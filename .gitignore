@@ -3,3 +3,4 @@ cloud/.dev.vars
 cloud/.wrangler/
 node_modules/
 .DS_Store
+docs/.publish-state.json
