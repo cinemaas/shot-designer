@@ -175,6 +175,22 @@ export function makePath(tag, points, opts = {}) {
   return n;
 }
 
+/** A picture the user brought in, used as a prop or a background. */
+export const makePicture = (dataURL) =>
+  node("Picture", { uniqueID: newID(), base64Data: dataURL });
+
+export const makeImageProp = (x, y, pictureID, scale = 1) =>
+  wrap("ImageProp", {
+    ...baseFields(x, y),
+    objectScaleX: scale, objectScaleY: scale,
+    pictureUniqueID: pictureID,
+    mirror: false,
+    animatable: false,
+  }, [
+    node("Scaler", { uniqueID: newID() }),
+    rotator("RotatorObject", 0),
+  ]);
+
 export const makeCaption = (x, y, text) =>
   wrap("Caption", {
     ...baseFields(x, y),

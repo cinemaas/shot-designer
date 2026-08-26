@@ -5,11 +5,12 @@ import * as H from "./hcw.js";
 import * as R from "./render.js";
 import { FXG } from "./assets.js";
 import * as B from "./blocking.js";
+import { byCategory, EXTRA_LABEL } from "./props.js";
 import { Cloud, sceneId, connectLive } from "./storage.js";
 import { Library } from "./library.js";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
-  CHARACTER_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
+  CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
 } from "./catalog.js";
 
@@ -34,6 +35,7 @@ const S = {
   beat: 1,
   info: null,            // derived beat structure
   ghosts: true,
+  compactLabels: false,
   allCameraLabels: false,   // in blocking mode, only labels for cameras that are on somebody
   cloudId: null,         // this scene's id in the cloud
   shareId: null,         // set when we were opened from a share link
@@ -172,7 +174,7 @@ function draw() {
       restore = { x: H.get(obj, "x"), y: H.get(obj, "y") };
       H.set(obj, "x", moved.x); H.set(obj, "y", moved.y);
     }
-    const node = R.drawObject(obj, S.scene);
+    const node = R.drawObject(obj, S.scene, { compact: S.compactLabels });
     if (restore) { H.set(obj, "x", restore.x); H.set(obj, "y", restore.y); }
 
     if (!shown) node.setAttribute("opacity", dim);
@@ -377,8 +379,10 @@ function drawSelection() {
  * so a table can be made long and narrow without touching its depth.
  */
 function drawStretchBox(g, obj, id) {
-  const b = R.artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
-  if (!b.width && !b.height) return;
+  const b = R.PICTURE_TAGS.has(obj.tag)
+    ? pictureBounds(obj)
+    : R.artBounds(H.get(obj, "objectKey"));
+  if (!b || (!b.width && !b.height)) return;
   const x = H.getNum(obj, "x"), y = H.getNum(obj, "y");
   const sx = H.getNum(obj, "objectScaleX", 1), sy = H.getNum(obj, "objectScaleY", 1);
   const a = R.angleOf(obj);
@@ -410,6 +414,15 @@ function drawStretchBox(g, obj, id) {
     }));
   }
   g.append(frame);
+}
+
+/** Bounds of a picture-backed object, measured off what actually rendered. */
+function pictureBounds(obj) {
+  const node = document.querySelector(`.obj[data-id="${idOf(obj)}"] image`);
+  if (!node) return null;
+  const x = parseFloat(node.getAttribute("x")), y = parseFloat(node.getAttribute("y"));
+  const w = parseFloat(node.getAttribute("width")), h = parseFloat(node.getAttribute("height"));
+  return Number.isFinite(w) ? { x, y, width: w, height: h } : null;
 }
 
 function applyView() {
@@ -454,38 +467,48 @@ function fitToContent(pad = 90) {
 
 // ---------------------------------------------------------------- hit testing
 
-function hitTest(pt) {
-  const order = ["caption", "camera", "character", "lighting", "prop",
-                 "walk", "lines", "track", "set", "background"];
-  const ls = layerStates();
-  for (const layer of order) {
-    const flag = layerKeyFor(layer);
-    if (flag && !H.getBool(ls, flag, true)) continue;
-    const list = objects().filter((o) => R.layerOf(o.tag) === layer).reverse();
-    for (const o of list) {
-      if (R.POINT_TAGS.has(o.tag)) {
-        if (nearPath(R.pointsOf(o), pt, 8 / S.view.k)) return o;
-      } else if (R.GENERIC_TAGS.has(o.tag)) {
-        if (insideArt(o, pt)) return o;
-      } else {
-        const dx = pt.x - H.getNum(o, "x"), dy = pt.y - H.getNum(o, "y");
-        if (Math.hypot(dx, dy) <= R.radiusOf(o) + 3 / S.view.k) return o;
-      }
+const layerOn = (o) => {
+  const flag = layerKeyFor(R.layerOf(o.tag));
+  return !flag || H.getBool(layerStates(), flag, true);
+};
+
+/**
+ * What did you actually click on?
+ *
+ * The first pass asks the browser, which answers against the pixels that were
+ * really drawn — so a big prop only responds where its shape is, not across the
+ * whole rectangle it happens to occupy. That was the reason dragging a camera
+ * so often picked up the room instead.
+ *
+ * The second pass is a tolerance sweep for things too thin to hit exactly: a
+ * wall at low zoom is barely a pixel wide.
+ */
+function hitTest(pt, client) {
+  if (client) {
+    for (const el of document.elementsFromPoint(client.x, client.y)) {
+      const g = el.closest?.(".obj");
+      if (!g) continue;
+      const o = byID(g.dataset.id);
+      if (o && layerOn(o)) return o;
     }
   }
-  return null;
-}
 
-/** Hit test a prop by undoing its transform and checking the art's own box. */
-function insideArt(o, pt) {
-  const a = -R.angleOf(o);
-  const dx = pt.x - H.getNum(o, "x"), dy = pt.y - H.getNum(o, "y");
-  const lx = (dx * Math.cos(a) - dy * Math.sin(a)) / H.getNum(o, "objectScaleX", 1);
-  const ly = (dx * Math.sin(a) + dy * Math.cos(a)) / H.getNum(o, "objectScaleY", 1);
-  const b = R.artBounds(KEY_TO_FXG[H.get(o, "objectKey")]);
-  const tol = 4 / S.view.k;
-  return lx >= b.x - tol && lx <= b.x + b.width + tol &&
-         ly >= b.y - tol && ly <= b.y + b.height + tol;
+  const tol = 9 / S.view.k;
+  const near = [];
+  for (const o of objects()) {
+    if (!layerOn(o)) continue;
+    if (R.POINT_TAGS.has(o.tag)) {
+      if (nearPath(R.pointsOf(o), pt, tol)) near.push({ o, d: 0 });
+    } else if (!R.GENERIC_TAGS.has(o.tag)) {
+      const d = Math.hypot(pt.x - H.getNum(o, "x"), pt.y - H.getNum(o, "y"));
+      if (d <= R.radiusOf(o) + tol) near.push({ o, d });
+    }
+  }
+  if (!near.length) return null;
+  // Ties go to whatever is drawn latest, matching what's on top.
+  const order = objects();
+  near.sort((a, b) => a.d - b.d || order.indexOf(b.o) - order.indexOf(a.o));
+  return near[0].o;
 }
 
 function nearPath(pts, p, tol) {
@@ -510,6 +533,7 @@ stage.addEventListener("pointerdown", (ev) => {
   const pt = toScene(ev);
 
   if (S.tool) return toolClick(pt, ev);
+  const client = { x: ev.clientX, y: ev.clientY };
 
   const handle = ev.target.closest(".handle");
   if (handle && handle.dataset.group === "stretch") {
@@ -535,7 +559,8 @@ stage.addEventListener("pointerdown", (ev) => {
   if (handle) {
     const obj = byID(handle.dataset.id);
     if (handle.dataset.stretch) {
-      const b = R.artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
+      const b = R.PICTURE_TAGS.has(obj.tag)
+        ? pictureBounds(obj) : R.artBounds(H.get(obj, "objectKey"));
       drag = {
         mode: "stretch", obj, axis: handle.dataset.stretch,
         anchor: { x: b.x + b.width, y: b.y + b.height },
@@ -551,7 +576,7 @@ stage.addEventListener("pointerdown", (ev) => {
     return;
   }
 
-  const hit = hitTest(pt);
+  const hit = hitTest(pt, client);
   const extend = ev.shiftKey || ev.metaKey || ev.ctrlKey;
   if (ev.button === 1 || S.spaceDown) {
     drag = { mode: "pan", sx: ev.clientX, sy: ev.clientY, vx: S.view.x, vy: S.view.y };
@@ -718,8 +743,12 @@ stage.addEventListener("pointermove", (ev) => {
 
 stage.addEventListener("contextmenu", (ev) => {
   ev.preventDefault();
+  if (S.tool) {
+    if (S.draft && S.draft.committed.length >= 2) finishTool();
+    return cancelTool();
+  }
   const pt = toScene(ev);
-  const hit = hitTest(pt);
+  const hit = hitTest(pt, { x: ev.clientX, y: ev.clientY });
   if (hit && S.sel.size > 1 && S.sel.has(idOf(hit))) {
     return groupMenu(ev.clientX, ev.clientY);
   }
@@ -740,7 +769,7 @@ stage.addEventListener("pointerleave", () => {
 
 stage.addEventListener("dblclick", (ev) => {
   if (S.tool) return;
-  const hit = hitTest(toScene(ev));
+  const hit = hitTest(toScene(ev), { x: ev.clientX, y: ev.clientY });
   if (hit) objectMenu(hit, ev.clientX, ev.clientY);
 });
 
@@ -790,6 +819,8 @@ function cancelTool() {
     const c = canvas();
     c.children = c.children.filter((o) => o !== S.draft.obj);
     S.draft = null;
+    // Backing out of a draw shouldn't leave the scene looking edited.
+    S.dirty = S.undo.pop()?.wasDirty ?? S.dirty;
     reindex();
   }
   S.tool = null; S.showGrid = false; S.pendingOwner = null;
@@ -797,9 +828,16 @@ function cancelTool() {
   draw(); syncChrome();
 }
 
-/** Commit the wall being drawn and stay armed for the next one. */
+// Walls come in runs, so that tool stays armed. Everything else is one shot:
+// you asked for a walk arrow, you got a walk arrow, you are back to normal.
+const ONE_SHOT = new Set(["walk", "axis", "track"]);
+
+/** Commit what's being drawn. Disarms unless the tool is meant to repeat. */
 function finishTool() {
-  if (!S.draft) return;
+  if (!S.draft) {
+    if (S.tool && ONE_SHOT.has(S.tool)) cancelTool();
+    return;
+  }
   const { obj, committed } = S.draft;
   const c = canvas();
   if (committed.length >= 2) {
@@ -807,9 +845,13 @@ function finishTool() {
     S.sel = new Set([idOf(obj)]);
   } else {
     c.children = c.children.filter((o) => o !== obj);   // a single click draws nothing
-    S.undo.pop();
+    S.dirty = S.undo.pop()?.wasDirty ?? S.dirty;
   }
   S.draft = null;
+  if (ONE_SHOT.has(S.tool)) {
+    S.tool = null; S.showGrid = false; S.pendingOwner = null;
+    stage.classList.remove("drawing");
+  }
   reindex(); draw(); syncChrome();
 }
 
@@ -1119,8 +1161,8 @@ function groupMenu(x, y) {
         run: () => colourGroup(name, col, i),
       }))] : []),
     ...(props.length ? ["-", { label: `Change all ${props.length} to…`, run: () => {
-      showPopover(x, y, [{ head: "Select Type" }, ...PROPS.map(([key, label, fxg]) => ({
-        label, thumb: thumbFor(fxg), run: () => retypeGroup(key),
+      showPopover(x, y, [{ head: "Select Type" }, ...PROPS.map(([key, label]) => ({
+        label, thumb: thumbFor(key), run: () => retypeGroup(key),
       }))]);
     } }] : []),
     "-",
@@ -1255,8 +1297,13 @@ window.addEventListener("keydown", (ev) => {
   if (cmd && k === "0") { ev.preventDefault(); return fitToContent(); }
 
   if (k === "escape") {
-    if (S.draft) { ev.preventDefault(); return finishTool(); }
-    if (S.tool) { ev.preventDefault(); return cancelTool(); }
+    if (S.draft || S.tool) {
+      ev.preventDefault();
+      // Keep a run of wall that's already worth keeping, then stand down.
+      if (S.draft && S.draft.committed.length >= 2) finishTool();
+      cancelTool();
+      return;
+    }
     S.sel.clear();
     hidePopover();
     return (draw(), syncChrome());
@@ -1406,6 +1453,27 @@ function syncChrome() {
             : `${name}${S.dirty ? " •" : ""}   ${Math.round(S.view.k * 100)}%` +
               (S.sel.size ? `   ${S.sel.size} selected` : ""));
   $("#status").classList.toggle("live", !!(readout || S.tool));
+
+  const banner = $("#toolbanner");
+  banner.hidden = !S.tool;
+  if (S.tool) {
+    banner.replaceChildren();
+    const name = document.createElement("b");
+    name.textContent = TOOL_NAME[S.tool];
+    const hint = document.createElement("span");
+    hint.textContent = S.draft
+      ? (S.tool === "wall"
+          ? "click to add corners · double-click or ⏎ to finish"
+          : "click where it ends")
+      : (S.tool === "wall" ? "click to start a wall" : "click to start");
+    const done = document.createElement("button");
+    done.textContent = S.draft && S.draft.committed.length >= 2 ? "Done" : "Cancel";
+    done.onclick = () => {
+      if (S.draft && S.draft.committed.length >= 2) finishTool();
+      cancelTool();
+    };
+    banner.append(name, hint, done);
+  }
 
   let badge = $("#peers");
   if (!badge) {
@@ -1596,8 +1664,17 @@ function addMenu(x, y, at) {
     { label: "Add Character…", run: () => addCharacter(at) },
     { label: "Add Camera…", run: () => addCamera(at) },
     { label: "Add Prop…", run: () => palette("Prop", PROPS, "GenericProp", at, x, y) },
+    { label: "Add Furniture…", run: () =>
+        palette("Furniture", asList(byCategory("prop")), "GenericProp", at, x, y) },
     { label: "Add Set…", run: () => palette("Set", SETPIECES, "GenericSet", at, x, y) },
-    { label: "Add Lighting…", run: () => palette("Lighting", LIGHTING, "GenericLight", at, x, y) },
+    { label: "Add Lighting…", run: () =>
+        palette("Lighting", [...LIGHTING, ...asList(byCategory("light"))],
+                "GenericLight", at, x, y) },
+    { label: "Add Grip…", run: () =>
+        palette("Grip", asList(byCategory("grip")), "GenericSet", at, x, y) },
+    { label: "Add Camera Support…", run: () =>
+        palette("Camera Support", asList(byCategory("camera")), "GenericProp", at, x, y) },
+    { label: "Add Image Prop…", run: () => importImageProp(at) },
     { label: "Add Annotation…", run: () => addCaption(at) },
     "-",
     { head: "Draw" },
@@ -1610,12 +1687,15 @@ function addMenu(x, y, at) {
   ]);
 }
 
+const asList = (items) => items.map((p) => [p.key, p.label]);
+const labelForKey = (k) => KEY_TO_LABEL[k] || EXTRA_LABEL[k] || "Object";
+
 function palette(title, list, tag, at, x, y) {
   showPopover(x, y, [
     { head: title },
     ...list.map(([key, label, fxg]) => ({
       label,
-      thumb: thumbFor(fxg, tag),
+      thumb: thumbFor(key, tag),
       run: () => {
         mark("add " + label);
         canvas().children.push(H.makeGeneric(tag, round(at.x), round(at.y), key, { scale: 1 }));
@@ -1628,13 +1708,13 @@ function palette(title, list, tag, at, x, y) {
 }
 
 const thumbCache = new Map();
-function thumbFor(name, tag = "GenericProp") {
-  const cacheKey = name + "|" + tag;
+function thumbFor(key, tag = "GenericProp") {
+  const cacheKey = key + "|" + tag;
   if (thumbCache.has(cacheKey)) return thumbCache.get(cacheKey);
-  const art = FXG[name];
+  const art = R.artOf(key);
   let svg = "";
   if (art) {
-    const b = R.artBounds(name);
+    const b = R.artBounds(key);
     const pad = Math.max(b.width, b.height) * 0.08 + 4;
     const wash = tag === "GenericProp"
       ? ' style="filter:url(#tintPalette)"' : "";
@@ -1674,11 +1754,52 @@ function addCharacter(at) {
 
 function addCamera(at) {
   mark("add camera");
+  const used = objects().filter((o) => o.tag === "Camera").length;
   const c = H.makeCamera(round(at.x), round(at.y), -Math.PI / 2);
+  H.set(c, "colorIndex", used % CAMERA_COLORS.length);
   canvas().children.push(c);
   reindex();
   S.sel = new Set([idOf(c)]);
   draw(); syncChrome();
+}
+
+/**
+ * Anything the built-in kit doesn't cover: bring in a PNG (transparent is
+ * best) and it behaves like any other prop — rotate it, stretch it, move it.
+ */
+function importImageProp(at) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      return toast("That image is over 8 MB — shrink it first");
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      mark("add image prop");
+      const pic = H.makePicture(String(reader.result));
+      let pics = H.child(S.doc, "Pictures");
+      if (!pics) {
+        pics = H.node("Pictures", {});
+        S.doc.children.splice(S.doc.children.length - 1, 0, pics);
+      }
+      pics.children.push(pic);
+      pics.text = null;
+
+      const prop = H.makeImageProp(round(at.x), round(at.y), H.get(pic, "uniqueID"));
+      canvas().children.push(prop);
+      reindex();
+      S.sel = new Set([idOf(prop)]);
+      draw(); syncChrome();
+      toast(`Added ${file.name}`);
+    };
+    reader.onerror = () => toast("Couldn't read that file");
+    reader.readAsDataURL(file);
+  };
+  input.click();
 }
 
 function addCaption(at) {
@@ -1720,7 +1841,18 @@ function layersMenu(x, y) {
 }
 
 function templatesMenu(x, y) {
+  const cams = objects().filter((o) => o.tag === "Camera");
   showPopover(x, y, [
+    { head: "Tidy" },
+    { label: `Colour ${cams.length} Cameras Apart`, disabled: cams.length < 2,
+      run: colourCamerasApart },
+    { label: S.compactLabels ? "Show Full Shot Labels" : "Shrink Shot Labels",
+      run: () => { S.compactLabels = !S.compactLabels; draw(); } },
+    { label: "Spread Overlapping Labels", run: () => {
+      mark("tidy labels");
+      bakeLabelOffsets();
+    } },
+    "-",
     { head: "Time" },
     { label: "Add Time Slice", run: () => {
       mark("time");
@@ -1739,6 +1871,37 @@ function templatesMenu(x, y) {
     { head: "Shot List" },
     { label: "Show Shot List", run: toggleShotList },
   ]);
+}
+
+/** Give every camera its own colour, in the order they were added. */
+function colourCamerasApart() {
+  mark("colour cameras");
+  objects().filter((o) => o.tag === "Camera")
+    .forEach((c, i) => H.set(c, "colorIndex", i % CAMERA_COLORS.length));
+  draw(); syncChrome();
+  toast("Cameras coloured");
+}
+
+/**
+ * Decluttering is a display trick, so it doesn't survive an export or reach
+ * anyone you share with. This writes the nudges into the scene for good.
+ */
+function bakeLabelOffsets() {
+  let moved = 0;
+  for (const n of LAYER_G.caption.children) {
+    const t = n.getAttribute("transform") || "";
+    const m = t.match(/translate\(0,(-?[\d.]+)\)\s*$/);
+    if (!m) continue;
+    const obj = byID(n.dataset.id);
+    if (!obj) continue;
+    H.set(obj, "y", round(H.getNum(obj, "y") + parseFloat(m[1])));
+    if (H.get(obj, "attachObjectID")) {
+      H.set(obj, "attachDeltaY", round(H.getNum(obj, "attachDeltaY") + parseFloat(m[1])));
+    }
+    moved++;
+  }
+  draw(); syncChrome();
+  toast(moved ? `Moved ${moved} labels apart for good` : "Nothing was overlapping");
 }
 
 // ---------------------------------------------------------------- object menus
@@ -1785,13 +1948,22 @@ function objectMenu(obj, x, y) {
       "-",
       { label: "Tilt Up", run: () => setTilt(obj, "tiltUp") },
       { label: "Tilt Down", run: () => setTilt(obj, "tiltDown") },
+      { head: "Colour" },
+      ...CAMERA_COLORS.map(([name, col], i) => ({
+        label: name, swatch: "#" + col.toString(16).padStart(6, "0"),
+        run: () => {
+          mark("camera colour");
+          H.set(obj, "colorIndex", i);
+          draw();
+        },
+      })),
       ...common,
     ]);
   }
 
   if (R.GENERIC_TAGS.has(tag)) {
     return showPopover(x, y, [
-      { head: "Edit " + (KEY_TO_LABEL[H.get(obj, "objectKey")] || "Object") },
+      { head: "Edit " + labelForKey(H.get(obj, "objectKey")) },
       { label: H.getBool(obj, "mirror") ? "Unflip Horizontally" : "Flip Horizontally", run: () => {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
@@ -1801,10 +1973,17 @@ function objectMenu(obj, x, y) {
         H.set(obj, "objectScaleX", 1); H.set(obj, "objectScaleY", 1); draw();
       } },
       { label: "Change Type…", run: () => {
-        const list = tag === "GenericLight" ? LIGHTING
-                   : SETPIECES.some(([k]) => k === H.get(obj, "objectKey")) ? SETPIECES : PROPS;
-        showPopover(x, y, [{ head: "Select Type" }, ...list.map(([key, label, fxg]) => ({
-          label, thumb: thumbFor(fxg),
+        const key = H.get(obj, "objectKey");
+        const mine = byCategory("grip").some((p) => p.key === key) ? asList(byCategory("grip"))
+          : byCategory("camera").some((p) => p.key === key) ? asList(byCategory("camera"))
+          : byCategory("prop").some((p) => p.key === key) ? asList(byCategory("prop"))
+          : byCategory("light").some((p) => p.key === key)
+            ? [...LIGHTING, ...asList(byCategory("light"))]
+          : tag === "GenericLight" ? [...LIGHTING, ...asList(byCategory("light"))]
+          : SETPIECES.some(([k]) => k === key) ? SETPIECES : PROPS;
+        const list = mine;
+        showPopover(x, y, [{ head: "Select Type" }, ...list.map(([key, label]) => ({
+          label, thumb: thumbFor(key),
           run: () => { mark("type"); H.set(obj, "objectKey", key); draw(); },
         }))]);
       } },
@@ -1885,11 +2064,11 @@ function startFromHere(tool, obj) {
 /** Type an exact size. Props are drawn to no particular scale, so this works
  *  in feet using the same 20-units-to-the-foot the grid implies. */
 function sizeDialog(obj) {
-  const b = R.artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
+  const b = R.artBounds(H.get(obj, "objectKey"));
   const asFeet = (units) => (units / UNITS_PER_FOOT).toFixed(2);
   sheet({
     title: "Size",
-    sub: `${KEY_TO_LABEL[H.get(obj, "objectKey")] || "Object"} — across and deep, in feet.`,
+    sub: `${labelForKey(H.get(obj, "objectKey"))} — across and deep, in feet.`,
     fields: [
       { name: "w", label: "Width", type: "text",
         value: asFeet(b.width * H.getNum(obj, "objectScaleX", 1)) },
@@ -2003,6 +2182,8 @@ function renderShotList() {
     row.className = "shot-row" + (S.sel.has(idOf(v)) ? " on" : "");
     const num = document.createElement("span");
     num.className = "num";
+    const cam = byID(H.get(v, "attachObjectID"));
+    if (cam && cam.tag === "Camera") num.style.background = R.cameraColour(cam);
     num.textContent = H.get(v, "headerText") ||
       (H.get(v, "versionNumber") > 0 ? "V" + H.get(v, "versionNumber") : i + 1);
     const nick = document.createElement("span");
@@ -2687,4 +2868,4 @@ async function openShared(shareId) {
 }
 
 // Exposed for quick console poking while iterating.
-window.SD = { S, H, R, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene };
+window.SD = { S, H, R, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };

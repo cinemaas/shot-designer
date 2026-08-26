@@ -87,11 +87,21 @@ export const KEY_TO_LABEL = Object.fromEntries(
   [...PROPS, ...LIGHTING, ...SETPIECES, ...EXTRAS].map(([k, l]) => [k, l])
 );
 
-// Character colours, in the order the app cycles them.
+// The app's own eight, read out of Josh's scene files rather than guessed, in
+// the order colorIndex assigns them.
 export const CHARACTER_COLORS = [
-  ["Red", 0xfc7b7b], ["Blue", 0x94b4ff], ["Green", 0x8fd98f], ["Yellow", 0xffe680],
-  ["Purple", 0xc9a3e6], ["Orange", 0xffbb77], ["Cyan", 0x8fdede], ["Pink", 0xffa8d3],
-  ["Brown", 0xc4a484], ["Gray", 0xc0c0c0],
+  ["Red", 0xfc837b], ["Blue", 0x94b8ff], ["Green", 0x76fa8a], ["Cyan", 0x7cffe0],
+  ["Pink", 0xe69bf0], ["Yellow", 0xffff86], ["Gray", 0xbbbbbb], ["Extra", 0xffffff],
+];
+
+// Cameras are all one green in the original, which stops being useful the
+// moment a scene has eight of them. colorIndex is already in the file format
+// and the original preserves it, so tinting a camera costs nothing on a
+// round-trip. Index 0 stays the green everyone recognises.
+export const CAMERA_COLORS = [
+  ["Green", 0x09d901], ["Orange", 0xff8c1a], ["Magenta", 0xe839c5],
+  ["Cyan", 0x14c8e6], ["Yellow", 0xf5d800], ["Violet", 0x9b6cff],
+  ["Red", 0xf03c3c], ["Blue", 0x2f7dfa],
 ];
 
 export const SHOT_SIZES = [

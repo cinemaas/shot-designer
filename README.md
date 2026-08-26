@@ -85,6 +85,35 @@ depth, the corner for both (hold `⇧` on the corner to keep the shape). The
 group box stretches a whole selection the same way, and **Size…** on any prop
 takes exact dimensions in feet.
 
+**Clicking what you meant to click.** Hit testing runs against the pixels that
+were actually drawn, so a big prop only responds where its shape is rather than
+across the whole rectangle it occupies — the reason dragging a camera used to
+pick up the room instead.
+
+**Tools you can get out of.** Walk arrows, axis lines and tracks are one-shot:
+you asked for one, you got one, you're back to normal. Walls stay armed because
+they come in runs. A banner names the armed tool and offers a way out, `Esc`
+always leaves you with nothing armed, and right-click stands the tool down.
+
+**Cameras that aren't all the same green.** Eight identical green cameras is
+where an overhead stops being readable. Cameras carry a colour, their shot chip
+matches it, and so does their row in the shot list. **Tidy → Colour Cameras
+Apart** does a whole scene at once, and **Shrink Shot Labels** drops the
+descriptions when you only need to see which camera is which. This rides on
+`colorIndex`, already in the file format, so it survives a round-trip through
+the original.
+
+**Grip, which the original has none of.** C-stands, combo stands, sandbags,
+apple boxes, flags, floppies, 4×4 through 12×12 frames, overheads, bounce,
+V-flats, mirror boards. Plus modern units — SkyPanel S30/S60/S120, LED tubes,
+1.2K through 18K HMIs, space lights, ring lights, book lights — and camera
+support: tripod, hi-hat, dolly, slider, jib, Steadicam. Furniture too: beds,
+desks, counters, appliances, stairs. Everything is drawn at 20 units to the
+foot, so a 12×12 really is twelve feet against a two-foot person.
+
+**Your own artwork.** **Add Image Prop…** takes a PNG (transparent is best) and
+it behaves like any other prop.
+
 **Group edits.** `⌘`-click or marquee to select several things, then right-click:
 align six ways, distribute, rotate and flip about the group centre, spread apart
 or pull together, recolour every selected character at once, or change every

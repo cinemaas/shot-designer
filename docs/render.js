@@ -1,9 +1,10 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=3711bccd";
-import { KEY_TO_FXG } from "./catalog.js?v=3711bccd";
-import * as H from "./hcw.js?v=3711bccd";
+import { FXG } from "./assets.js?v=9542faad";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=9542faad";
+import { EXTRA_SVG } from "./props.js?v=9542faad";
+import * as H from "./hcw.js?v=9542faad";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -44,7 +45,8 @@ export const hasScaler = (obj) =>
   (H.child(obj, "SubObjects")?.children ?? []).some((s) => s.tag === "Scaler");
 
 export const POINT_TAGS = new Set(["Wall", "Track", "AxisLine", "WalkArrow", "SpeedRail"]);
-export const GENERIC_TAGS = new Set(["GenericSet", "GenericLight", "GenericProp", "ImageProp"]);
+export const GENERIC_TAGS = new Set(["GenericSet", "GenericLight", "GenericProp"]);
+export const PICTURE_TAGS = new Set(["Background", "ImageProp"]);
 export const LABEL_TAGS = new Set(["Caption", "ShotVersion"]);
 
 export const pointsOf = (obj) =>
@@ -59,6 +61,7 @@ export function setPoints(obj, pts) {
 
 /** Which layer group an object belongs to, matching the app's layer toggles. */
 export function layerOf(tag) {
+  if (tag === "ImageProp") return "prop";
   if (tag === "Camera") return "camera";
   if (tag === "Character") return "character";
   if (tag === "Track" || tag === "SpeedRail") return "track";
@@ -98,19 +101,32 @@ function drawCharacter(obj) {
 const CAM_PATH =
   "M0,-4 L3,-11 L17,-11 L19.5,-3 L31,-11.2 L31,11.2 L19.5,3 L17,11 L3,11 L0,4 Z";
 
-function drawCamera() {
+export const cameraColour = (obj) => {
+  const i = H.getNum(obj, "colorIndex", 0);
+  return "#" + (CAMERA_COLORS[i] || CAMERA_COLORS[0])[1]
+    .toString(16).padStart(6, "0");
+};
+
+function drawCamera(obj) {
   const g = el("g");
   g.append(el("path", {
-    d: CAM_PATH, fill: CAMERA_GREEN, stroke: INK, "stroke-width": STROKE,
-    "stroke-linejoin": "round",
+    d: CAM_PATH, fill: obj ? cameraColour(obj) : CAMERA_GREEN,
+    stroke: INK, "stroke-width": STROKE, "stroke-linejoin": "round",
   }));
   return g;
+}
+
+/** Artwork for an object key, whether it came with the app or with us. */
+export function artOf(key) {
+  const fxg = FXG[KEY_TO_FXG[key]];
+  if (fxg) return fxg;
+  return EXTRA_SVG[key] ? { svg: EXTRA_SVG[key] } : null;
 }
 
 function drawGeneric(obj) {
   const g = el("g");
   const key = H.get(obj, "objectKey");
-  const art = FXG[KEY_TO_FXG[key]];
+  const art = artOf(key);
   if (!art) {
     g.append(el("rect", {
       x: -18, y: -18, width: 36, height: 36,
@@ -252,24 +268,32 @@ function drawBackground(obj, pictures) {
 }
 
 /** Captions and shot labels: a navy header chip over navy body text. */
-function drawLabel(obj, scene) {
+function drawLabel(obj, scene, opts = {}) {
   const g = el("g");
   const header = H.get(obj, "headerText");
   const body = (H.get(obj, "userText") || H.get(obj, "systemText") || "")
     .replace(/<br\s*\/?>/gi, "\n");
-  const lines = body.split("\n").filter((s) => s.length);
+  // Compact mode keeps the chip and drops the description, which is what turns
+  // a page of twenty shots from unreadable into scannable.
+  const lines = (opts.compact && header) ? [] : body.split("\n").filter((s) => s.length);
   const size = H.getNum(obj, "fontSize", 0) || 15;
   const lh = size * 1.28;
   let y = 0;
+
+  // A shot label wears its camera's colour, so eight of them on one page can
+  // be told apart at a glance instead of being eight identical navy chips.
+  const hostObj = scene?.byID?.get(H.get(obj, "attachObjectID"));
+  const tone = hostObj?.tag === "Camera" ? cameraColour(hostObj) : LABEL_NAVY;
+  const ink = hostObj?.tag === "Camera" ? readableInk(tone) : "#fff";
 
   if (header) {
     const w = header.length * size * 0.58 + 12;
     g.append(el("rect", {
       x: -w / 2, y: y - size * 0.95, width: w, height: size * 1.5,
-      rx: 2, fill: LABEL_NAVY,
+      rx: 2, fill: tone,
     }));
     const t = el("text", {
-      x: 0, y: y + size * 0.3, "text-anchor": "middle", fill: "#fff",
+      x: 0, y: y + size * 0.3, "text-anchor": "middle", fill: ink,
       "font-size": size, "font-family": "Helvetica, Arial, sans-serif",
       "font-weight": H.getBool(obj, "fontBold") ? "700" : "400",
     });
@@ -279,6 +303,7 @@ function drawLabel(obj, scene) {
   }
   for (const ln of lines) {
     const t = el("text", {
+      // The chip carries the identity; the description stays legible navy.
       x: 0, y: y + size * 0.35, "text-anchor": "middle", fill: LABEL_NAVY,
       "font-size": size, "font-family": "Helvetica, Arial, sans-serif",
       "font-weight": H.getBool(obj, "fontBold") ? "700" : "400",
@@ -297,24 +322,40 @@ function drawLabel(obj, scene) {
       const lx = H.getNum(obj, "x"), ly = H.getNum(obj, "y");
       g.insertBefore(el("line", {
         x1: 0, y1: y - lh * 0.4, x2: hx - lx, y2: hy - ly,
-        stroke: "#9aa0a6", "stroke-width": 1,
+        stroke: host.tag === "Camera" ? darken(tone) : "#9aa0a6",
+        "stroke-width": 1, opacity: .55,
       }), g.firstChild);
     }
   }
   return g;
 }
 
+const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+/** Black or white, whichever stays legible on the chip. */
+function readableInk(hex) {
+  const [r, g, b] = rgbOf(hex);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#12181d" : "#fff";
+}
+
+/** Body text sits on paper, so the camera's colour needs taking down a bit. */
+function darken(hex) {
+  if (hex === LABEL_NAVY) return LABEL_NAVY;
+  const [r, g, b] = rgbOf(hex).map((v) => Math.round(v * 0.62));
+  return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
 // --- dispatch ---------------------------------------------------------------
 
-export function drawObject(obj, scene) {
+export function drawObject(obj, scene, opts = {}) {
   const tag = obj.tag;
   let art;
   if (tag === "Character") art = drawCharacter(obj);
   else if (tag === "Camera") art = drawCamera(obj);
   else if (GENERIC_TAGS.has(tag)) art = drawGeneric(obj);
   else if (POINT_TAGS.has(tag)) art = drawPathObject(obj);
-  else if (tag === "Background") art = drawBackground(obj, scene.pictures);
-  else if (LABEL_TAGS.has(tag)) art = drawLabel(obj, scene);
+  else if (PICTURE_TAGS.has(tag)) art = drawBackground(obj, scene.pictures);
+  else if (LABEL_TAGS.has(tag)) art = drawLabel(obj, scene, opts);
   else art = el("g");
 
   const g = el("g", { "data-id": H.get(obj, "uniqueID"), class: "obj" });
@@ -348,10 +389,10 @@ const measureSVG = (() => {
 })();
 
 const boundsCache = new Map();
-/** Bounding box of a piece of FXG art, in scene units. */
-export function artBounds(fxgName) {
-  if (boundsCache.has(fxgName)) return boundsCache.get(fxgName);
-  const art = FXG[fxgName];
+/** Bounding box of an object key's artwork, in scene units. */
+export function artBounds(key) {
+  if (boundsCache.has(key)) return boundsCache.get(key);
+  const art = artOf(key);
   let box = { x: -30, y: -30, width: 60, height: 60 };
   if (art) {
     const g = el("g");
@@ -364,7 +405,7 @@ export function artBounds(fxgName) {
     } catch { /* fall back to the default box */ }
     g.remove();
   }
-  boundsCache.set(fxgName, box);
+  boundsCache.set(key, box);
   return box;
 }
 
@@ -375,8 +416,9 @@ export function radiusOf(obj) {
   if (obj.tag === "Camera") return 22;
   if (LABEL_TAGS.has(obj.tag)) return 34;
   if (GENERIC_TAGS.has(obj.tag)) {
-    const b = artBounds(KEY_TO_FXG[H.get(obj, "objectKey")]);
+    const b = artBounds(H.get(obj, "objectKey"));
     return Math.max(10, Math.hypot(b.width, b.height) / 2 * s);
   }
+  if (obj.tag === "ImageProp") return 60 * s;
   return 34 * s;
 }
