@@ -63,13 +63,32 @@ const build = crypto.createHash("sha256")
 
 const stamp = (text) => text
   .replace(/(from\s+["']\.\/[\w.-]+\.js)(["'])/g, `$1?v=${build}$2`)
-  .replace(/(import\(["']\.\/[\w.-]+\.js)(["'])/g, `$1?v=${build}$2`)
-  .replace(/(src="[\w.-]+\.js)(")/g, `$1?v=${build}$2`)
-  .replace(/(href="[\w.-]+\.css)(")/g, `$1?v=${build}$2`);
+  .replace(/(import\(["']\.\/[\w.-]+\.js)(["'])/g, `$1?v=${build}$2`);
+
+// index.html is the one file that can't carry a stamp — the browser caches it
+// for ten minutes and then hands out last publish's module URLs. So it stops
+// naming them: a tiny loader that never changes reads the current build id and
+// pulls the app in from there. A stale index.html is then harmless.
+const BOOTSTRAP = `<style>html,body{margin:0;height:100%;background:#fff;overflow:hidden}</style>
+<script type="module">
+const { build } = await fetch("build.json", { cache: "no-store" }).then((r) => r.json());
+document.head.append(Object.assign(document.createElement("link"),
+  { rel: "stylesheet", href: "style.css?v=" + build }));
+await import("./app.js?v=" + build);
+</script>`;
 
 for (const [f, text] of sources) {
-  writeFileSync(join(DOCS, f), /\.(js|html)$/.test(f) ? stamp(text) : text);
+  let out = text;
+  if (f === "index.html") {
+    out = text
+      .replace(/<link rel="stylesheet" href="style\.css">\s*/, "")
+      .replace(/<script type="module" src="app\.js"><\/script>/, BOOTSTRAP);
+  } else if (f.endsWith(".js")) {
+    out = stamp(text);
+  }
+  writeFileSync(join(DOCS, f), out);
 }
+writeFileSync(join(DOCS, "build.json"), JSON.stringify({ build, at: Date.now() }));
 writeFileSync(join(DOCS, ".nojekyll"), "");
 console.log(`app: ${APP_FILES.length} files -> docs/  (build ${build})`);
 
