@@ -85,6 +85,30 @@ depth, the corner for both (hold `⇧` on the corner to keep the shape). The
 group box stretches a whole selection the same way, and **Size…** on any prop
 takes exact dimensions in feet.
 
+**A handbook, in the app.** `?` or **☰ ▸ Handbook** — how everything works,
+written for the way it gets used on the day.
+
+**Light and dark.** **☰ ▸ Appearance…** — light, dark, or follow the system.
+Exports are always on white paper whatever the screen is set to.
+
+**Dolly track in real pieces.** **Add ▸ Lay Dolly Track…** builds a run out of
+what actually comes off the truck: 4ft, 8ft and 10ft straights and 45°/90°
+curves, drawn at the true 24.5-inch gauge with ties. The panel keeps a running
+tally — *3 × 8ft straight, 1 × 45° right, 1 × 90° left · 24ft of straight* —
+which is what you'd hand the key grip.
+
+**Rigged camera support.** **Add ▸ Add Rigged Camera…** gives you a dolly, a
+dolly with a jib, a bare jib, or a slider, with the camera already on it.
+Dropping a dolly near track puts it on the track. Drag it and it can only go
+where the track goes, camera along for the ride. Drag the camera and the jib
+arm swings it at a fixed reach — 8ft by default, the Jib 21 working radius — or
+runs it along a slider's own axis. Move the track and everything on it follows.
+
+**The shot list into Drive.** **To Drive** writes a formatted `.xlsx` into
+*My Drive / Shot Lists* with a row per shot and **an overhead frame for each
+one**, that setup's camera lit and the rest dimmed. Sheets opens `.xlsx`
+directly, so it's sitting in Drive ready to send to departments.
+
 **Shot lists at typing speed.** The shot list panel takes shorthand: `ots d to
 m 50`, `cu sara 85`, `ins r 135`. The vocabulary isn't invented — it's what
 1,554 shot descriptions in this library actually use, so OTS, CU, MCU, M, W,

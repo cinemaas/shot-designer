@@ -1,19 +1,22 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=ceb8219f";
-import * as R from "./render.js?v=ceb8219f";
-import { FXG } from "./assets.js?v=ceb8219f";
-import * as B from "./blocking.js?v=ceb8219f";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=ceb8219f";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ceb8219f";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=ceb8219f";
-import { Library } from "./library.js?v=ceb8219f";
+import * as H from "./hcw.js?v=f6063cd2";
+import * as R from "./render.js?v=f6063cd2";
+import { FXG } from "./assets.js?v=f6063cd2";
+import * as B from "./blocking.js?v=f6063cd2";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=f6063cd2";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f6063cd2";
+import { HANDBOOK } from "./handbook.js?v=f6063cd2";
+import * as TR from "./track.js?v=f6063cd2";
+import * as RIG from "./rigs.js?v=f6063cd2";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=f6063cd2";
+import { Library } from "./library.js?v=f6063cd2";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=ceb8219f";
+} from "./catalog.js?v=f6063cd2";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -37,6 +40,7 @@ const S = {
   info: null,            // derived beat structure
   ghosts: true,
   compactLabels: false,
+  spotlight: null,       // one camera lit while a shot's frame is rendered
   allCameraLabels: false,   // in blocking mode, only labels for cameras that are on somebody
   cloudId: null,         // this scene's id in the cloud
   shareId: null,         // set when we were opened from a share link
@@ -92,21 +96,44 @@ function reindex() {
 
 // ---------------------------------------------------------------- animation
 
-/** Positions for the current time slice, keyed by object id. */
+/**
+ * Positions for the current time slice, keyed by object id.
+ *
+ * A walk arrow is the route, not the journey: its ends are held clear of the
+ * figures at either end so the drawing reads, so the actual travel runs from
+ * where the character stands to where they end up, using the arrow's middle
+ * points as the way through. At the first beat everyone is exactly where the
+ * scene says they are.
+ */
 function slicePositions() {
   const n = Math.max(1, timeSlices().length);
   const t = n > 1 ? S.slice / (n - 1) : 0;
   const moves = new Map();
+  if (t === 0) return moves;
+
   for (const o of objects()) {
-    if (!R.POINT_TAGS.has(o.tag)) continue;
-    if (o.tag === "AxisLine") continue;
-    const mover = H.get(o, "fromConstraints");
+    if (!R.POINT_TAGS.has(o.tag) || o.tag === "AxisLine") continue;
+    const moverID = H.get(o, "fromConstraints");
+    const mover = moverID && byID(moverID);
     if (!mover) continue;
+
     const pts = R.pointsOf(o);
     if (pts.length < 2) continue;
-    moves.set(mover, alongPath(pts, t));
+    const dest = byID(H.get(o, "toConstraints"));
+    const route = [
+      { x: H.getNum(mover, "x"), y: H.getNum(mover, "y") },
+      ...pts.slice(1, -1),
+      dest ? { x: H.getNum(dest, "x"), y: H.getNum(dest, "y") } : pts[pts.length - 1],
+    ];
+    moves.set(moverID, alongPath(route, t));
   }
   return moves;
+}
+
+/** Where an object is actually drawn right now, timeline included. */
+function drawnPos(o) {
+  const moved = S.moves?.get(idOf(o));
+  return moved || { x: H.getNum(o, "x"), y: H.getNum(o, "y") };
 }
 
 function alongPath(pts, t) {
@@ -151,12 +178,17 @@ const LAYER_G = Object.fromEntries(
 );
 
 function draw() {
+  R.refreshTheme();
   for (const g of Object.values(LAYER_G)) g.replaceChildren();
   if (!S.doc) return;
+  // A rig's position is derived from the track it rides, so it's recomputed
+  // rather than remembered — move the track and the dolly goes with it.
+  reflowRigs();
   drawGrid();
 
   const ls = layerStates();
   const moves = slicePositions();
+  S.moves = moves;
   const dim = H.getNum(ls, "disabledLayerTransparency", 0.2);
   const beatState = S.blocking && S.info
     ? B.stateAt(S.info, objects(), S.beat, { cameraLabels: S.allCameraLabels })
@@ -188,9 +220,19 @@ function draw() {
         node.setAttribute("opacity", 0.16);
       }
     }
+    if (S.spotlight) {
+      const id = idOf(obj);
+      const isCam = obj.tag === "Camera";
+      const isItsLabel = R.LABEL_TAGS.has(obj.tag) &&
+        H.get(obj, "attachObjectID") === S.spotlight;
+      const otherLabel = R.LABEL_TAGS.has(obj.tag) && !isItsLabel;
+      if (otherLabel) continue;
+      if (isCam && id !== S.spotlight) node.setAttribute("opacity", 0.22);
+    }
     if (S.sel.has(idOf(obj))) node.classList.add("selected");
     g.append(node);
   }
+  drawRigArms();
   declutterLabels();
   drawSelection();
   applyView();
@@ -201,6 +243,29 @@ function draw() {
  * on top of each other. Nudge the overlapping ones apart for display only —
  * the scene itself is untouched — and stretch each leader line to follow.
  */
+/** The physical link: a jib arm, or the post a camera sits on. */
+function drawRigArms() {
+  for (const rig of objects()) {
+    if (!RIG.isRig(rig)) continue;
+    const cam = byID(RIG.rigCameraID(rig));
+    if (!cam) continue;
+    const spec = RIG.rigSpec(rig);
+    const ox = H.getNum(rig, "x"), oy = H.getNum(rig, "y");
+    const cx = H.getNum(cam, "x"), cy = H.getNum(cam, "y");
+    if (Math.hypot(cx - ox, cy - oy) < 2) continue;
+    const g = LAYER_G.prop;
+    if (spec.arm) {
+      g.append(R.el("line", { x1: ox, y1: oy, x2: cx, y2: cy,
+        stroke: "#4a5157", "stroke-width": 7, "stroke-linecap": "round", opacity: .85 }));
+      g.append(R.el("circle", { cx: ox, cy: oy, r: 7,
+        fill: "#4a5157", stroke: "none" }));
+    } else {
+      g.append(R.el("line", { x1: ox, y1: oy, x2: cx, y2: cy,
+        stroke: "#4a5157", "stroke-width": 5, "stroke-linecap": "round", opacity: .7 }));
+    }
+  }
+}
+
 function declutterLabels() {
   const nodes = [...LAYER_G.caption.children];
   if (nodes.length < 2) return;
@@ -468,6 +533,47 @@ function fitToContent(pad = 90) {
 
 // ---------------------------------------------------------------- hit testing
 
+// An arrow drawn between two people belongs to those people: the original
+// keeps its ends 32 units clear of where it starts and 40 clear of where it
+// lands, and redraws it whenever either of them moves.
+const LEAD_IN = 32, LEAD_OUT = 40;
+
+function reflowConstraints(movedIDs = null) {
+  for (const o of objects()) {
+    if (!R.POINT_TAGS.has(o.tag)) continue;
+    const fromID = H.get(o, "fromConstraints"), toID = H.get(o, "toConstraints");
+    const from = fromID && byID(fromID), to = toID && byID(toID);
+    if (!from && !to) continue;
+    if (movedIDs && !(movedIDs.has(fromID) || movedIDs.has(toID))) continue;
+
+    const pts = R.pointsOf(o);
+    if (pts.length < 2) continue;
+    const arrow = H.getBool(o, "endArrowHead");
+
+    if (from) {
+      const a = { x: H.getNum(from, "x"), y: H.getNum(from, "y") };
+      const towards = to && pts.length === 2
+        ? { x: H.getNum(to, "x"), y: H.getNum(to, "y") } : pts[1];
+      pts[0] = offsetFrom(a, towards, LEAD_IN);
+    }
+    if (to) {
+      const b = { x: H.getNum(to, "x"), y: H.getNum(to, "y") };
+      const towards = from && pts.length === 2
+        ? { x: H.getNum(from, "x"), y: H.getNum(from, "y") } : pts[pts.length - 2];
+      pts[pts.length - 1] = offsetFrom(b, towards, arrow ? LEAD_OUT : LEAD_IN);
+    }
+    R.setPoints(o, pts);
+  }
+}
+
+/** A point `gap` away from `at`, in the direction of `towards`. */
+function offsetFrom(at, towards, gap) {
+  const dx = towards.x - at.x, dy = towards.y - at.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 1) return { x: at.x, y: at.y };
+  return { x: round(at.x + (dx / d) * gap), y: round(at.y + (dy / d) * gap) };
+}
+
 const layerOn = (o) => {
   const flag = layerKeyFor(R.layerOf(o.tag));
   return !flag || H.getBool(layerStates(), flag, true);
@@ -486,11 +592,20 @@ const layerOn = (o) => {
  */
 function hitTest(pt, client) {
   if (client) {
+    const stack = [];
     for (const el of document.elementsFromPoint(client.x, client.y)) {
       const g = el.closest?.(".obj");
       if (!g) continue;
       const o = byID(g.dataset.id);
-      if (o && layerOn(o)) return o;
+      if (o && layerOn(o) && !stack.includes(o)) stack.push(o);
+    }
+    if (stack.length) {
+      // Labels are the top layer and they drift over everything in a busy
+      // scene — numbers sit dead centre on their character, shot descriptions
+      // sprawl across the set. You almost never want to grab one by accident,
+      // so anything solid underneath wins. A label sitting on its own still
+      // picks up fine, because then it's the only thing there.
+      return stack.find((o) => !R.LABEL_TAGS.has(o.tag)) || stack[0];
     }
   }
 
@@ -501,7 +616,8 @@ function hitTest(pt, client) {
     if (R.POINT_TAGS.has(o.tag)) {
       if (nearPath(R.pointsOf(o), pt, tol)) near.push({ o, d: 0 });
     } else if (!R.GENERIC_TAGS.has(o.tag)) {
-      const d = Math.hypot(pt.x - H.getNum(o, "x"), pt.y - H.getNum(o, "y"));
+      const p = drawnPos(o);
+      const d = Math.hypot(pt.x - p.x, pt.y - p.y);
       if (d <= R.radiusOf(o) + tol) near.push({ o, d });
     }
   }
@@ -592,8 +708,14 @@ stage.addEventListener("pointerdown", (ev) => {
       S.sel.clear(); S.sel.add(id);
     }
     mark("move");
-    drag = { mode: "move", start: pt, moved: false,
-      origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
+    if (S.sel.size === 1 && RIG.rigParentID(hit)) {
+      drag = { mode: "rigcam", obj: hit, moved: false };
+    } else if (S.sel.size === 1 && RIG.isRig(hit) && H.get(hit, "snapPath")) {
+      drag = { mode: "rigslide", obj: hit, moved: false };
+    } else {
+      drag = { mode: "move", start: pt, moved: false,
+        origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
+    }
   } else {
     if (!extend) S.sel.clear();
     S.marquee = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y };
@@ -627,6 +749,24 @@ stage.addEventListener("pointermove", (ev) => {
     for (const o of drag.origins) {
       if (o.pts) R.setPoints(o.obj, o.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })));
       else { H.set(o.obj, "x", round(o.x + dx)); H.set(o.obj, "y", round(o.y + dy)); }
+    }
+    reflowConstraints(new Set(S.sel));
+    reflowRigs();
+    sendLiveEdit();
+    return draw();
+  }
+  if (drag.mode === "rigcam") {
+    drag.moved = true;
+    dragRigCamera(drag.obj, pt);
+    sendLiveEdit();
+    return draw();
+  }
+  if (drag.mode === "rigslide") {
+    drag.moved = true;
+    const track = byID(H.get(drag.obj, "snapPath"));
+    if (track) {
+      H.set(drag.obj, "snapPercent", RIG.percentOnTrack(R.pointsOf(track), pt));
+      reflowRigs();
     }
     sendLiveEdit();
     return draw();
@@ -971,14 +1111,149 @@ function drawGrid() {
   const y1 = y0 + r.height / S.view.k + GRID;
   if ((x1 - x0) / GRID > 400) return;                 // too far out to be useful
   const w = 1 / S.view.k;
+  const cs = getComputedStyle(document.documentElement);
+  const axis = (cs.getPropertyValue("--grid-axis") || "#c9d2da").trim();
+  const fine = (cs.getPropertyValue("--grid-fine") || "#eceff2").trim();
   for (let x = x0; x <= x1; x += GRID) {
     g.append(R.el("line", { x1: x, y1: y0, x2: x, y2: y1,
-      stroke: x === 0 ? "#c9d2da" : "#eceff2", "stroke-width": w }));
+      stroke: x === 0 ? axis : fine, "stroke-width": w }));
   }
   for (let y = y0; y <= y1; y += GRID) {
     g.append(R.el("line", { x1: x0, y1: y, x2: x1, y2: y,
-      stroke: y === 0 ? "#c9d2da" : "#eceff2", "stroke-width": w }));
+      stroke: y === 0 ? axis : fine, "stroke-width": w }));
   }
+}
+
+// ---------------------------------------------------------------- track & rigs
+
+/** Start a run of track. Pieces get added from the panel that appears. */
+function layTrack(at) {
+  mark("lay track");
+  const recipe = ["S8"];
+  const { points } = TR.layout(recipe, { x: round(at.x), y: round(at.y) }, 0);
+  const t = H.makePath("Track", points, { hardLine: true });
+  H.set(t, "trackSegments", TR.writeRecipe(recipe));
+  H.set(t, "trackHeading", 0);
+  canvas().children.push(t);
+  reindex();
+  S.sel = new Set([idOf(t)]);
+  draw(); syncChrome();
+}
+
+const trackRecipe = (t) => TR.parseRecipe(H.get(t, "trackSegments"));
+const isBuiltTrack = (o) => o && o.tag === "Track" && trackRecipe(o).length > 0;
+
+function rebuildTrack(t) {
+  const pts = R.pointsOf(t);
+  const origin = pts[0] || { x: 0, y: 0 };
+  const { points } = TR.layout(trackRecipe(t), origin, H.getNum(t, "trackHeading", 0));
+  R.setPoints(t, points.map((p) => ({ x: round(p.x), y: round(p.y) })));
+  reflowRigs();
+}
+
+function addTrackPiece(t, code) {
+  mark("track piece");
+  const recipe = trackRecipe(t);
+  recipe.push(code);
+  H.set(t, "trackSegments", TR.writeRecipe(recipe));
+  rebuildTrack(t);
+  draw(); syncChrome();
+}
+
+function dropTrackPiece(t) {
+  const recipe = trackRecipe(t);
+  if (recipe.length <= 1) return;
+  mark("track piece");
+  recipe.pop();
+  H.set(t, "trackSegments", TR.writeRecipe(recipe));
+  rebuildTrack(t);
+  draw(); syncChrome();
+}
+
+function rigMenu(x, y, at) {
+  showPopover(x, y, [
+    { head: "Rigged Camera" },
+    ...Object.entries(RIG.RIGS).map(([kind, spec]) => ({
+      label: spec.label,
+      run: () => {
+        mark("add rig");
+        const { rig, cam } = RIG.makeRig(kind, round(at.x), round(at.y));
+        H.set(cam, "colorIndex",
+          objects().filter((o) => o.tag === "Camera").length % CAMERA_COLORS.length);
+        canvas().children.push(rig, cam);
+        reindex();
+        snapRigToNearestTrack(rig);
+        S.sel = new Set([idOf(rig)]);
+        draw(); syncChrome();
+        toast(`${spec.label} — drag it and the camera comes with it`);
+      },
+    })),
+  ]);
+}
+
+/** Dropping a dolly near track puts it on the track. */
+function snapRigToNearestTrack(rig) {
+  if (!RIG.rigSpec(rig)?.ride) return;
+  const here = { x: H.getNum(rig, "x"), y: H.getNum(rig, "y") };
+  let best = null;
+  for (const o of objects()) {
+    if (o.tag !== "Track") continue;
+    const pts = R.pointsOf(o);
+    const pct = RIG.percentOnTrack(pts, here);
+    const at = RIG.alongTrack(pts, pct);
+    const d = Math.hypot(at.x - here.x, at.y - here.y);
+    if (d < 120 && (!best || d < best.d)) best = { o, pct, at, d };
+  }
+  if (!best) return;
+  H.set(rig, "snapPath", idOf(best.o));
+  H.set(rig, "snapPercent", best.pct);
+  placeRigOnTrack(rig);
+}
+
+/** Put a rig where its track says it is, and bring its camera along. */
+function placeRigOnTrack(rig) {
+  const track = byID(H.get(rig, "snapPath"));
+  if (!track || track.tag !== "Track") return false;
+  const at = RIG.alongTrack(R.pointsOf(track), H.getNum(rig, "snapPercent", 0));
+  H.set(rig, "x", round(at.x));
+  H.set(rig, "y", round(at.y));
+  if (at.angle !== undefined) R.setAngle(rig, at.angle);
+  return true;
+}
+
+/** Every camera sits where its rig puts it. */
+function reflowRigs() {
+  for (const rig of objects()) {
+    if (!RIG.isRig(rig)) continue;
+    placeRigOnTrack(rig);
+    const cam = byID(RIG.rigCameraID(rig));
+    if (!cam) continue;
+    const seat = RIG.cameraSeat(rig, cam);
+    H.set(cam, "x", round(seat.x));
+    H.set(cam, "y", round(seat.y));
+  }
+}
+
+/** Dragging a rigged camera swings the arm rather than detaching it. */
+function dragRigCamera(cam, pt) {
+  const rig = byID(RIG.rigParentID(cam));
+  if (!rig) return false;
+  const spec = RIG.rigSpec(rig);
+  const ox = H.getNum(rig, "x"), oy = H.getNum(rig, "y");
+
+  if (spec.arm) {
+    H.set(cam, "rigArmAngle", Math.atan2(pt.y - oy, pt.x - ox));
+  } else if (spec.travel) {
+    const a = R.angleOf(rig);
+    const along = (pt.x - ox) * Math.cos(a) + (pt.y - oy) * Math.sin(a);
+    H.set(cam, "rigSlide", Math.max(-0.5, Math.min(0.5, along / spec.travel)));
+  } else {
+    R.setAngle(rig, Math.atan2(pt.y - oy, pt.x - ox));
+  }
+  const seat = RIG.cameraSeat(rig, cam);
+  H.set(cam, "x", round(seat.x));
+  H.set(cam, "y", round(seat.y));
+  return true;
 }
 
 // ---------------------------------------------------------------- group edits
@@ -1015,6 +1290,7 @@ function mapGroup(fn, spin = 0) {
       if (spin && R.hasRotator(o)) R.setAngle(o, R.angleOf(o) + spin);
     }
   }
+  reflowConstraints(new Set(S.sel));
   draw(); syncChrome();
 }
 
@@ -1265,6 +1541,7 @@ function moveSelection(dx, dy) {
   if (!S.sel.size) return;
   mark("nudge");
   for (const id of S.sel) nudge(byID(id), dx, dy);
+  reflowConstraints(new Set(S.sel));
   draw();
 }
 
@@ -1297,6 +1574,11 @@ window.addEventListener("keydown", (ev) => {
   if (cmd && k === "-") { ev.preventDefault(); return zoomStep(0.8); }
   if (cmd && k === "0") { ev.preventDefault(); return fitToContent(); }
 
+  if (k === "escape" && !$("#handbook").hidden) {
+    $("#handbook").hidden = true;
+    return;
+  }
+  if (k === "?" || (k === "/" && ev.shiftKey)) { ev.preventDefault(); return openHandbook(); }
   if (k === "escape") {
     if (S.draft || S.tool) {
       ev.preventDefault();
@@ -1460,6 +1742,9 @@ function syncChrome() {
               (S.sel.size ? `   ${S.sel.size} selected` : ""));
   $("#status").classList.toggle("live", !!(readout || S.tool));
 
+  const track = S.sel.size === 1 ? byID([...S.sel][0]) : null;
+  renderTrackPanel(isBuiltTrack(track) ? track : null);
+
   const banner = $("#toolbanner");
   banner.hidden = !S.tool;
   if (S.tool) {
@@ -1596,6 +1881,42 @@ const colorFor = (name) =>
   "#" + ((CHARACTER_COLORS.find(([n]) => n === name) || [, 0xbbbbbb])[1])
     .toString(16).padStart(6, "0");
 
+/** What you'd send the key grip for, and the buttons to add more. */
+function renderTrackPanel(t) {
+  let panel = $("#trackPanel");
+  if (!t) { if (panel) panel.hidden = true; return; }
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "trackPanel";
+    $("#app").append(panel);
+  }
+  panel.hidden = false;
+  panel.replaceChildren();
+
+  const head = document.createElement("b");
+  head.textContent = "Dolly track";
+  const list = document.createElement("span");
+  list.className = "tally";
+  list.textContent = TR.summary(trackRecipe(t));
+
+  const row = document.createElement("div");
+  row.className = "pieces";
+  for (const [code, piece] of Object.entries(TR.PIECES)) {
+    const b = document.createElement("button");
+    b.textContent = piece.label.replace(" straight", "").replace("degree", "°");
+    b.title = "Add a " + piece.label;
+    b.onclick = () => addTrackPiece(t, code);
+    row.append(b);
+  }
+  const undo = document.createElement("button");
+  undo.textContent = "Remove last";
+  undo.className = "drop";
+  undo.onclick = () => dropTrackPiece(t);
+  row.append(undo);
+
+  panel.append(head, list, row);
+}
+
 // ---------------------------------------------------------------- popovers
 
 const pop = $("#popover");
@@ -1660,6 +1981,8 @@ function mainMenu(x, y) {
     "-",
     "-",
     { label: Cloud.connected ? "Cloud…" : "Connect to Cloud…", run: () => cloudMenu(x, y) },
+    { label: "Appearance…", run: () => themeMenu(x, y) },
+    { label: "Handbook", key: "?", run: openHandbook },
     { label: "Keyboard Shortcuts", run: shortcutsSheet },
   ]);
 }
@@ -1680,6 +2003,8 @@ function addMenu(x, y, at) {
         palette("Grip", asList(byCategory("grip")), "GenericSet", at, x, y) },
     { label: "Add Camera Support…", run: () =>
         palette("Camera Support", asList(byCategory("camera")), "GenericProp", at, x, y) },
+    { label: "Lay Dolly Track…", run: () => layTrack(at) },
+    { label: "Add Rigged Camera…", run: () => rigMenu(x, y, at) },
     { label: "Add Image Prop…", run: () => importImageProp(at) },
     { label: "Add Annotation…", run: () => addCaption(at) },
     "-",
@@ -2232,10 +2557,15 @@ function renderShotList() {
     ? `Cover ${cast[0].name} / ${cast[1].name}` : "Standard Coverage";
   cov.onclick = () => addCoverage(cast);
   const csv = document.createElement("button");
-  csv.textContent = "Export CSV";
+  csv.textContent = "CSV";
   csv.disabled = !versions.length;
   csv.onclick = exportShotCSV;
-  quick.append(cov, csv);
+  const drive = document.createElement("button");
+  drive.textContent = "To Drive";
+  drive.title = "A formatted sheet with a frame per shot, saved into Google Drive";
+  drive.disabled = !versions.length || !isLocal();
+  drive.onclick = exportShotSheet;
+  quick.append(cov, csv, drive);
   p.append(quick);
 
   if (!versions.length) {
@@ -2464,6 +2794,69 @@ function deleteShot(v) {
 }
 
 /** A shot list the AD can actually open. */
+/**
+ * A shot list with a frame for every setup, written into Google Drive.
+ * Sheets opens .xlsx directly, so it's sitting there ready to send on.
+ */
+async function exportShotSheet() {
+  const versions = shotVersions();
+  if (!versions.length) return toast("No shots yet");
+  if (!isLocal()) return toast("Drive export runs from the app on your Mac");
+
+  const wasSel = new Set(S.sel);
+  const shots = [];
+  toast(`Rendering ${versions.length} frames…`);
+
+  for (const [i, v] of versions.entries()) {
+    S.spotlight = H.get(v, "attachObjectID");
+    S.sel.clear();
+    draw();
+    shots.push({
+      camera: H.get(v, "headerText"),
+      shot: H.get(v, "versionNickname"),
+      type: H.get(v, "versionShotType"),
+      lens: parseFloat(H.get(v, "versionLens")) || "",
+      notes: H.get(v, "versionDescription"),
+      png: await frameToPNG(),
+    });
+    if (i % 3 === 0) toast(`Rendering frame ${i + 1} of ${versions.length}…`);
+  }
+
+  S.spotlight = null;
+  S.sel = wasSel;
+  draw();
+
+  try {
+    const r = await api("/api/shotsheet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scene: baseName(), shots }),
+    });
+    toast(`Saved to Drive → ${r.folder}`);
+  } catch (e) { toast("Drive export failed: " + e.message); }
+}
+
+/** The current view of the scene as a PNG, sized for a spreadsheet row. */
+function frameToPNG() {
+  const { svg, w, h } = sceneSVG();
+  const scale = Math.min(760 / w, 420 / h, 1);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(w * scale));
+      c.height = Math.max(1, Math.round(h * scale));
+      const x = c.getContext("2d");
+      x.fillStyle = "#fff";
+      x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL("image/png"));
+    };
+    img.onerror = () => resolve("");
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  });
+}
+
 function exportShotCSV() {
   const rows = [["#", "Camera", "Shot", "Type", "Lens", "Notes"]];
   shotVersions().forEach((v, i) => {
@@ -2947,6 +3340,13 @@ function sendLiveSnapshot() {
 // ---------------------------------------------------------------- export
 
 function sceneSVG() {
+  const wasDark = document.documentElement.dataset.theme === "dark";
+  if (wasDark) { document.documentElement.dataset.theme = "light"; draw(); }
+  try { return buildSceneSVG(); }
+  finally { if (wasDark) { document.documentElement.dataset.theme = "dark"; draw(); } }
+}
+
+function buildSceneSVG() {
   const pts = [];
   for (const o of objects()) {
     if (R.POINT_TAGS.has(o.tag)) pts.push(...R.pointsOf(o));
@@ -3010,6 +3410,80 @@ function exportHCW() {
   download(baseName() + ".hcw", new Blob([H.serialize(S.doc)], { type: "application/xml" }));
 }
 
+// ---------------------------------------------------------------- handbook
+
+function openHandbook(section) {
+  const box = $("#handbook");
+  box.replaceChildren();
+  box.hidden = false;
+
+  const nav = document.createElement("nav");
+  const main = document.createElement("article");
+
+  const show = (id) => {
+    const s = HANDBOOK.find((x) => x.id === id) || HANDBOOK[0];
+    main.innerHTML = `<h2>${s.title}</h2>${s.body}`;
+    main.scrollTop = 0;
+    for (const b of nav.querySelectorAll("button")) {
+      b.classList.toggle("on", b.dataset.id === s.id);
+    }
+  };
+
+  const head = document.createElement("div");
+  head.className = "hb-head";
+  const title = document.createElement("b");
+  title.textContent = "Handbook";
+  const close = document.createElement("button");
+  close.textContent = "✕";
+  close.title = "Close (Esc)";
+  close.onclick = () => { box.hidden = true; };
+  head.append(title, close);
+
+  for (const s of HANDBOOK) {
+    const b = document.createElement("button");
+    b.textContent = s.title;
+    b.dataset.id = s.id;
+    b.onclick = () => show(s.id);
+    nav.append(b);
+  }
+
+  const side = document.createElement("div");
+  side.className = "hb-side";
+  side.append(head, nav);
+  box.append(side, main);
+  show(section || HANDBOOK[0].id);
+}
+
+// ---------------------------------------------------------------- theme
+
+const THEME_KEY = "sd.theme";
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "system") delete root.dataset.theme;
+  else root.dataset.theme = mode;
+  try { localStorage.setItem(THEME_KEY, mode); } catch { /* private window */ }
+  S.theme = mode;
+  draw(); syncChrome();
+}
+
+function currentTheme() {
+  try { return localStorage.getItem(THEME_KEY) || "system"; }
+  catch { return "system"; }
+}
+
+function themeMenu(x, y) {
+  const now = currentTheme();
+  showPopover(x, y, [
+    { head: "Appearance" },
+    ...[["light", "Light"], ["dark", "Dark"], ["system", "Match the system"]]
+      .map(([mode, label]) => ({
+        label: (now === mode ? "◉  " : "○  ") + label,
+        run: () => applyTheme(mode),
+      })),
+  ]);
+}
+
 // ---------------------------------------------------------------- boot
 
 window.addEventListener("beforeunload", (e) => {
@@ -3018,6 +3492,12 @@ window.addEventListener("beforeunload", (e) => {
 window.addEventListener("resize", () => draw());
 
 (async function boot() {
+  applyTheme(currentTheme());
+  // Following the system means following it as it changes, too.
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (currentTheme() === "system") { draw(); syncChrome(); }
+  });
+
   const q = new URLSearchParams(location.search);
 
   // On the Worker, ?s= is a share link. On Pages, it's a scene in the library.

@@ -1,17 +1,28 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=ceb8219f";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=ceb8219f";
-import { EXTRA_SVG } from "./props.js?v=ceb8219f";
-import * as H from "./hcw.js?v=ceb8219f";
+import { FXG } from "./assets.js?v=f6063cd2";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=f6063cd2";
+import { EXTRA_SVG } from "./props.js?v=f6063cd2";
+import { GAUGE } from "./track.js?v=f6063cd2";
+import * as H from "./hcw.js?v=f6063cd2";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
-const INK = "#000";
 const CAMERA_GREEN = "#09d901";
 const WALL_GRAY = "#8c9195";
-export const LABEL_NAVY = "#255681";
+
+// Ink and label colour come from the stylesheet so the diagram follows the
+// theme, but they're read as concrete values — the maths below needs real
+// numbers, and an exported SVG has no stylesheet to resolve var() against.
+let INK = "#000";
+export let LABEL_NAVY = "#255681";
+
+export function refreshTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  INK = (cs.getPropertyValue("--line") || "#000").trim();
+  LABEL_NAVY = (cs.getPropertyValue("--ink") || "#255681").trim();
+}
 
 const SVGNS = "http://www.w3.org/2000/svg";
 export function el(tag, attrs = {}) {
@@ -203,14 +214,15 @@ function drawPathObject(obj) {
   const style = {
     // Measured off the app: walls are a plain black 2-unit line, never filled.
     Wall: { stroke: INK, width: 2, dash: null },
-    Track: { stroke: INK, width: STROKE, dash: null },
+    Track: { stroke: INK, width: 1, dash: "6 5" },
     SpeedRail: { stroke: INK, width: STROKE, dash: "10 6" },
     AxisLine: { stroke: INK, width: 1.6, dash: "9 7" },
     WalkArrow: { stroke: INK, width: 2.2, dash: null },
   }[tag] || { stroke: INK, width: STROKE, dash: null };
 
   const line = el("path", {
-    d, fill: "none", stroke: style.stroke, "stroke-width": style.width,
+    d, fill: "none", stroke: style.stroke,
+    "stroke-width": tag === "Track" ? 1 : style.width,
     "stroke-linecap": "round", "stroke-linejoin": "round",
     "stroke-dasharray": style.dash,
   });
@@ -219,11 +231,21 @@ function drawPathObject(obj) {
   g.append(line);
 
   if (tag === "Track") {
-    // Dolly track reads as two rails with ties between them.
-    for (const off of [-4.5, 4.5]) {
+    // Two rails at the real 24.5-inch gauge, with ties between them, so track
+    // on the page takes up the room track takes up on the floor.
+    const half = GAUGE / 2;
+    const left = offsetPoints(pts, -half), right = offsetPoints(pts, half);
+    for (let i = 0; i < pts.length; i += 1) {
+      g.append(el("line", {
+        x1: left[i].x, y1: left[i].y, x2: right[i].x, y2: right[i].y,
+        stroke: INK, "stroke-width": 1.6, opacity: .45,
+      }));
+    }
+    for (const rail of [left, right]) {
       g.append(el("path", {
-        d: pathData(offsetPoints(pts, off), { hard, closed }),
-        fill: "none", stroke: INK, "stroke-width": 1.4, opacity: .8,
+        d: pathData(rail, { hard, closed }),
+        fill: "none", stroke: INK, "stroke-width": 2.4,
+        "stroke-linecap": "round", "stroke-linejoin": "round",
       }));
     }
   }

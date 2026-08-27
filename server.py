@@ -6,6 +6,7 @@ Serves the app and exposes a small file API over the real
 scenes the original app uses. Writes always leave a timestamped backup behind.
 """
 import http.server, socketserver, json, os, re, shutil, time, urllib.parse, posixpath
+import base64, tempfile
 
 PORT = 8769
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +47,82 @@ def listing(rel):
             st = os.stat(p)
             scenes.append({"name": name, "size": st.st_size, "mtime": st.st_mtime})
     return {"path": rel, "folders": folders, "scenes": scenes}
+
+
+DRIVE = os.path.expanduser(
+    "~/Library/CloudStorage/GoogleDrive-cinemaasinc@gmail.com/My Drive")
+SHEET_DIR = os.path.join(DRIVE, "Shot Lists")
+
+
+def write_shot_sheet(data):
+    """A formatted shot list with a frame per row, dropped straight into Drive.
+
+    Google Drive syncs the folder, and Sheets opens .xlsx directly, so it's
+    there ready to share with departments without an upload step.
+    """
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    scene = re.sub(r"[^\w .-]", "", data.get("scene") or "Scene")
+    shots = data.get("shots") or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Shot List"
+
+    headers = ["#", "Cam", "Shot", "Type", "Lens", "Notes", "Overhead"]
+    widths = [5, 8, 34, 9, 8, 40, 46]
+    navy = PatternFill("solid", fgColor="255681")
+    thin = Side(style="thin", color="D6DBE0")
+    edge = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    ws["A1"] = scene
+    ws["A1"].font = Font(size=15, bold=True, color="255681")
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+    ws.row_dimensions[1].height = 26
+
+    for i, (head, w) in enumerate(zip(headers, widths), start=1):
+        c = ws.cell(row=2, column=i, value=head)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = navy
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.row_dimensions[2].height = 20
+    ws.freeze_panes = "A3"
+
+    tmp = []
+    for n, shot in enumerate(shots, start=1):
+        row = n + 2
+        values = [n, shot.get("camera", ""), shot.get("shot", ""),
+                  shot.get("type", ""), shot.get("lens", ""), shot.get("notes", "")]
+        for i, v in enumerate(values, start=1):
+            c = ws.cell(row=row, column=i, value=v)
+            c.alignment = Alignment(vertical="top", wrap_text=(i == 6))
+            c.border = edge
+        ws.cell(row=row, column=7).border = edge
+        ws.row_dimensions[row].height = 132
+
+        png = shot.get("png") or ""
+        if png.startswith("data:image"):
+            raw = base64.b64decode(png.split(",", 1)[1])
+            f = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            f.write(raw); f.close(); tmp.append(f.name)
+            img = XLImage(f.name)
+            scale = min(320 / img.width, 172 / img.height, 1)
+            img.width = int(img.width * scale)
+            img.height = int(img.height * scale)
+            ws.add_image(img, f"G{row}")
+
+    os.makedirs(SHEET_DIR, exist_ok=True)
+    path = os.path.join(SHEET_DIR, f"{scene} shot list.xlsx")
+    wb.save(path)
+    for f in tmp:
+        try: os.remove(f)
+        except OSError: pass
+    return {"ok": True, "path": path, "shots": len(shots),
+            "folder": os.path.relpath(SHEET_DIR, DRIVE)}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -131,6 +208,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 shutil.copy2(src, dst)
                 return self.send_json({"ok": True, "path": data["to"]})
+            if u.path == "/api/shotsheet":
+                return self.send_json(write_shot_sheet(data))
             if u.path == "/api/mkdir":
                 os.makedirs(safe(data["path"]), exist_ok=True)
                 return self.send_json({"ok": True})
