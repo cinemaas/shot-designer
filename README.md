@@ -85,6 +85,23 @@ depth, the corner for both (hold `⇧` on the corner to keep the shape). The
 group box stretches a whole selection the same way, and **Size…** on any prop
 takes exact dimensions in feet.
 
+**Shot lists at typing speed.** The shot list panel takes shorthand: `ots d to
+m 50`, `cu sara 85`, `ins r 135`. The vocabulary isn't invented — it's what
+1,554 shot descriptions in this library actually use, so OTS, CU, MCU, M, W,
+MW, TWO, MASTER, INS and the rest all parse, subjects match on name or initial,
+and a bare number is the lens. It shows you what it understood before you commit.
+
+**Coverage without typing it.** One button lays out the master, both
+over-the-shoulders and both singles for a two-hander — camera placed, pointed,
+lensed (32 / 50 / 50 / 85 / 85), numbered and coloured. Singles are taken from
+past the other actor's shoulder rather than on top of them, and every camera
+lands on the same side of the line, working out which side from any cameras
+already in the scene.
+
+Rows reorder, duplicate one step tighter (`MCU` → `CU` → `ECU`), and rename in
+place. **Export CSV** gives the AD something they can open. Lens chips are in
+the order you actually use them — 50, 85, 32, 24, 135.
+
 **Clicking what you meant to click.** Hit testing runs against the pixels that
 were actually drawn, so a big prop only responds where its shape is rather than
 across the whole rectangle it occupies — the reason dragging a camera used to

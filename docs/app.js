@@ -1,18 +1,19 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=b6dbdcf3";
-import * as R from "./render.js?v=b6dbdcf3";
-import { FXG } from "./assets.js?v=b6dbdcf3";
-import * as B from "./blocking.js?v=b6dbdcf3";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=b6dbdcf3";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=b6dbdcf3";
-import { Library } from "./library.js?v=b6dbdcf3";
+import * as H from "./hcw.js?v=ceb8219f";
+import * as R from "./render.js?v=ceb8219f";
+import { FXG } from "./assets.js?v=ceb8219f";
+import * as B from "./blocking.js?v=ceb8219f";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=ceb8219f";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ceb8219f";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=ceb8219f";
+import { Library } from "./library.js?v=ceb8219f";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=b6dbdcf3";
+} from "./catalog.js?v=ceb8219f";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1347,6 +1348,11 @@ window.addEventListener("keydown", (ev) => {
   if (k === "t") return startTool("track");
   if (k === "p") return (S.playing ? stopPlay() : startPlay());
   if (k === "b") return toggleBlocking();
+  if (k === "n" && !cmd) {
+    if ($("#shotList").hidden) toggleShotList();
+    setTimeout(() => $("#shotInput")?.focus(), 30);
+    return;
+  }
 });
 
 window.addEventListener("keyup", (ev) => { if (ev.key === " ") S.spaceDown = false; });
@@ -2165,44 +2171,315 @@ $("#shotListToggle").addEventListener("click", toggleShotList);
 
 function renderShotList() {
   const p = $("#shotList");
-  const versions = objects().filter((o) => o.tag === "ShotVersion");
+  const versions = shotVersions();
+  const cast = castOf(objects());
   p.replaceChildren();
+
   const h = document.createElement("h3");
   h.textContent = "Shot List";
   p.append(h);
+
+  // --- type it the way you'd say it ----------------------------------------
+  const adder = document.createElement("div");
+  adder.className = "shot-add";
+  const box = document.createElement("input");
+  box.type = "text";
+  box.id = "shotInput";
+  box.placeholder = cast.length >= 2
+    ? `e.g. ots ${cast[0].initial.toLowerCase()} to ${cast[1].initial.toLowerCase()} 50`
+    : "e.g. cu sara 85";
+  box.autocomplete = "off";
+
+  const preview = document.createElement("div");
+  preview.className = "shot-preview";
+  const refresh = () => {
+    const parsed = parseShot(box.value, cast);
+    preview.textContent = parsed
+      ? describe(parsed) + (parsed.lens ? `  ·  ${parsed.lens}mm` : "")
+      : "";
+    preview.hidden = !parsed || !box.value.trim();
+  };
+  box.oninput = refresh;
+  box.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      const parsed = parseShot(box.value, cast);
+      if (parsed) { addShot(parsed, cast); box.value = ""; refresh(); }
+    }
+    if (e.key === "Escape") { box.value = ""; refresh(); box.blur(); }
+  };
+  adder.append(box, preview);
+  p.append(adder);
+
+  const lensRow = document.createElement("div");
+  lensRow.className = "lens-row";
+  for (const mm of LENSES.slice(0, 5)) {
+    const b = document.createElement("button");
+    b.textContent = mm;
+    b.title = `Append ${mm}mm`;
+    b.onclick = () => {
+      box.value = box.value.replace(/\s*\d{2,3}$/, "") + " " + mm;
+      box.focus(); refresh();
+    };
+    lensRow.append(b);
+  }
+  p.append(lensRow);
+
+  const quick = document.createElement("div");
+  quick.className = "shot-actions";
+  const cov = document.createElement("button");
+  cov.textContent = cast.length >= 2
+    ? `Cover ${cast[0].name} / ${cast[1].name}` : "Standard Coverage";
+  cov.onclick = () => addCoverage(cast);
+  const csv = document.createElement("button");
+  csv.textContent = "Export CSV";
+  csv.disabled = !versions.length;
+  csv.onclick = exportShotCSV;
+  quick.append(cov, csv);
+  p.append(quick);
+
   if (!versions.length) {
     const d = document.createElement("div");
     d.className = "empty";
-    d.textContent = 'To see shots here, add a "Shot Description" to a camera from its menu.';
+    d.textContent = "Type a shot above, or let it lay out the standard coverage " +
+                    "and move the cameras from there.";
     p.append(d);
     return;
   }
+
   versions.forEach((v, i) => {
+    const cam = byID(H.get(v, "attachObjectID"));
     const row = document.createElement("div");
-    row.className = "shot-row" + (S.sel.has(idOf(v)) ? " on" : "");
+    row.className = "shot-row" + (S.sel.has(idOf(cam || v)) ? " on" : "");
+
     const num = document.createElement("span");
     num.className = "num";
-    const cam = byID(H.get(v, "attachObjectID"));
     if (cam && cam.tag === "Camera") num.style.background = R.cameraColour(cam);
-    num.textContent = H.get(v, "headerText") ||
-      (H.get(v, "versionNumber") > 0 ? "V" + H.get(v, "versionNumber") : i + 1);
+    num.textContent = H.get(v, "headerText") || i + 1;
+
     const nick = document.createElement("span");
     nick.className = "nick";
     nick.textContent = H.get(v, "versionNickname") || "(no description)";
+    nick.title = "Double-click to edit";
+
     const meta = document.createElement("span");
     meta.className = "meta";
     const lens = parseFloat(H.get(v, "versionLens"));
-    const bits = [H.get(v, "versionShotType"), lens > 0 ? lens + "mm" : ""];
-    meta.textContent = bits.filter(Boolean).join(" · ");
-    row.append(num, nick, meta);
+    meta.textContent = lens > 0 ? lens + "mm" : "";
+
+    const tools = document.createElement("span");
+    tools.className = "row-tools";
+    const mk = (label, title, run) => {
+      const b = document.createElement("button");
+      b.textContent = label; b.title = title;
+      b.onclick = (e) => { e.stopPropagation(); run(); };
+      return b;
+    };
+    tools.append(
+      mk("↑", "Move up", () => moveShot(v, -1)),
+      mk("↓", "Move down", () => moveShot(v, 1)),
+      mk("⧉", "Duplicate this setup", () => duplicateShot(v)),
+      mk("✕", "Delete shot", () => deleteShot(v)));
+
+    row.append(num, nick, meta, tools);
     row.onclick = () => {
-      const cam = byID(H.get(v, "attachObjectID"));
       S.sel = new Set([idOf(cam || v)]);
       if (cam) centreOn(H.getNum(cam, "x"), H.getNum(cam, "y"));
       draw(); syncChrome();
     };
+    row.ondblclick = (e) => { e.stopPropagation(); editShot(v); };
     p.append(row);
   });
+}
+
+const shotVersions = () => objects().filter((o) => o.tag === "ShotVersion");
+
+/** The next free camera letter, so the list reads Cam A, Cam B, Cam C. */
+function nextCamLetter() {
+  const taken = new Set(shotVersions().map((v) => H.get(v, "headerText")));
+  for (let i = 0; i < 26; i++) {
+    const name = "Cam " + String.fromCharCode(65 + i);
+    if (!taken.has(name)) return name;
+  }
+  return "Cam " + (shotVersions().length + 1);
+}
+
+/** Build the camera and its label together, positioned for the shot. */
+function createShot({ header, nick, lens, type, at, angle, colourIndex }) {
+  const cam = H.makeCamera(round(at.x), round(at.y), angle);
+  H.set(cam, "colorIndex", colourIndex);
+  canvas().children.push(cam);
+
+  // Sit the label behind the camera, out of the shot rather than across it.
+  const back = 52;
+  const lx = round(at.x - Math.cos(angle) * back);
+  const ly = round(at.y - Math.sin(angle) * back);
+  const v = H.makeCaption(lx, ly, "");
+  v.tag = "ShotVersion";
+  H.set(v, "shotID", H.newID());
+  H.set(v, "versionNickname", nick);
+  H.set(v, "versionDescription", "");
+  H.set(v, "versionNumber", 0);
+  H.set(v, "versionShotType", type || "");
+  H.set(v, "versionLens", lens || 0);
+  H.set(v, "headerText", header);
+  H.set(v, "systemText", nick);
+  H.set(v, "attachObjectID", idOf(cam));
+  H.set(v, "attachDeltaX", round(lx - at.x));
+  H.set(v, "attachDeltaY", round(ly - at.y));
+  canvas().children.push(v);
+
+  shotItems().children.push(H.node("ShotListCamera", {
+    uniqueID: H.get(v, "shotID"),
+    sequence: H.kids(shotItems(), "ShotListCamera").length,
+    shotCameraNumber: 0, shotCrew: "", shotProps: "", shotEquipment: "",
+  }));
+  return { cam, v };
+}
+
+function addShot(parsed, cast) {
+  mark("add shot");
+  const side = coverageSide();
+  const at = placeFor(parsed, cast, side);
+  const { cam } = createShot({
+    header: nextCamLetter(),
+    nick: describe(parsed),
+    lens: parsed.lens || 0,
+    type: parsed.size && parsed.size.length <= 4 ? parsed.size : "",
+    at, angle: at.angle,
+    colourIndex: objects().filter((o) => o.tag === "Camera").length % CAMERA_COLORS.length,
+  });
+  reindex();
+  S.sel = new Set([idOf(cam)]);
+  draw(); syncChrome();
+}
+
+/**
+ * Which side of the line the coverage lives on. Once a scene has cameras,
+ * stay where they already are rather than crossing the axis on you.
+ */
+function coverageSide() {
+  const cast = castOf(objects());
+  const cams = objects().filter((o) => o.tag === "Camera");
+  if (cast.length < 2 || !cams.length) return 1;
+  const [a, b] = cast;
+  const ax = b.x - a.x, ay = b.y - a.y;
+  let sum = 0;
+  for (const c of cams) {
+    sum += Math.sign(ax * (H.getNum(c, "y") - a.y) - ay * (H.getNum(c, "x") - a.x));
+  }
+  return sum < 0 ? -1 : 1;
+}
+
+function addCoverage(cast) {
+  mark("standard coverage");
+  const side = coverageSide();
+  let n = objects().filter((o) => o.tag === "Camera").length;
+  for (const shot of standardCoverage(cast)) {
+    const at = placeFor(shot, cast, side);
+    createShot({
+      header: nextCamLetter(),
+      nick: describe(shot),
+      lens: shot.lens || 0,
+      type: shot.size && shot.size.length <= 4 ? shot.size : "",
+      at, angle: at.angle,
+      colourIndex: n++ % CAMERA_COLORS.length,
+    });
+    reindex();
+  }
+  draw(); syncChrome();
+  toast("Coverage laid out — drag any camera to taste");
+}
+
+function editShot(v) {
+  const cast = castOf(objects());
+  sheet({
+    title: "Edit Shot",
+    sub: "Retype it in shorthand, or write it out longhand.",
+    fields: [
+      { name: "header", label: "Camera", type: "text", value: H.get(v, "headerText") },
+      { name: "nick", label: "Shot", type: "text", value: H.get(v, "versionNickname") },
+      { name: "lens", label: "Lens (mm)", type: "text", value: H.get(v, "versionLens") || "" },
+      { name: "desc", label: "Notes", type: "textarea", value: H.get(v, "versionDescription") },
+    ],
+    onOK: ({ header, nick, lens, desc }) => {
+      mark("edit shot");
+      const parsed = parseShot(nick, cast);
+      const text = parsed ? describe(parsed) : nick;
+      H.set(v, "headerText", header);
+      H.set(v, "versionNickname", text);
+      H.set(v, "systemText", text);
+      H.set(v, "versionDescription", desc);
+      H.set(v, "versionLens", parseFloat(lens) || 0);
+      draw(); syncChrome();
+    },
+  });
+}
+
+function moveShot(v, dir) {
+  const list = shotVersions();
+  const i = list.indexOf(v);
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  mark("reorder shots");
+  const c = canvas();
+  const ai = c.children.indexOf(list[i]), bi = c.children.indexOf(list[j]);
+  [c.children[ai], c.children[bi]] = [c.children[bi], c.children[ai]];
+  // Camera letters follow the running order, so the list stays readable.
+  shotVersions().forEach((sv, n) => H.set(sv, "headerText", "Cam " + String.fromCharCode(65 + n)));
+  draw(); syncChrome();
+}
+
+/** Same setup, one step tighter — the most common way a second shot happens. */
+function duplicateShot(v) {
+  mark("duplicate shot");
+  const cam = byID(H.get(v, "attachObjectID"));
+  const at = cam
+    ? { x: H.getNum(cam, "x") + 30, y: H.getNum(cam, "y") + 30 }
+    : { x: H.getNum(v, "x"), y: H.getNum(v, "y") };
+  const tighter = { CU: "ECU", MCU: "CU", M: "MCU", MW: "M", W: "MW", Master: "MW" };
+  const nick = H.get(v, "versionNickname");
+  const head = nick.split(" ")[0];
+  const next = tighter[head];
+  createShot({
+    header: nextCamLetter(),
+    nick: next ? nick.replace(head, next) : nick,
+    lens: parseFloat(H.get(v, "versionLens")) || 0,
+    type: H.get(v, "versionShotType"),
+    at, angle: cam ? R.angleOf(cam) : 0,
+    colourIndex: objects().filter((o) => o.tag === "Camera").length % CAMERA_COLORS.length,
+  });
+  reindex(); draw(); syncChrome();
+}
+
+function deleteShot(v) {
+  mark("delete shot");
+  const camID = H.get(v, "attachObjectID");
+  const shotID = H.get(v, "shotID");
+  const c = canvas();
+  c.children = c.children.filter((o) => o !== v && idOf(o) !== camID);
+  const items = shotItems();
+  items.children = items.children.filter((it) => H.get(it, "uniqueID") !== shotID);
+  reindex(); draw(); syncChrome();
+}
+
+/** A shot list the AD can actually open. */
+function exportShotCSV() {
+  const rows = [["#", "Camera", "Shot", "Type", "Lens", "Notes"]];
+  shotVersions().forEach((v, i) => {
+    rows.push([
+      i + 1,
+      H.get(v, "headerText"),
+      H.get(v, "versionNickname"),
+      H.get(v, "versionShotType"),
+      parseFloat(H.get(v, "versionLens")) || "",
+      H.get(v, "versionDescription").replace(/\s+/g, " "),
+    ]);
+  });
+  const csv = rows.map((r) => r
+    .map((cell) => /[",\n]/.test(String(cell)) ? `"${String(cell).replace(/"/g, '""')}"` : cell)
+    .join(",")).join("\n");
+  download(baseName() + " shot list.csv", new Blob([csv], { type: "text/csv" }));
 }
 
 function centreOn(x, y) {
@@ -2275,6 +2552,7 @@ function shortcutsSheet() {
     ["⌘0", "Fit to scene"], ["⌘+ / ⌘−", "Zoom"],
     ["1–9", "Jump to time slice"], ["P", "Play / pause"],
     ["W / T", "Wall tool, track tool"], ["Esc", "Cancel / deselect"],
+    ["N", "New shot — jumps to the shot-list box"],
     ["B / ← →", "Blocking mode, step beats"],
     ["G", "Grid snap on/off"],
     ["Space-drag, scroll", "Pan"], ["⌘scroll", "Zoom"],
