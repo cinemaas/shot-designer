@@ -94,6 +94,15 @@ people draw it. <b>Arm Reach…</b> sets it to something else for a 23.</dd>
 </dl>
 <p><b>Track To…</b> on a camera lays track from where it stands to wherever you
 click, and puts the camera on it.</p>
+<h4>Moving track after you've laid it</h4>
+<p>Select a run and the arrow keys nudge the whole thing two units at a time,
+<kbd>⇧</kbd> for twenty — anything riding it comes along. <kbd>[</kbd> and
+<kbd>]</kbd> turn it about its own middle.</p>
+<p>When the run is simply in the wrong place: <kbd>⌥</kbd>-drag the dolly to
+where you actually want it, then <b>Lay New Track From Here</b> on it. It runs
+fresh track out from where the dolly now stands and strikes the old run — unless
+something else is still riding it, in which case the old run stays. <kbd>⌘Z</kbd>
+brings it back either way.</p>
 <h4>Positions</h4>
 <p>Cameras and figures get more than one position the same way here as in the
 original: <b>a position is another copy, tagged with the time it belongs to</b>.

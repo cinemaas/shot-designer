@@ -96,7 +96,10 @@ what actually comes off the truck: 4ft, 8ft and 10ft straights and 45°/90°
 curves, drawn at the true 24.5-inch gauge with ties. The panel keeps a running
 tally — *3 × 8ft straight, 1 × 45° right, 1 × 90° left · 24ft of straight* —
 which is what you'd hand the key grip. `[` and `]` or the handle turn the whole
-run, pivoting about its middle so it stays where you put it. Track doesn't bend,
+run, pivoting about its middle so it stays where you put it; the arrow keys
+nudge it, and anything riding it comes along. **Lay New Track From Here** on a
+dolly runs fresh track from wherever you've moved it to and strikes the old run,
+unless something else is still riding that one. Track doesn't bend,
 so a laid run moves and turns as one piece rather than corner by corner.
 
 **Rigged camera support.** **Add ▸ Add Rigged Camera…** gives you a dolly, a

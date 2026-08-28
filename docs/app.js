@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=6973efe1";
-import * as R from "./render.js?v=6973efe1";
-import { FXG } from "./assets.js?v=6973efe1";
-import * as B from "./blocking.js?v=6973efe1";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=6973efe1";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6973efe1";
-import { HANDBOOK } from "./handbook.js?v=6973efe1";
-import * as TR from "./track.js?v=6973efe1";
-import * as RIG from "./rigs.js?v=6973efe1";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=6973efe1";
-import { Library } from "./library.js?v=6973efe1";
+import * as H from "./hcw.js?v=6ad8a8b5";
+import * as R from "./render.js?v=6ad8a8b5";
+import { FXG } from "./assets.js?v=6ad8a8b5";
+import * as B from "./blocking.js?v=6ad8a8b5";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=6ad8a8b5";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6ad8a8b5";
+import { HANDBOOK } from "./handbook.js?v=6ad8a8b5";
+import * as TR from "./track.js?v=6ad8a8b5";
+import * as RIG from "./rigs.js?v=6ad8a8b5";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=6ad8a8b5";
+import { Library } from "./library.js?v=6ad8a8b5";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=6973efe1";
+} from "./catalog.js?v=6ad8a8b5";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1113,6 +1113,7 @@ function cancelTool() {
     reindex();
   }
   S.tool = null; S.showGrid = false; S.pendingOwner = null;
+  S.replaceTrack = null;
   stage.classList.remove("drawing");
   draw(); syncChrome();
 }
@@ -1154,14 +1155,27 @@ function finishTool() {
       H.set(rider, "snapPath", idOf(laid));
       H.set(rider, "snapPercent", 0);
       S.sel = new Set([idOf(rider)]);
+
+      // The track it came off goes with it, unless someone else is on it.
+      if (S.replaceTrack && S.replaceTrack !== idOf(laid)) {
+        const stillUsed = objects().some(
+          (o) => o !== rider && H.get(o, "snapPath") === S.replaceTrack);
+        if (!stillUsed) {
+          const c = canvas();
+          c.children = c.children.filter((o) => idOf(o) !== S.replaceTrack);
+          toast("On the new track — the old one's struck");
+        }
+      }
+      S.replaceTrack = null;
+      reindex();
       reflowRigs();
-      toast("On the track — drag it to slide, then freeze positions");
     }
   }
   reflowConstraints();
 
   if (ONE_SHOT.has(S.tool)) {
     S.tool = null; S.showGrid = false; S.pendingOwner = null;
+    S.replaceTrack = null;
     stage.classList.remove("drawing");
   }
   draw(); syncChrome();
@@ -1296,6 +1310,24 @@ function drawGrid() {
 }
 
 // ---------------------------------------------------------------- track & rigs
+
+/**
+ * Put the dolly where you actually want it, then run new track out from it.
+ * Whatever it was on before goes, unless something else is still riding it.
+ */
+function layTrackFrom(rig) {
+  const old = H.get(rig, "snapPath");
+  startTool("track", idOf(rig));
+  const start = { x: H.getNum(rig, "x"), y: H.getNum(rig, "y") };
+  mark("lay track");
+  const path = H.makePath("Track", [start, start]);
+  canvas().children.push(path);
+  S.draft = { obj: path, committed: [start], owner: idOf(rig) };
+  S.replaceTrack = old || null;
+  reindex();
+  toast("Click where the track runs to");
+  draw(); syncChrome();
+}
 
 /** Start a run of track. Pieces get added from the panel that appears. */
 function layTrack(at) {
@@ -2155,7 +2187,8 @@ function renderTrackPanel(t, rider) {
     head.textContent = "Dolly track";
     const list = document.createElement("span");
     list.className = "tally";
-    list.textContent = TR.summary(trackRecipe(t)) + "   ·   [ ] to turn";
+    list.textContent = TR.summary(trackRecipe(t)) +
+      "   ·   [ ] turns it, arrows nudge it";
 
     const row = document.createElement("div");
     row.className = "pieces";
@@ -2613,6 +2646,9 @@ function objectMenu(obj, x, y) {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
       ...(RIG.isRig(obj) && RIG.rigSpec(obj).ride ? [{
+        label: "Lay New Track From Here",
+        run: () => layTrackFrom(obj),
+      }, {
         label: RIG.ridesTrack(obj) ? "Take Off Track" : "Put On Nearest Track",
         run: () => {
           mark("track attachment");
