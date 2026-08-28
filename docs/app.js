@@ -1,22 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=27e04500";
-import * as R from "./render.js?v=27e04500";
-import { FXG } from "./assets.js?v=27e04500";
-import * as B from "./blocking.js?v=27e04500";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=27e04500";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=27e04500";
-import { HANDBOOK } from "./handbook.js?v=27e04500";
-import * as TR from "./track.js?v=27e04500";
-import * as RIG from "./rigs.js?v=27e04500";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=27e04500";
-import { Library } from "./library.js?v=27e04500";
+import * as H from "./hcw.js?v=2b5a3e6f";
+import * as R from "./render.js?v=2b5a3e6f";
+import { FXG } from "./assets.js?v=2b5a3e6f";
+import * as B from "./blocking.js?v=2b5a3e6f";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=2b5a3e6f";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=2b5a3e6f";
+import { HANDBOOK } from "./handbook.js?v=2b5a3e6f";
+import * as TR from "./track.js?v=2b5a3e6f";
+import * as RIG from "./rigs.js?v=2b5a3e6f";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=2b5a3e6f";
+import { Library } from "./library.js?v=2b5a3e6f";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
+  SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=27e04500";
+} from "./catalog.js?v=2b5a3e6f";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -324,8 +325,26 @@ const layerKeyFor = (layer) => ({
   camera: "cameraLayer", track: "trackLayer", lighting: "lightingLayer",
   character: "characterLayer", lines: "linesLayer", walk: "walkLayer",
   caption: "captionLayer", set: "setLayer", prop: "propLayer",
-  background: null, overlay: null,
+  background: "backgroundLayer", overlay: null,
 }[layer]);
+
+// A layer can be shown, shown but locked, or hidden. Locked is the useful one:
+// the set stays on the page and stops being something you can grab by mistake.
+const lockedSet = () => new Set(
+  (H.get(layerStates(), "lockedLayers") || "").split(",").filter(Boolean));
+
+const setLocked = (keys) => H.set(layerStates(), "lockedLayers", [...keys].join(","));
+
+const layerLocked = (o) => {
+  const flag = layerKeyFor(R.layerOf(o.tag));
+  return !!flag && lockedSet().has(flag);
+};
+
+function layerState(key) {
+  const on = H.getBool(layerStates(), key, true);
+  if (!on) return "off";
+  return lockedSet().has(key) ? "locked" : "on";
+}
 
 function drawSelection() {
   const g = LAYER_G.overlay;
@@ -601,6 +620,25 @@ const layerOn = (o) => {
   return !flag || H.getBool(layerStates(), flag, true);
 };
 
+/** The name of a locked layer sitting under the pointer, if that's why
+ *  nothing was picked up. */
+function lockedUnder(client) {
+  if (!client) return null;
+  for (const el of document.elementsFromPoint(client.x, client.y)) {
+    const g = el.closest?.(".obj");
+    if (!g) continue;
+    const o = byID(g.dataset.id);
+    if (o && layerOn(o) && layerLocked(o)) {
+      const key = layerKeyFor(R.layerOf(o.tag));
+      return (LAYERS.find(([k]) => k === key) || [, "That layer"])[1];
+    }
+  }
+  return null;
+}
+
+/** Can you pick this up? Hidden layers can't, locked layers won't. */
+const grabbable = (o) => layerOn(o) && !layerLocked(o);
+
 /**
  * What did you actually click on?
  *
@@ -619,7 +657,7 @@ function hitTest(pt, client) {
       const g = el.closest?.(".obj");
       if (!g) continue;
       const o = byID(g.dataset.id);
-      if (o && layerOn(o) && !stack.includes(o)) stack.push(o);
+      if (o && grabbable(o) && !stack.includes(o)) stack.push(o);
     }
     if (stack.length) {
       // Labels are the top layer and they drift over everything in a busy
@@ -634,7 +672,7 @@ function hitTest(pt, client) {
   const tol = 9 / S.view.k;
   const near = [];
   for (const o of objects()) {
-    if (!layerOn(o)) continue;
+    if (!grabbable(o)) continue;
     if (R.POINT_TAGS.has(o.tag)) {
       if (nearPath(R.pointsOf(o), pt, tol)) near.push({ o, d: 0 });
     } else if (!R.GENERIC_TAGS.has(o.tag)) {
@@ -748,6 +786,10 @@ stage.addEventListener("pointerdown", (ev) => {
         origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
     }
   } else {
+    const blocked = lockedUnder(client);
+    if (blocked) {
+      toast(`${blocked} is locked — press L to change that`);
+    }
     if (!extend) S.sel.clear();
     S.marquee = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y };
     drag = { mode: "marquee" };
@@ -895,6 +937,7 @@ stage.addEventListener("pointerup", (ev) => {
     const inBox = (x, y) => x >= Math.min(m.x0, m.x1) && x <= Math.max(m.x0, m.x1) &&
                             y >= Math.min(m.y0, m.y1) && y <= Math.max(m.y0, m.y1);
     for (const o of objects()) {
+      if (!grabbable(o)) continue;
       const hit = R.POINT_TAGS.has(o.tag)
         ? R.pointsOf(o).some((p) => inBox(p.x, p.y))
         : inBox(H.getNum(o, "x"), H.getNum(o, "y"));
@@ -1719,7 +1762,7 @@ window.addEventListener("keydown", (ev) => {
   if (cmd && k === "d") { ev.preventDefault(); return duplicate(); }
   if (cmd && k === "a") {
     ev.preventDefault();
-    S.sel = new Set(objects().map(idOf));
+    S.sel = new Set(objects().filter(grabbable).map(idOf));
     return (draw(), syncChrome());
   }
   if (cmd && k === "s") { ev.preventDefault(); return saveScene(ev.shiftKey); }
@@ -1792,6 +1835,10 @@ window.addEventListener("keydown", (ev) => {
   if (k === "t") return startTool("track");
   if (k === "p") return (S.playing ? stopPlay() : startPlay());
   if (k === "b") return toggleBlocking();
+  if (k === "l" && !cmd) {
+    const r = $("[data-act=layers]").getBoundingClientRect();
+    return layersMenu(r.left, r.top);
+  }
   if (k === "n" && !cmd) {
     if ($("#shotList").hidden) toggleShotList();
     setTimeout(() => $("#shotInput")?.focus(), 30);
@@ -2352,23 +2399,49 @@ function addCaption(at) {
   });
 }
 
+const LAYER_MARK = { on: "◉  ", locked: "🔒  ", off: "○  " };
+
+/** Click a layer to cycle it: shown, shown but locked, hidden. */
+function cycleLayer(key) {
+  const ls = layerStates();
+  const locked = lockedSet();
+  const state = layerState(key);
+  mark("layer");
+  if (state === "on") { locked.add(key); setLocked(locked); }
+  else if (state === "locked") { locked.delete(key); setLocked(locked); H.set(ls, key, false); }
+  else { H.set(ls, key, true); }
+  draw(); syncChrome();
+}
+
 function layersMenu(x, y) {
   const ls = layerStates();
+  const locked = lockedSet();
+  const sceneryLocked = SCENERY_LAYERS.every((k) => locked.has(k));
   showPopover(x, y, [
-    { head: "Layers" },
+    { head: "Layers — click to cycle: shown, locked, hidden" },
     ...LAYERS.map(([key, label]) => ({
-      label: (H.getBool(ls, key, true) ? "◉  " : "○  ") + label,
-      run: () => {
-        mark("layer");
-        H.set(ls, key, !H.getBool(ls, key, true));
-        draw(); layersMenu(x, y);
-      },
+      label: LAYER_MARK[layerState(key)] + label,
+      run: () => { cycleLayer(key); layersMenu(x, y); },
     })),
     "-",
+    { label: sceneryLocked ? "Unlock Set, Props & Backgrounds"
+                           : "Lock Set, Props & Backgrounds",
+      run: () => {
+        mark("lock scenery");
+        const next = lockedSet();
+        for (const k of SCENERY_LAYERS) {
+          if (sceneryLocked) next.delete(k);
+          else { next.add(k); H.set(ls, k, true); }
+        }
+        setLocked(next);
+        draw(); syncChrome();
+        toast(sceneryLocked ? "Scenery unlocked" : "Scenery locked — still visible, not grabbable");
+      } },
     { label: "Show All", run: () => {
       mark("layers");
       for (const [k] of LAYERS) H.set(ls, k, true);
-      draw();
+      setLocked(new Set());
+      draw(); syncChrome();
     } },
   ]);
 }

@@ -121,8 +121,13 @@ export const LAYERS = [
   ["lightingLayer", "Lighting"], ["characterLayer", "Characters"],
   ["linesLayer", "Axis Lines"], ["walkLayer", "Walk Arrows"],
   ["captionLayer", "Captions"], ["setLayer", "Set"],
-  ["propLayer", "Props"], ["storyboardLayer", "Storyboards"],
+  ["propLayer", "Props"], ["backgroundLayer", "Background Images"],
+  ["storyboardLayer", "Storyboards"],
 ];
+
+// The things you build once and then work on top of. Locking these is the
+// common case: you want to see the room, not drag it by accident.
+export const SCENERY_LAYERS = ["setLayer", "propLayer", "backgroundLayer"];
 
 // --- scale -------------------------------------------------------------------
 // The original app has no notion of real-world units, but its wall grid is

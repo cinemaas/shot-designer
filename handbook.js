@@ -156,8 +156,17 @@ a page you're handing to someone who just needs to see where the cameras are.</d
 <dt>Spread Overlapping Labels</dt><dd>Overlapping labels are always nudged apart
 on screen; this writes those nudges into the scene so they survive an export.</dd>
 </dl>
-<p><b>Layers</b> turns whole categories down — lighting, grip, walk arrows —
-when you want the diagram to say one thing.</p>`,
+<p><b>Layers</b> (<kbd>L</kbd>) turns whole categories down — lighting, grip,
+walk arrows — when you want the diagram to say one thing.</p>
+<h4>Locking what you've already built</h4>
+<p>Clicking a layer cycles it through three states: <b>shown</b>, <b>shown but
+locked</b>, and <b>hidden</b>. Locked is the one you'll live in — the set stays
+on the page and stops being something you can drag by accident while you work
+cameras and actors on top of it. Locked things ignore clicks, marquees and
+Select All.</p>
+<p><b>Lock Set, Props &amp; Backgrounds</b> does the three in one go, which is
+usually the moment the room is right and you want to stop touching it. Click
+into something locked and it tells you which layer is holding it.</p>`,
   },
   {
     id: "files",

@@ -10,9 +10,9 @@
 // in the file format. The camera-to-rig link is ours; a scene opened in the
 // original still reads, the camera just comes off the rig.
 
-import * as H from "./hcw.js?v=27e04500";
-import * as R from "./render.js?v=27e04500";
-import { UNITS_PER_FOOT } from "./catalog.js?v=27e04500";
+import * as H from "./hcw.js?v=2b5a3e6f";
+import * as R from "./render.js?v=2b5a3e6f";
+import { UNITS_PER_FOOT } from "./catalog.js?v=2b5a3e6f";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 

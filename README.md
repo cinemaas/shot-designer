@@ -107,6 +107,13 @@ arm swings it at its real reach — a Fisher Jib 21 is **5'10"**, shorter than
 most people draw it — or runs it along a slider's own axis. **Arm Reach…** sets
 it to something else for a 23. Move the track and everything on it follows.
 
+**Locking what you've built.** A layer cycles through shown, **shown but
+locked**, and hidden. Locked keeps the set on the page and stops it being
+something you drag by accident — it ignores clicks, marquees and Select All.
+**Lock Set, Props & Backgrounds** does the three at once, for the moment the
+room is right and you want to stop touching it. Click into something locked and
+it says which layer is holding it. `L` opens the menu.
+
 **Marked positions.** Put a rig where you want it and hit **Set position**. It
 freezes where on the track, where the arm is and where the camera looks. Every
 marked position draws as a numbered camera with its arm, joined in order by a
