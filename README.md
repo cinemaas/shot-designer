@@ -95,14 +95,17 @@ Exports are always on white paper whatever the screen is set to.
 what actually comes off the truck: 4ft, 8ft and 10ft straights and 45°/90°
 curves, drawn at the true 24.5-inch gauge with ties. The panel keeps a running
 tally — *3 × 8ft straight, 1 × 45° right, 1 × 90° left · 24ft of straight* —
-which is what you'd hand the key grip.
+which is what you'd hand the key grip. `[` and `]` or the handle turn the whole
+run, pivoting about its middle so it stays where you put it. Track doesn't bend,
+so a laid run moves and turns as one piece rather than corner by corner.
 
 **Rigged camera support.** **Add ▸ Add Rigged Camera…** gives you a dolly, a
 dolly with a jib, a bare jib, or a slider, with the camera already on it.
 Dropping a dolly near track puts it on the track. Drag it and it can only go
 where the track goes, camera along for the ride. Drag the camera and the jib
-arm swings it at a fixed reach — 8ft by default, the Jib 21 working radius — or
-runs it along a slider's own axis. Move the track and everything on it follows.
+arm swings it at its real reach — a Fisher Jib 21 is **5'10"**, shorter than
+most people draw it — or runs it along a slider's own axis. **Arm Reach…** sets
+it to something else for a 23. Move the track and everything on it follows.
 
 **The shot list into Drive.** **To Drive** writes a formatted `.xlsx` into
 *My Drive / Shot Lists* with a row per shot and **an overhead frame for each

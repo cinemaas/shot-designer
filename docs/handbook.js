@@ -69,7 +69,21 @@ SkyPanel S30/S60/S120, LED tubes, 1.2K through 18K HMIs, space lights, ring
 lights and book lights.</p>
 <p><b>Camera support</b> has tripod, hi-hat, dolly, slider, jib and Steadicam.</p>
 <p>For anything not covered, <b>Add Image Prop…</b> takes a PNG — transparent
-works best — and it behaves like any other prop.</p>`,
+works best — and it behaves like any other prop.</p>
+<h4>Track and rigs</h4>
+<p><b>Lay Dolly Track…</b> builds a run out of what comes off the truck — 4ft,
+8ft and 10ft straights, 45° and 90° curves — at the real 24.5-inch gauge. The
+panel keeps a running tally, which is what you'd hand the key grip. Turn the
+whole run with <kbd>[</kbd> and <kbd>]</kbd> or its handle; it pivots about the
+middle of the run so it stays where you put it. Hold <kbd>⌥</kbd> to turn off
+the fifteen-degree detents. Track sections don't bend, so a laid run moves and
+turns as one piece rather than corner by corner.</p>
+<p><b>Add Rigged Camera…</b> gives you a dolly, a dolly with a Jib 21, a bare
+jib, or a slider, camera already on it. Drop a dolly near track and it takes the
+track; after that it only goes where the track goes. Drag the camera and the arm
+swings it at its real reach — a Fisher Jib 21 is 5'10", which is shorter than
+most people draw it. <b>Arm Reach…</b> on the rig sets it to something else if
+you're on a 23.</p>`,
   },
   {
     id: "shots",

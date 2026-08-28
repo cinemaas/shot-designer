@@ -366,6 +366,27 @@ function drawSelection() {
   for (const id of S.sel) {
     const obj = byID(id);
     if (!obj) continue;
+    if (isBuiltTrack(obj)) {
+      const pts = R.pointsOf(obj);
+      const c = centroidOf(pts);
+      const end = pts[pts.length - 1];
+      const a = Math.atan2(end.y - c.y, end.x - c.x);
+      const reach = Math.max(60, Math.hypot(end.x - c.x, end.y - c.y)) + 26 / S.view.k;
+      const hx = c.x + Math.cos(a) * reach, hy = c.y + Math.sin(a) * reach;
+      g.append(R.el("line", {
+        x1: c.x, y1: c.y, x2: hx, y2: hy, stroke: "var(--sel)",
+        "stroke-width": 1.2 / S.view.k, opacity: .5,
+      }));
+      g.append(R.el("circle", {
+        cx: hx, cy: hy, r: 7 / S.view.k, fill: "var(--sel)",
+        stroke: "#fff", "stroke-width": 1.5 / S.view.k,
+        class: "handle", "data-id": id, "data-turntrack": "1",
+      }));
+      g.append(R.el("circle", {
+        cx: c.x, cy: c.y, r: 3.5 / S.view.k, fill: "var(--sel)", opacity: .7,
+      }));
+      continue;
+    }
     if (R.POINT_TAGS.has(obj.tag)) {
       for (const [i, p] of R.pointsOf(obj).entries()) {
         const h = R.el("circle", {
@@ -675,6 +696,15 @@ stage.addEventListener("pointerdown", (ev) => {
   }
   if (handle) {
     const obj = byID(handle.dataset.id);
+    if (handle.dataset.turntrack) {
+      const c = centroidOf(R.pointsOf(obj));
+      mark("turn track");
+      drag = { mode: "turntrack", obj, c,
+        a0: Math.atan2(pt.y - c.y, pt.x - c.x),
+        h0: H.getNum(obj, "trackHeading", 0) };
+      stage.setPointerCapture(ev.pointerId);
+      return;
+    }
     if (handle.dataset.stretch) {
       const b = R.PICTURE_TAGS.has(obj.tag)
         ? pictureBounds(obj) : R.artBounds(H.get(obj, "objectKey"));
@@ -753,6 +783,14 @@ stage.addEventListener("pointermove", (ev) => {
     reflowConstraints(new Set(S.sel));
     reflowRigs();
     sendLiveEdit();
+    return draw();
+  }
+  if (drag.mode === "turntrack") {
+    const a = Math.atan2(pt.y - drag.c.y, pt.x - drag.c.x);
+    let want = drag.h0 + (a - drag.a0);
+    if (!ev.altKey) want = Math.round(want / (Math.PI / 12)) * (Math.PI / 12);
+    H.set(drag.obj, "trackHeading", drag.h0);
+    rotateTrack(drag.obj, want - drag.h0);
     return draw();
   }
   if (drag.mode === "rigcam") {
@@ -1148,6 +1186,27 @@ function rebuildTrack(t) {
   const origin = pts[0] || { x: 0, y: 0 };
   const { points } = TR.layout(trackRecipe(t), origin, H.getNum(t, "trackHeading", 0));
   R.setPoints(t, points.map((p) => ({ x: round(p.x), y: round(p.y) })));
+  reflowRigs();
+}
+
+const centroidOf = (pts) => pts.reduce(
+  (a, p) => ({ x: a.x + p.x / pts.length, y: a.y + p.y / pts.length }), { x: 0, y: 0 });
+
+/**
+ * Turn a run of track. It pivots about the middle of the run so it stays put
+ * while it swings, rather than flinging itself off the end it started from.
+ */
+function rotateTrack(t, delta) {
+  const before = centroidOf(R.pointsOf(t));
+  const heading = H.getNum(t, "trackHeading", 0) + delta;
+  H.set(t, "trackHeading", heading);
+
+  const { points } = TR.layout(trackRecipe(t), { x: 0, y: 0 }, heading);
+  const after = centroidOf(points);
+  R.setPoints(t, points.map((p) => ({
+    x: round(p.x + before.x - after.x),
+    y: round(p.y + before.y - after.y),
+  })));
   reflowRigs();
 }
 
@@ -1614,6 +1673,12 @@ window.addEventListener("keydown", (ev) => {
 
   if (k === "[" || k === "]") {           // rotate the selection in 15° steps
     const d = (k === "[" ? -1 : 1) * Math.PI / 12;
+    if (S.sel.size === 1) {
+      const one = byID([...S.sel][0]);
+      if (isBuiltTrack(one)) {
+        mark("turn track"); rotateTrack(one, d); draw(); return;
+      }
+    }
     if (S.sel.size > 1) return rotateGroup(d);
     for (const id of S.sel) {
       const o = byID(id);
@@ -2298,6 +2363,22 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "mirror") ? "Unflip Horizontally" : "Flip Horizontally", run: () => {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
+      ...(RIG.isRig(obj) && RIG.rigSpec(obj).arm ? [{
+        label: "Arm Reach…",
+        run: () => sheet({
+          title: "Arm Reach",
+          sub: "A Fisher Jib 21 is 5'10\". A 23 reaches further.",
+          fields: [{ name: "ft", label: "Reach (feet)", type: "text",
+            value: (H.getNum(obj, "rigArm", RIG.rigSpec(obj).arm) / UNITS_PER_FOOT).toFixed(2) }],
+          onOK: ({ ft }) => {
+            const v = parseFloat(ft);
+            if (!(v > 0)) return;
+            mark("arm reach");
+            H.set(obj, "rigArm", v * UNITS_PER_FOOT);
+            reflowRigs(); draw(); syncChrome();
+          },
+        }),
+      }] : []),
       { label: "Size…", run: () => sizeDialog(obj) },
       { label: "Reset Size", run: () => {
         mark("size");

@@ -16,11 +16,13 @@ import { UNITS_PER_FOOT } from "./catalog.js";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
+// Reaches are the manufacturers' own. A Fisher Jib 21 is 5'10" — considerably
+// shorter than people expect it to look on a plan.
 export const RIGS = {
-  DOLLY: { label: "Dolly", arm: 0, riser: ft(1.2), ride: true },
-  DOLLYJIB: { label: "Dolly + Jib", arm: ft(8), riser: 0, ride: true },
-  JIB: { label: "Jib Arm", arm: ft(8), riser: 0, ride: false },
-  SLIDER: { label: "Slider", arm: 0, riser: 0, ride: false, travel: ft(3) },
+  DOLLY:    { label: "Dolly",            arm: 0,          riser: ft(1.2), ride: true },
+  DOLLYJIB: { label: "Dolly + Jib 21",   arm: ft(5 + 10 / 12), riser: 0,  ride: true },
+  JIB:      { label: "Jib 21",           arm: ft(5 + 10 / 12), riser: 0,  ride: false },
+  SLIDER:   { label: "Slider",           arm: 0, riser: 0, ride: false, travel: ft(3) },
 };
 
 export const isRig = (o) => !!RIGS[H.get(o, "objectKey")];
