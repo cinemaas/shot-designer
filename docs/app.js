@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=2b5a3e6f";
-import * as R from "./render.js?v=2b5a3e6f";
-import { FXG } from "./assets.js?v=2b5a3e6f";
-import * as B from "./blocking.js?v=2b5a3e6f";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=2b5a3e6f";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=2b5a3e6f";
-import { HANDBOOK } from "./handbook.js?v=2b5a3e6f";
-import * as TR from "./track.js?v=2b5a3e6f";
-import * as RIG from "./rigs.js?v=2b5a3e6f";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=2b5a3e6f";
-import { Library } from "./library.js?v=2b5a3e6f";
+import * as H from "./hcw.js?v=9c9ba6f6";
+import * as R from "./render.js?v=9c9ba6f6";
+import { FXG } from "./assets.js?v=9c9ba6f6";
+import * as B from "./blocking.js?v=9c9ba6f6";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=9c9ba6f6";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=9c9ba6f6";
+import { HANDBOOK } from "./handbook.js?v=9c9ba6f6";
+import * as TR from "./track.js?v=9c9ba6f6";
+import * as RIG from "./rigs.js?v=9c9ba6f6";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=9c9ba6f6";
+import { Library } from "./library.js?v=9c9ba6f6";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=2b5a3e6f";
+} from "./catalog.js?v=9c9ba6f6";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -161,6 +161,7 @@ function alongPath(pts, t) {
 
 /** OnOffEvents switch objects on and off across the timeline. */
 function visibleAt(obj, slice) {
+  if (!presentAt(obj, slice)) return false;
   const evs = H.kids(H.child(obj, "ObjectEvents"), "OnOffEvent");
   if (!evs.length) return true;
   let state = true, best = -1;
@@ -234,7 +235,6 @@ function draw() {
     g.append(node);
   }
   drawRigArms();
-  drawMarks();
   declutterLabels();
   drawSelection();
   applyView();
@@ -614,6 +614,28 @@ function offsetFrom(at, towards, gap) {
   if (d < 1) return { x: at.x, y: at.y };
   return { x: round(at.x + (dx / d) * gap), y: round(at.y + (dy / d) * gap) };
 }
+
+/**
+ * Which time slices an object is present at.
+ *
+ * This is the original's own `stopMarks` field: "1", "2", "1,3". An object with
+ * none is simply always there. A camera at three positions is three cameras,
+ * each tagged with its slice — which is the same thing people already do by
+ * hand when they number a character's positions on the page.
+ */
+function stopsOf(o) {
+  return (H.get(o, "stopMarks") || "")
+    .split(",").map((n) => parseInt(n, 10)).filter(Number.isFinite);
+}
+
+const setStops = (o, list) =>
+  H.set(o, "stopMarks", [...new Set(list)].sort((a, b) => a - b).join(","));
+
+/** Slices are 1-based in the file; the timeline index is 0-based. */
+const presentAt = (o, slice) => {
+  const stops = stopsOf(o);
+  return !stops.length || stops.includes(slice + 1);
+};
 
 const layerOn = (o) => {
   const flag = layerKeyFor(R.layerOf(o.tag));
@@ -1292,80 +1314,54 @@ function dropTrackPiece(t) {
   draw(); syncChrome();
 }
 
-// --- marks ------------------------------------------------------------------
-
-const marksOf = (o) => RIG.readMarks(o);
-
-function setMark(rider) {
-  mark("set mark");
-  const cam = byID(RIG.rigCameraID(rider)) || rider;
-  const list = marksOf(rider);
-  list.push(RIG.captureMark(rider, cam));
-  H.set(rider, "marks", RIG.writeMarks(list));
+/** Put this rig at, or take it out of, one position. */
+function toggleStop(o, n) {
+  mark("position");
+  const stops = new Set(stopsOf(o));
+  const cam = byID(RIG.rigCameraID(o));
+  if (stops.has(n)) stops.delete(n); else stops.add(n);
+  setStops(o, [...stops]);
+  if (cam) setStops(cam, [...stops]);
+  S.slice = Math.min(Math.max(0, n - 1), timeSlices().length - 1);
   draw(); syncChrome();
-  toast(`Position ${list.length} set`);
 }
 
-function goToMark(rider, i) {
-  const m = marksOf(rider)[i];
-  if (!m) return;
-  mark("go to mark");
-  H.set(rider, "snapPercent", m.pct);
+/**
+ * Another position for the same rig — a copy tagged for the next slice, still
+ * on the same track with the same arm. Move it and it's position two.
+ */
+function addRigPosition(rider) {
+  mark("add position");
   const cam = byID(RIG.rigCameraID(rider));
-  if (cam && m.arm !== null) H.set(cam, "rigArmAngle", m.arm);
-  R.setAngle(cam || rider, m.pan);
+  const slices = timeSlices();
+
+  // Whatever's here now becomes position one if it wasn't tagged already.
+  if (!stopsOf(rider).length) {
+    setStops(rider, [1]);
+    if (cam) setStops(cam, [1]);
+  }
+  const next = Math.max(...stopsOf(rider)) + 1;
+  if (next > slices.length) {
+    H.child(H.child(S.doc, "CurrentSnapshot"), "TimeSlices")
+      .children.push(H.makeTimeNumber(slices.length));
+  }
+
+  const copy = reid(structuredClone(rider));
+  setStops(copy, [next]);
+  canvas().children.push(copy);
+  if (cam) {
+    const camCopy = reid(structuredClone(cam));
+    setStops(camCopy, [next]);
+    H.set(camCopy, "rigParent", idOf(copy));
+    H.set(copy, "rigCamera", idOf(camCopy));
+    canvas().children.push(camCopy);
+  }
+  reindex();
+  S.slice = next - 1;
+  S.sel = new Set([idOf(copy)]);
   reflowRigs();
   draw(); syncChrome();
-}
-
-function dropMark(rider, i) {
-  mark("remove mark");
-  const list = marksOf(rider);
-  list.splice(i, 1);
-  H.set(rider, "marks", RIG.writeMarks(list));
-  draw(); syncChrome();
-}
-
-/** Every frozen position, drawn faintly, with the move joining them up. */
-function drawMarks() {
-  for (const rider of objects()) {
-    const list = marksOf(rider);
-    if (!list.length) continue;
-    const cam = byID(RIG.rigCameraID(rider));
-    const track = byID(H.get(rider, "snapPath"));
-    const pts = track && track.tag === "Track" ? R.pointsOf(track) : null;
-    const g = LAYER_G.overlay;
-    const tone = cam ? R.cameraColour(cam) : "#255681";
-
-    const seats = list.map((m) => RIG.markState(rider, cam, m, pts));
-    if (seats.length > 1) {
-      g.append(R.el("path", {
-        d: "M" + seats.map((s) => `${s.camPos.x},${s.camPos.y}`).join(" L"),
-        fill: "none", stroke: tone, "stroke-width": 2 / S.view.k,
-        "stroke-dasharray": `${7 / S.view.k} ${5 / S.view.k}`, opacity: .75,
-      }));
-    }
-
-    seats.forEach((seat, i) => {
-      if (RIG.rigSpec(rider)?.arm) {
-        g.append(R.el("line", {
-          x1: seat.base.x, y1: seat.base.y, x2: seat.camPos.x, y2: seat.camPos.y,
-          stroke: tone, "stroke-width": 3 / S.view.k, opacity: .35,
-        }));
-      }
-      g.append(R.el("circle", {
-        cx: seat.camPos.x, cy: seat.camPos.y, r: 11 / S.view.k,
-        fill: tone, opacity: .9, stroke: "#fff", "stroke-width": 1.5 / S.view.k,
-      }));
-      const t = R.el("text", {
-        x: seat.camPos.x, y: seat.camPos.y + 4 / S.view.k,
-        "text-anchor": "middle", fill: "#fff", "font-weight": "700",
-        "font-size": 12 / S.view.k, "font-family": "Helvetica, Arial, sans-serif",
-      });
-      t.textContent = i + 1;
-      g.append(t);
-    });
-  }
+  toast(`Position ${next} — move it, and the timeline runs between them`);
 }
 
 function rigMenu(x, y, at) {
@@ -2130,38 +2126,30 @@ function renderTrackPanel(t, rider) {
   if (rider) {
     const head = document.createElement("b");
     head.textContent = RIG.rigSpec(rider)?.label || "Camera on track";
-    const marks = marksOf(rider);
+    const stops = stopsOf(rider);
+    const slices = timeSlices().length;
+
     const tally = document.createElement("span");
     tally.className = "tally";
-    tally.textContent = marks.length
-      ? `${marks.length} position${marks.length > 1 ? "s" : ""} marked`
-      : "Put it where you want it, then freeze the position";
+    tally.textContent = stops.length
+      ? `At position${stops.length > 1 ? "s" : ""} ${stops.join(", ")}`
+      : "At every position — tag it, or add another";
 
     const row = document.createElement("div");
     row.className = "pieces";
-    const set = document.createElement("button");
-    set.textContent = "Set position " + (marks.length + 1);
-    set.onclick = () => setMark(rider);
-    row.append(set);
-
-    marks.forEach((m, i) => {
+    for (let n = 1; n <= slices; n++) {
       const b = document.createElement("button");
-      b.textContent = String(i + 1);
-      b.title = "Go to position " + (i + 1) + " — ⌥-click to remove";
-      b.onclick = (e) => (e.altKey ? dropMark(rider, i) : goToMark(rider, i));
+      b.textContent = String(n);
+      b.className = stops.includes(n) || !stops.length ? "" : "drop";
+      b.title = stops.includes(n) ? `Remove from position ${n}` : `Also at position ${n}`;
+      b.onclick = () => toggleStop(rider, n);
       row.append(b);
-    });
-    if (marks.length) {
-      const clear = document.createElement("button");
-      clear.textContent = "Clear";
-      clear.className = "drop";
-      clear.onclick = () => {
-        mark("clear marks");
-        H.set(rider, "marks", "");
-        draw(); syncChrome();
-      };
-      row.append(clear);
     }
+    const add = document.createElement("button");
+    add.textContent = "Add position";
+    add.title = "A copy of this rig for the next position, still on its track";
+    add.onclick = () => addRigPosition(rider);
+    row.append(add);
     panel.append(head, tally, row);
   }
 }

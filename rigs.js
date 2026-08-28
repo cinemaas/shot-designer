@@ -98,53 +98,6 @@ export function percentOnTrack(pts, p) {
   return best.run / total;
 }
 
-// --- marks -------------------------------------------------------------------
-//
-// Freezing the move at a point: where on the track, where the arm is, where the
-// camera is looking. Stored as one field so it travels with the scene.
-
-export function readMarks(o) {
-  return (H.get(o, "marks") || "").split(";").filter(Boolean).map((chunk) => {
-    const [pct, arm, pan] = chunk.split(",");
-    return {
-      pct: parseFloat(pct) || 0,
-      arm: arm === "" ? null : parseFloat(arm),
-      pan: parseFloat(pan) || 0,
-    };
-  });
-}
-
-export const writeMarks = (list) => list
-  .map((m) => `${m.pct.toFixed(4)},${m.arm === null ? "" : m.arm.toFixed(4)},${m.pan.toFixed(4)}`)
-  .join(";");
-
-/** The current state of a rider, ready to be frozen as a mark. */
-export function captureMark(rider, cam) {
-  const spec = rigSpec(rider);
-  return {
-    pct: H.getNum(rider, "snapPercent", 0),
-    arm: spec && spec.arm ? H.getNum(cam, "rigArmAngle", 0) : null,
-    pan: R.angleOf(cam || rider),
-  };
-}
-
-/** Where the rig and its camera sit at a given mark. */
-export function markState(rider, cam, mark, trackPts) {
-  const base = trackPts && trackPts.length > 1
-    ? alongTrack(trackPts, mark.pct)
-    : { x: H.getNum(rider, "x"), y: H.getNum(rider, "y") };
-  const spec = rigSpec(rider);
-  let camPos = base;
-  if (spec && spec.arm && mark.arm !== null) {
-    const reach = H.getNum(rider, "rigArm", spec.arm);
-    camPos = { x: base.x + Math.cos(mark.arm) * reach, y: base.y + Math.sin(mark.arm) * reach };
-  } else if (spec && spec.riser) {
-    const a = base.angle ?? R.angleOf(rider);
-    camPos = { x: base.x + Math.cos(a) * spec.riser, y: base.y + Math.sin(a) * spec.riser };
-  }
-  return { base, camPos, pan: mark.pan };
-}
-
 // --- building one ------------------------------------------------------------
 
 /** A support and its camera, already rigged together. */

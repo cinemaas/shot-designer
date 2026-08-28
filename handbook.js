@@ -86,15 +86,18 @@ most people draw it. <b>Arm Reach…</b> on the rig sets it to something else if
 you're on a 23.</p>
 <p><b>Track To…</b> on a camera lays track from where it stands to wherever you
 click, and puts the camera on it.</p>
-<h4>Marking the move</h4>
-<p>Put the rig where you want it — anywhere along the track, arm anywhere —
-and hit <b>Set position</b>. That freezes it: where on the track, where the arm
-is, where the camera is pointed. Do it again for position 2, and so on.</p>
-<p>Every marked position draws on the plan as a numbered camera with its arm,
-and a dashed line runs through them in order so the move reads at a glance.
-Click a number to send the rig back to it. <kbd>⌥</kbd>-click a number to drop
-that position.</p>
-<p>This is what you hand the dolly grip: the marks are the marks.</p>`,
+<h4>Positions</h4>
+<p>Cameras and figures get more than one position the same way here as in the
+original: <b>a position is another copy, tagged with the time it belongs to</b>.
+Hit <b>Add position</b> on a rig and you get a second one on the same track with
+the same arm, tagged for the next slice. Move it and that's position two.</p>
+<p>The numbered buttons say which positions this one is at — click to add or
+remove it from a slice, and a position used twice is simply tagged twice, the
+same as writing <code>1,4</code> on an actor's mark.</p>
+<p>Step the timeline with the numbers at the bottom right, or with
+<kbd>←</kbd> <kbd>→</kbd> in blocking mode, and only that position is solid
+while the others fall back. A dolly position is still a dolly position: it can
+only sit on its track, and the arm still only reaches as far as it reaches.</p>`,
   },
   {
     id: "shots",

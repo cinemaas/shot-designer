@@ -114,12 +114,17 @@ something you drag by accident — it ignores clicks, marquees and Select All.
 room is right and you want to stop touching it. Click into something locked and
 it says which layer is holding it. `L` opens the menu.
 
-**Marked positions.** Put a rig where you want it and hit **Set position**. It
-freezes where on the track, where the arm is and where the camera looks. Every
-marked position draws as a numbered camera with its arm, joined in order by a
-dashed line, so the move reads off the plan. Click a number to go back to it.
+**Positions.** A camera or a rig gets more than one position the way the
+original does it: **another copy, tagged with the time slice it belongs to** —
+the `stopMarks` field, which is already in the file format. **Add position** on
+a rig makes a second one on the same track with the same arm, tagged for the
+next slice; move it and that's position two. Step the timeline and only that
+position is solid. It stays constrained throughout: on its track, within its
+reach. Blocking mode reads the same field, so tagged positions and the numbers
+people type onto actors' marks are finally the same thing.
+
 **Track To…** on a camera lays track to where you click and puts the camera on
-it, ready to slide and mark.
+it, ready to slide.
 
 **The shot list into Drive.** **To Drive** writes a formatted `.xlsx` into
 *My Drive / Shot Lists* with a row per shot and **an overhead frame for each

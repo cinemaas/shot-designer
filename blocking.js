@@ -22,7 +22,17 @@ export function analyse(objects) {
   const id = (o) => H.get(o, "uniqueID");
   const byId = new Map(chars.map((o) => [id(o), o]));
 
-  // Numbers people typed into a label attached to a position.
+  // The file's own field first: stopMarks says which time slices an object is
+  // present at, and it's what the original writes when a camera or a figure has
+  // more than one position.
+  const tagged = new Map();
+  for (const o of objects) {
+    const stops = (H.get(o, "stopMarks") || "")
+      .split(",").map((n) => parseInt(n, 10)).filter(Number.isFinite);
+    if (stops.length) tagged.set(H.get(o, "uniqueID"), stops);
+  }
+
+  // Then the numbers people typed into a label attached to a position.
   const labels = new Map();
   for (const o of objects) {
     if (!R.LABEL_TAGS.has(o.tag)) continue;
@@ -84,11 +94,15 @@ export function analyse(objects) {
   const beatsOf = new Map();
   let maxBeat = 0;
   for (const [, v] of labels) maxBeat = Math.max(maxBeat, ...v.beats);
+  for (const [, stops] of tagged) maxBeat = Math.max(maxBeat, ...stops);
 
   for (const seq of ordered) {
+    // Anything the file already tags is taken at its word.
+    for (const n of seq) if (tagged.has(n)) beatsOf.set(n, tagged.get(n));
     const labelled = seq.filter((n) => labels.has(n));
     if (labelled.length) {
       for (const n of seq) {
+        if (tagged.has(n)) continue;
         if (labels.has(n)) { beatsOf.set(n, labels.get(n).beats); continue; }
         // Unlabelled position: slot it after the labelled one before it.
         const i = seq.indexOf(n);
@@ -100,9 +114,9 @@ export function analyse(objects) {
       }
     } else if (seq.length > 1) {
       // A chain nobody numbered: spread its moves across the scene.
-      seq.forEach((n, i) => beatsOf.set(n, [i + 1]));
+      seq.forEach((n, i) => { if (!tagged.has(n)) beatsOf.set(n, [i + 1]); });
       maxBeat = Math.max(maxBeat, seq.length);
-    } else {
+    } else if (!tagged.has(seq[0])) {
       beatsOf.set(seq[0], null);          // a lone figure: always present
     }
   }
