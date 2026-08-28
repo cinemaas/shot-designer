@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=24e1a835";
-import * as R from "./render.js?v=24e1a835";
-import { FXG } from "./assets.js?v=24e1a835";
-import * as B from "./blocking.js?v=24e1a835";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=24e1a835";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=24e1a835";
-import { HANDBOOK } from "./handbook.js?v=24e1a835";
-import * as TR from "./track.js?v=24e1a835";
-import * as RIG from "./rigs.js?v=24e1a835";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=24e1a835";
-import { Library } from "./library.js?v=24e1a835";
+import * as H from "./hcw.js?v=3f1a74d9";
+import * as R from "./render.js?v=3f1a74d9";
+import { FXG } from "./assets.js?v=3f1a74d9";
+import * as B from "./blocking.js?v=3f1a74d9";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=3f1a74d9";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=3f1a74d9";
+import { HANDBOOK } from "./handbook.js?v=3f1a74d9";
+import * as TR from "./track.js?v=3f1a74d9";
+import * as RIG from "./rigs.js?v=3f1a74d9";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=3f1a74d9";
+import { Library } from "./library.js?v=3f1a74d9";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=24e1a835";
+} from "./catalog.js?v=3f1a74d9";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -256,12 +256,15 @@ function drawRigArms() {
     const spec = RIG.rigSpec(rig);
     const ox = H.getNum(rig, "x"), oy = H.getNum(rig, "y");
 
-    if (spec.arm) {
-      // The sweep the arm can reach, drawn once for the base.
+    // The sweep only matters while you're working the rig; on the finished
+    // page it's a big circle over everything.
+    const working = S.sel.has(idOf(rig)) ||
+      objects().some((c) => RIG.rigParentID(c) === idOf(rig) && S.sel.has(idOf(c)));
+    if (spec.arm && working) {
       g.append(R.el("circle", {
         cx: ox, cy: oy, r: H.getNum(rig, "rigArm", spec.arm),
         fill: "none", stroke: "#8b9399", "stroke-width": 1,
-        "stroke-dasharray": "6 6", opacity: .35,
+        "stroke-dasharray": "6 6", opacity: .3,
       }));
     }
 

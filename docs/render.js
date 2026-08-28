@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=24e1a835";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=24e1a835";
-import { EXTRA_SVG } from "./props.js?v=24e1a835";
-import { GAUGE } from "./track.js?v=24e1a835";
-import * as H from "./hcw.js?v=24e1a835";
+import { FXG } from "./assets.js?v=3f1a74d9";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=3f1a74d9";
+import { EXTRA_SVG } from "./props.js?v=3f1a74d9";
+import { GAUGE } from "./track.js?v=3f1a74d9";
+import * as H from "./hcw.js?v=3f1a74d9";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -228,7 +228,7 @@ function drawPathObject(obj) {
   const style = {
     // Measured off the app: walls are a plain black 2-unit line, never filled.
     Wall: { stroke: INK, width: 2, dash: null },
-    Track: { stroke: INK, width: 1, dash: "6 5" },
+    Track: { stroke: "none", width: 0, dash: null },
     SpeedRail: { stroke: INK, width: STROKE, dash: "10 6" },
     AxisLine: { stroke: INK, width: 1.6, dash: "9 7" },
     WalkArrow: { stroke: INK, width: 2.2, dash: null },
@@ -236,7 +236,7 @@ function drawPathObject(obj) {
 
   const line = el("path", {
     d, fill: "none", stroke: style.stroke,
-    "stroke-width": tag === "Track" ? 1 : style.width,
+    "stroke-width": style.width,
     "stroke-linecap": "round", "stroke-linejoin": "round",
     "stroke-dasharray": style.dash,
   });
@@ -245,25 +245,47 @@ function drawPathObject(obj) {
   g.append(line);
 
   if (tag === "Track") {
-    // Two rails at the real 24.5-inch gauge, with ties between them, so track
-    // on the page takes up the room track takes up on the floor.
+    // Two rails at the real 24.5-inch gauge with ties every eighteen inches.
+    // Ties only at the control points gave a long rectangle, which read as a
+    // plank rather than as track.
     const half = GAUGE / 2;
     const left = offsetPoints(pts, -half), right = offsetPoints(pts, half);
-    for (let i = 0; i < pts.length; i += 1) {
+    for (const [a, b] of ties(pts, 30)) {
+      const perp = { x: -(b.y - a.y), y: b.x - a.x };
+      const len = Math.hypot(perp.x, perp.y) || 1;
+      const ox = (perp.x / len) * half, oy = (perp.y / len) * half;
       g.append(el("line", {
-        x1: left[i].x, y1: left[i].y, x2: right[i].x, y2: right[i].y,
-        stroke: INK, "stroke-width": 1.6, opacity: .45,
+        x1: a.x - ox, y1: a.y - oy, x2: a.x + ox, y2: a.y + oy,
+        stroke: INK, "stroke-width": 1.4, opacity: .5,
       }));
     }
     for (const rail of [left, right]) {
       g.append(el("path", {
         d: pathData(rail, { hard, closed }),
-        fill: "none", stroke: INK, "stroke-width": 2.4,
+        fill: "none", stroke: INK, "stroke-width": 2,
         "stroke-linecap": "round", "stroke-linejoin": "round",
       }));
     }
   }
   return g;
+}
+
+
+
+/** Evenly spaced samples along a polyline, each with the local direction. */
+function ties(pts, every) {
+  const out = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(1, Math.round(len / every));
+    for (let k = 0; k <= n; k++) {
+      if (i > 1 && k === 0) continue;              // don't double up on joins
+      const t = k / n;
+      out.push([{ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, b]);
+    }
+  }
+  return out;
 }
 
 function offsetPoints(pts, off) {

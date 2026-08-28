@@ -256,12 +256,15 @@ function drawRigArms() {
     const spec = RIG.rigSpec(rig);
     const ox = H.getNum(rig, "x"), oy = H.getNum(rig, "y");
 
-    if (spec.arm) {
-      // The sweep the arm can reach, drawn once for the base.
+    // The sweep only matters while you're working the rig; on the finished
+    // page it's a big circle over everything.
+    const working = S.sel.has(idOf(rig)) ||
+      objects().some((c) => RIG.rigParentID(c) === idOf(rig) && S.sel.has(idOf(c)));
+    if (spec.arm && working) {
       g.append(R.el("circle", {
         cx: ox, cy: oy, r: H.getNum(rig, "rigArm", spec.arm),
         fill: "none", stroke: "#8b9399", "stroke-width": 1,
-        "stroke-dasharray": "6 6", opacity: .35,
+        "stroke-dasharray": "6 6", opacity: .3,
       }));
     }
 

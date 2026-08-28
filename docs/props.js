@@ -102,11 +102,11 @@ const RAW = [
     `<circle cx="0" cy="0" r="11" fill="${G}" stroke="${D}" stroke-width="3"/>` +
     `<rect x="-16" y="-16" width="32" height="32" fill="none" stroke="${D}" stroke-width="3"/>`],
   ["DOLLY", "Dolly", "camera",
-    box(3, 4) + `<circle cx="0" cy="0" r="7" fill="${L}" stroke="${D}" stroke-width="3"/>`],
+    box(2.5, 4.2) + `<circle cx="0" cy="0" r="7" fill="${L}" stroke="${D}" stroke-width="3"/>`],
   ["DOLLYJIB", "Dolly + Jib", "camera",
-    // A Fisher-type dolly seen from above with the jib post at its centre:
-    // the post is the pivot, so the arm reads as swinging about the dolly.
-    box(3, 4) +
+    // A Fisher-type chassis seen from above — longer than it is wide — with the
+    // jib post at its centre, so the arm reads as swinging about the dolly.
+    box(2.5, 4.2) +
     `<circle cx="0" cy="0" r="13" fill="${L}" stroke="${D}" stroke-width="3"/>` +
     `<circle cx="0" cy="0" r="5" fill="${D}" stroke="none"/>` +
     `<line x1="-30" y1="-40" x2="30" y2="-40" stroke="${D}" stroke-width="3"/>` +
