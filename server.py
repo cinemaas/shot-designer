@@ -54,26 +54,77 @@ DRIVE = os.path.expanduser(
 SHEET_DIR = os.path.join(DRIVE, "Shot Lists")
 
 
+def drive_dest(rel):
+    """A destination inside Drive, or the default folder."""
+    rel = (rel or "Shot Lists").strip().strip("/")
+    full = os.path.realpath(os.path.join(DRIVE, rel))
+    if not full.startswith(os.path.realpath(DRIVE)):
+        raise ValueError("destination must be inside Google Drive")
+    return full
+
+
+def tab_name(name):
+    """Sheet names can't carry the characters a scene path can."""
+    clean = re.sub(r"[\\/*?:\[\]]", "-", name).strip() or "Scene"
+    return clean[:31]
+
+
 def write_shot_sheet(data):
     """A formatted shot list with a frame per row, dropped straight into Drive.
 
     Google Drive syncs the folder, and Sheets opens .xlsx directly, so it's
-    there ready to share with departments without an upload step.
+    there ready to share with departments without an upload step. One tab per
+    scene, plus an "All Shots" tab a department can filter in one go.
     """
     from openpyxl import Workbook
+
+    sheets = data.get("sheets")
+    if not sheets:
+        sheets = [{"name": data.get("scene") or "Scene", "shots": data.get("shots") or []}]
+
+    title = re.sub(r"[^\w .-]", "", data.get("title") or sheets[0]["name"] or "Shot List")
+    dest = drive_dest(data.get("dest"))
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    tmp = []
+
+    if len(sheets) > 1:
+        flat = []
+        for sh in sheets:
+            for shot in sh["shots"]:
+                flat.append({**shot, "scene": sh["name"]})
+        fill_sheet(wb.create_sheet(tab_name("All Shots")), "All Shots", flat, tmp,
+                   with_scene=True)
+
+    used = set()
+    for sh in sheets:
+        name = tab_name(sh["name"])
+        n, base = 2, name
+        while name in used:
+            name = tab_name(f"{base} {n}"); n += 1
+        used.add(name)
+        fill_sheet(wb.create_sheet(name), sh["name"], sh["shots"], tmp)
+
+    os.makedirs(dest, exist_ok=True)
+    path = os.path.join(dest, f"{title} shot list.xlsx")
+    wb.save(path)
+    for f in tmp:
+        try: os.remove(f)
+        except OSError: pass
+    return {"ok": True, "path": path, "folder": os.path.relpath(dest, DRIVE),
+            "scenes": len(sheets),
+            "shots": sum(len(sh["shots"]) for sh in sheets)}
+
+
+def fill_sheet(ws, scene, shots, tmp, with_scene=False):
     from openpyxl.drawing.image import Image as XLImage
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
 
-    scene = re.sub(r"[^\w .-]", "", data.get("scene") or "Scene")
-    shots = data.get("shots") or []
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Shot List"
-
-    headers = ["#", "Cam", "Shot", "Type", "Lens", "Notes", "Overhead"]
-    widths = [5, 8, 34, 9, 8, 40, 46]
+    headers = (["#", "Scene"] if with_scene else ["#"]) + \
+              ["Cam", "Shot", "Type", "Lens", "Notes", "Overhead"]
+    widths = ([5, 16] if with_scene else [5]) + [8, 34, 9, 8, 40, 46]
     navy = PatternFill("solid", fgColor="255681")
     thin = Side(style="thin", color="D6DBE0")
     edge = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -92,16 +143,18 @@ def write_shot_sheet(data):
     ws.row_dimensions[2].height = 20
     ws.freeze_panes = "A3"
 
-    tmp = []
+    notes_col = len(headers) - 1
+    img_col = len(headers)
     for n, shot in enumerate(shots, start=1):
         row = n + 2
-        values = [n, shot.get("camera", ""), shot.get("shot", ""),
-                  shot.get("type", ""), shot.get("lens", ""), shot.get("notes", "")]
+        values = ([n, shot.get("scene", "")] if with_scene else [n]) + [
+            shot.get("camera", ""), shot.get("shot", ""),
+            shot.get("type", ""), shot.get("lens", ""), shot.get("notes", "")]
         for i, v in enumerate(values, start=1):
             c = ws.cell(row=row, column=i, value=v)
-            c.alignment = Alignment(vertical="top", wrap_text=(i == 6))
+            c.alignment = Alignment(vertical="top", wrap_text=(i == notes_col))
             c.border = edge
-        ws.cell(row=row, column=7).border = edge
+        ws.cell(row=row, column=img_col).border = edge
         ws.row_dimensions[row].height = 132
 
         png = shot.get("png") or ""
@@ -113,16 +166,8 @@ def write_shot_sheet(data):
             scale = min(320 / img.width, 172 / img.height, 1)
             img.width = int(img.width * scale)
             img.height = int(img.height * scale)
-            ws.add_image(img, f"G{row}")
+            ws.add_image(img, f"{get_column_letter(img_col)}{row}")
 
-    os.makedirs(SHEET_DIR, exist_ok=True)
-    path = os.path.join(SHEET_DIR, f"{scene} shot list.xlsx")
-    wb.save(path)
-    for f in tmp:
-        try: os.remove(f)
-        except OSError: pass
-    return {"ok": True, "path": path, "shots": len(shots),
-            "folder": os.path.relpath(SHEET_DIR, DRIVE)}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):

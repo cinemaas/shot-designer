@@ -1,22 +1,22 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=f6063cd2";
-import * as R from "./render.js?v=f6063cd2";
-import { FXG } from "./assets.js?v=f6063cd2";
-import * as B from "./blocking.js?v=f6063cd2";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=f6063cd2";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f6063cd2";
-import { HANDBOOK } from "./handbook.js?v=f6063cd2";
-import * as TR from "./track.js?v=f6063cd2";
-import * as RIG from "./rigs.js?v=f6063cd2";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=f6063cd2";
-import { Library } from "./library.js?v=f6063cd2";
+import * as H from "./hcw.js?v=c05807fe";
+import * as R from "./render.js?v=c05807fe";
+import { FXG } from "./assets.js?v=c05807fe";
+import * as B from "./blocking.js?v=c05807fe";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=c05807fe";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=c05807fe";
+import { HANDBOOK } from "./handbook.js?v=c05807fe";
+import * as TR from "./track.js?v=c05807fe";
+import * as RIG from "./rigs.js?v=c05807fe";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=c05807fe";
+import { Library } from "./library.js?v=c05807fe";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=f6063cd2";
+} from "./catalog.js?v=c05807fe";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -2568,6 +2568,16 @@ function renderShotList() {
   quick.append(cov, csv, drive);
   p.append(quick);
 
+  const folderRow = document.createElement("div");
+  folderRow.className = "shot-actions";
+  const syncBtn = document.createElement("button");
+  syncBtn.textContent = "Sync Folder to Drive…";
+  syncBtn.title = "Every scene in a folder, one workbook, saved where you choose";
+  syncBtn.disabled = !isLocal();
+  syncBtn.onclick = syncFolderDialog;
+  folderRow.append(syncBtn);
+  p.append(folderRow);
+
   if (!versions.length) {
     const d = document.createElement("div");
     d.className = "empty";
@@ -2826,11 +2836,13 @@ async function exportShotSheet() {
   S.sel = wasSel;
   draw();
 
+  const folder = (S.path || "").split("/").slice(0, -1).join("/");
+  const dest = (await driveTargets())[folder];
   try {
     const r = await api("/api/shotsheet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scene: baseName(), shots }),
+      body: JSON.stringify({ title: baseName(), dest, sheets: [{ name: baseName(), shots }] }),
     });
     toast(`Saved to Drive → ${r.folder}`);
   } catch (e) { toast("Drive export failed: " + e.message); }
@@ -2855,6 +2867,143 @@ function frameToPNG() {
     img.onerror = () => resolve("");
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   });
+}
+
+// Where each folder's sheet lives in Drive, remembered between runs.
+const DRIVE_TARGETS = "drive-targets";
+
+async function driveTargets() {
+  try { return (await api("/api/data?key=" + DRIVE_TARGETS)).value || {}; }
+  catch { return {}; }
+}
+
+async function rememberTarget(folder, dest) {
+  const all = await driveTargets();
+  all[folder] = dest;
+  await api("/api/data", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: DRIVE_TARGETS, value: all }),
+  }).catch(() => {});
+}
+
+/** Pick a folder of scenes and where in Drive its sheet should live. */
+async function syncFolderDialog() {
+  if (!isLocal()) return toast("Drive sync runs from the app on your Mac");
+
+  let folders = [];
+  try {
+    const root = await api("/api/list?path=");
+    folders = [""].concat(root.folders);
+    // One level down as well, since episodes sit inside a production.
+    for (const f of root.folders.slice(0, 40)) {
+      const sub = await api("/api/list?path=" + encodeURIComponent(f)).catch(() => null);
+      for (const s2 of sub?.folders || []) folders.push(`${f}/${s2}`);
+    }
+  } catch (e) { return toast("Can't read scenes: " + e.message); }
+
+  const saved = await driveTargets();
+  const body = document.createElement("div");
+
+  const fLabel = document.createElement("label");
+  fLabel.textContent = "Folder of scenes";
+  const pick = document.createElement("select");
+  for (const f of folders) {
+    const o = document.createElement("option");
+    o.value = f;
+    o.textContent = f || "(everything)";
+    pick.append(o);
+  }
+  const here = (S.path || "").split("/").slice(0, -1).join("/");
+  if (folders.includes(here)) pick.value = here;
+
+  const dLabel = document.createElement("label");
+  dLabel.textContent = "Save into Google Drive";
+  const dest = document.createElement("input");
+  dest.type = "text";
+  const suggest = () => {
+    dest.value = saved[pick.value] || (pick.value ? `Shot Lists/${pick.value}` : "Shot Lists");
+  };
+  suggest();
+  pick.onchange = suggest;
+
+  const note = document.createElement("p");
+  note.className = "sub";
+  note.style.margin = "12px 0 0";
+  note.textContent = "A tab per scene plus an All Shots tab, each row with its " +
+    "overhead. Saved where you put it, and it remembers per folder.";
+
+  body.append(fLabel, pick, dLabel, dest, note);
+  sheet({
+    title: "Sync Folder to Drive",
+    sub: "Every scene's shot list in one workbook.",
+    body, okLabel: "Sync",
+    onOK: () => syncFolder(pick.value, dest.value.trim()),
+  });
+}
+
+async function syncFolder(folder, dest) {
+  const saved = { doc: S.doc, path: S.path, sel: new Set(S.sel), dirty: S.dirty,
+                  view: { ...S.view }, spotlight: S.spotlight };
+  let listing;
+  try { listing = await api("/api/list?path=" + encodeURIComponent(folder)); }
+  catch (e) { return toast("Can't read folder: " + e.message); }
+
+  const scenes = listing.scenes.map((s) => (folder ? `${folder}/${s.name}` : s.name));
+  if (!scenes.length) return toast("No scenes in that folder");
+
+  const sheets = [];
+  try {
+    for (const [i, path] of scenes.entries()) {
+      toast(`Reading ${i + 1} of ${scenes.length} — ${path.replace(/\.hcw$/i, "")}`);
+      const { xml } = await api("/api/scene?path=" + encodeURIComponent(path));
+      const shots = await renderSceneShots(xml);
+      if (shots.length) {
+        sheets.push({ name: path.replace(/\.hcw$/i, "").split("/").pop(), shots });
+      }
+    }
+  } finally {
+    S.doc = saved.doc; S.path = saved.path; S.sel = saved.sel;
+    S.dirty = saved.dirty; S.view = saved.view; S.spotlight = saved.spotlight;
+    reindex(); draw(); syncChrome();
+  }
+
+  if (!sheets.length) return toast("No shot descriptions found in that folder");
+
+  try {
+    const r = await api("/api/shotsheet", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: folder ? folder.replace(/\//g, " ") : "All scenes",
+        dest, sheets,
+      }),
+    });
+    await rememberTarget(folder, dest);
+    toast(`${r.shots} shots from ${r.scenes} scenes → Drive / ${r.folder}`);
+  } catch (e) { toast("Drive sync failed: " + e.message); }
+}
+
+/** Load a scene off to one side and photograph each of its setups. */
+async function renderSceneShots(xml) {
+  S.doc = H.parseXML(xml);
+  S.sel.clear();
+  reindex();
+  fitToContent();
+
+  const out = [];
+  for (const v of shotVersions()) {
+    S.spotlight = H.get(v, "attachObjectID");
+    draw();
+    out.push({
+      camera: H.get(v, "headerText"),
+      shot: H.get(v, "versionNickname"),
+      type: H.get(v, "versionShotType"),
+      lens: parseFloat(H.get(v, "versionLens")) || "",
+      notes: H.get(v, "versionDescription"),
+      png: await frameToPNG(),
+    });
+  }
+  S.spotlight = null;
+  return out;
 }
 
 function exportShotCSV() {
