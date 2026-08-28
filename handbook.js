@@ -83,7 +83,18 @@ jib, or a slider, camera already on it. Drop a dolly near track and it takes the
 track; after that it only goes where the track goes. Drag the camera and the arm
 swings it at its real reach — a Fisher Jib 21 is 5'10", which is shorter than
 most people draw it. <b>Arm Reach…</b> on the rig sets it to something else if
-you're on a 23.</p>`,
+you're on a 23.</p>
+<p><b>Track To…</b> on a camera lays track from where it stands to wherever you
+click, and puts the camera on it.</p>
+<h4>Marking the move</h4>
+<p>Put the rig where you want it — anywhere along the track, arm anywhere —
+and hit <b>Set position</b>. That freezes it: where on the track, where the arm
+is, where the camera is pointed. Do it again for position 2, and so on.</p>
+<p>Every marked position draws on the plan as a numbered camera with its arm,
+and a dashed line runs through them in order so the move reads at a glance.
+Click a number to send the rig back to it. <kbd>⌥</kbd>-click a number to drop
+that position.</p>
+<p>This is what you hand the dolly grip: the marks are the marks.</p>`,
   },
   {
     id: "shots",

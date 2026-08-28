@@ -1,22 +1,22 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=c8ef7d45";
-import * as R from "./render.js?v=c8ef7d45";
-import { FXG } from "./assets.js?v=c8ef7d45";
-import * as B from "./blocking.js?v=c8ef7d45";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=c8ef7d45";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=c8ef7d45";
-import { HANDBOOK } from "./handbook.js?v=c8ef7d45";
-import * as TR from "./track.js?v=c8ef7d45";
-import * as RIG from "./rigs.js?v=c8ef7d45";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=c8ef7d45";
-import { Library } from "./library.js?v=c8ef7d45";
+import * as H from "./hcw.js?v=27e04500";
+import * as R from "./render.js?v=27e04500";
+import { FXG } from "./assets.js?v=27e04500";
+import * as B from "./blocking.js?v=27e04500";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=27e04500";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=27e04500";
+import { HANDBOOK } from "./handbook.js?v=27e04500";
+import * as TR from "./track.js?v=27e04500";
+import * as RIG from "./rigs.js?v=27e04500";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=27e04500";
+import { Library } from "./library.js?v=27e04500";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=c8ef7d45";
+} from "./catalog.js?v=27e04500";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -233,6 +233,7 @@ function draw() {
     g.append(node);
   }
   drawRigArms();
+  drawMarks();
   declutterLabels();
   drawSelection();
   applyView();
@@ -740,7 +741,7 @@ stage.addEventListener("pointerdown", (ev) => {
     mark("move");
     if (S.sel.size === 1 && RIG.rigParentID(hit)) {
       drag = { mode: "rigcam", obj: hit, moved: false };
-    } else if (S.sel.size === 1 && RIG.isRig(hit) && H.get(hit, "snapPath")) {
+    } else if (S.sel.size === 1 && RIG.ridesTrack(hit)) {
       drag = { mode: "rigslide", obj: hit, moved: false };
     } else {
       drag = { mode: "move", start: pt, moved: false,
@@ -1026,12 +1027,31 @@ function finishTool() {
     c.children = c.children.filter((o) => o !== obj);   // a single click draws nothing
     S.dirty = S.undo.pop()?.wasDirty ?? S.dirty;
   }
+  const owner = S.draft.owner || S.pendingOwner;
+  const laid = committed.length >= 2 ? obj : null;
   S.draft = null;
+  reindex();
+
+  // Track drawn from a camera means that camera is now on it, not merely
+  // pointed at the far end — so it can be slid along and marked like any rig.
+  if (S.tool === "track" && owner && laid) {
+    const rider = byID(owner);
+    if (rider) {
+      H.set(laid, "fromConstraints", "");
+      H.set(rider, "snapPath", idOf(laid));
+      H.set(rider, "snapPercent", 0);
+      S.sel = new Set([idOf(rider)]);
+      reflowRigs();
+      toast("On the track — drag it to slide, then freeze positions");
+    }
+  }
+  reflowConstraints();
+
   if (ONE_SHOT.has(S.tool)) {
     S.tool = null; S.showGrid = false; S.pendingOwner = null;
     stage.classList.remove("drawing");
   }
-  reindex(); draw(); syncChrome();
+  draw(); syncChrome();
 }
 
 function toolClick(pt, ev) {
@@ -1229,6 +1249,82 @@ function dropTrackPiece(t) {
   draw(); syncChrome();
 }
 
+// --- marks ------------------------------------------------------------------
+
+const marksOf = (o) => RIG.readMarks(o);
+
+function setMark(rider) {
+  mark("set mark");
+  const cam = byID(RIG.rigCameraID(rider)) || rider;
+  const list = marksOf(rider);
+  list.push(RIG.captureMark(rider, cam));
+  H.set(rider, "marks", RIG.writeMarks(list));
+  draw(); syncChrome();
+  toast(`Position ${list.length} set`);
+}
+
+function goToMark(rider, i) {
+  const m = marksOf(rider)[i];
+  if (!m) return;
+  mark("go to mark");
+  H.set(rider, "snapPercent", m.pct);
+  const cam = byID(RIG.rigCameraID(rider));
+  if (cam && m.arm !== null) H.set(cam, "rigArmAngle", m.arm);
+  R.setAngle(cam || rider, m.pan);
+  reflowRigs();
+  draw(); syncChrome();
+}
+
+function dropMark(rider, i) {
+  mark("remove mark");
+  const list = marksOf(rider);
+  list.splice(i, 1);
+  H.set(rider, "marks", RIG.writeMarks(list));
+  draw(); syncChrome();
+}
+
+/** Every frozen position, drawn faintly, with the move joining them up. */
+function drawMarks() {
+  for (const rider of objects()) {
+    const list = marksOf(rider);
+    if (!list.length) continue;
+    const cam = byID(RIG.rigCameraID(rider));
+    const track = byID(H.get(rider, "snapPath"));
+    const pts = track && track.tag === "Track" ? R.pointsOf(track) : null;
+    const g = LAYER_G.overlay;
+    const tone = cam ? R.cameraColour(cam) : "#255681";
+
+    const seats = list.map((m) => RIG.markState(rider, cam, m, pts));
+    if (seats.length > 1) {
+      g.append(R.el("path", {
+        d: "M" + seats.map((s) => `${s.camPos.x},${s.camPos.y}`).join(" L"),
+        fill: "none", stroke: tone, "stroke-width": 2 / S.view.k,
+        "stroke-dasharray": `${7 / S.view.k} ${5 / S.view.k}`, opacity: .75,
+      }));
+    }
+
+    seats.forEach((seat, i) => {
+      if (RIG.rigSpec(rider)?.arm) {
+        g.append(R.el("line", {
+          x1: seat.base.x, y1: seat.base.y, x2: seat.camPos.x, y2: seat.camPos.y,
+          stroke: tone, "stroke-width": 3 / S.view.k, opacity: .35,
+        }));
+      }
+      g.append(R.el("circle", {
+        cx: seat.camPos.x, cy: seat.camPos.y, r: 11 / S.view.k,
+        fill: tone, opacity: .9, stroke: "#fff", "stroke-width": 1.5 / S.view.k,
+      }));
+      const t = R.el("text", {
+        x: seat.camPos.x, y: seat.camPos.y + 4 / S.view.k,
+        "text-anchor": "middle", fill: "#fff", "font-weight": "700",
+        "font-size": 12 / S.view.k, "font-family": "Helvetica, Arial, sans-serif",
+      });
+      t.textContent = i + 1;
+      g.append(t);
+    });
+  }
+}
+
 function rigMenu(x, y, at) {
   showPopover(x, y, [
     { head: "Rigged Camera" },
@@ -1269,7 +1365,7 @@ function snapRigToNearestTrack(rig) {
   placeRigOnTrack(rig);
 }
 
-/** Put a rig where its track says it is, and bring its camera along. */
+/** Put anything that rides a track where its track says it is. */
 function placeRigOnTrack(rig) {
   const track = byID(H.get(rig, "snapPath"));
   if (!track || track.tag !== "Track") return false;
@@ -1282,12 +1378,13 @@ function placeRigOnTrack(rig) {
 
 /** Every camera sits where its rig puts it. */
 function reflowRigs() {
-  for (const rig of objects()) {
-    if (!RIG.isRig(rig)) continue;
-    placeRigOnTrack(rig);
-    const cam = byID(RIG.rigCameraID(rig));
+  for (const o of objects()) {
+    const rides = RIG.ridesTrack(o);
+    if (!RIG.isRig(o) && !rides) continue;
+    if (rides) placeRigOnTrack(o);
+    const cam = byID(RIG.rigCameraID(o));
     if (!cam) continue;
-    const seat = RIG.cameraSeat(rig, cam);
+    const seat = RIG.cameraSeat(o, cam);
     H.set(cam, "x", round(seat.x));
     H.set(cam, "y", round(seat.y));
   }
@@ -1807,8 +1904,9 @@ function syncChrome() {
               (S.sel.size ? `   ${S.sel.size} selected` : ""));
   $("#status").classList.toggle("live", !!(readout || S.tool));
 
-  const track = S.sel.size === 1 ? byID([...S.sel][0]) : null;
-  renderTrackPanel(isBuiltTrack(track) ? track : null);
+  const one = S.sel.size === 1 ? byID([...S.sel][0]) : null;
+  renderTrackPanel(isBuiltTrack(one) ? one : null,
+    one && (RIG.isRig(one) || RIG.ridesTrack(one)) ? one : null);
 
   const banner = $("#toolbanner");
   banner.hidden = !S.tool;
@@ -1947,9 +2045,9 @@ const colorFor = (name) =>
     .toString(16).padStart(6, "0");
 
 /** What you'd send the key grip for, and the buttons to add more. */
-function renderTrackPanel(t) {
+function renderTrackPanel(t, rider) {
   let panel = $("#trackPanel");
-  if (!t) { if (panel) panel.hidden = true; return; }
+  if (!t && !rider) { if (panel) panel.hidden = true; return; }
   if (!panel) {
     panel = document.createElement("div");
     panel.id = "trackPanel";
@@ -1958,28 +2056,67 @@ function renderTrackPanel(t) {
   panel.hidden = false;
   panel.replaceChildren();
 
-  const head = document.createElement("b");
-  head.textContent = "Dolly track";
-  const list = document.createElement("span");
-  list.className = "tally";
-  list.textContent = TR.summary(trackRecipe(t));
+  if (t) {
+    const head = document.createElement("b");
+    head.textContent = "Dolly track";
+    const list = document.createElement("span");
+    list.className = "tally";
+    list.textContent = TR.summary(trackRecipe(t)) + "   ·   [ ] to turn";
 
-  const row = document.createElement("div");
-  row.className = "pieces";
-  for (const [code, piece] of Object.entries(TR.PIECES)) {
-    const b = document.createElement("button");
-    b.textContent = piece.label.replace(" straight", "").replace("degree", "°");
-    b.title = "Add a " + piece.label;
-    b.onclick = () => addTrackPiece(t, code);
-    row.append(b);
+    const row = document.createElement("div");
+    row.className = "pieces";
+    for (const [code, piece] of Object.entries(TR.PIECES)) {
+      const b = document.createElement("button");
+      b.textContent = piece.label.replace(" straight", "").replace("degree", "°");
+      b.title = "Add a " + piece.label;
+      b.onclick = () => addTrackPiece(t, code);
+      row.append(b);
+    }
+    const undo = document.createElement("button");
+    undo.textContent = "Remove last";
+    undo.className = "drop";
+    undo.onclick = () => dropTrackPiece(t);
+    row.append(undo);
+    panel.append(head, list, row);
   }
-  const undo = document.createElement("button");
-  undo.textContent = "Remove last";
-  undo.className = "drop";
-  undo.onclick = () => dropTrackPiece(t);
-  row.append(undo);
 
-  panel.append(head, list, row);
+  if (rider) {
+    const head = document.createElement("b");
+    head.textContent = RIG.rigSpec(rider)?.label || "Camera on track";
+    const marks = marksOf(rider);
+    const tally = document.createElement("span");
+    tally.className = "tally";
+    tally.textContent = marks.length
+      ? `${marks.length} position${marks.length > 1 ? "s" : ""} marked`
+      : "Put it where you want it, then freeze the position";
+
+    const row = document.createElement("div");
+    row.className = "pieces";
+    const set = document.createElement("button");
+    set.textContent = "Set position " + (marks.length + 1);
+    set.onclick = () => setMark(rider);
+    row.append(set);
+
+    marks.forEach((m, i) => {
+      const b = document.createElement("button");
+      b.textContent = String(i + 1);
+      b.title = "Go to position " + (i + 1) + " — ⌥-click to remove";
+      b.onclick = (e) => (e.altKey ? dropMark(rider, i) : goToMark(rider, i));
+      row.append(b);
+    });
+    if (marks.length) {
+      const clear = document.createElement("button");
+      clear.textContent = "Clear";
+      clear.className = "drop";
+      clear.onclick = () => {
+        mark("clear marks");
+        H.set(rider, "marks", "");
+        draw(); syncChrome();
+      };
+      row.append(clear);
+    }
+    panel.append(head, tally, row);
+  }
 }
 
 // ---------------------------------------------------------------- popovers
@@ -2467,7 +2604,7 @@ function startFromHere(tool, obj) {
   const path = H.makePath(TOOL_TAG[tool], [start, start]);
   H.set(path, "fromConstraints", idOf(obj));
   canvas().children.push(path);
-  S.draft = { obj: path, committed: [start] };
+  S.draft = { obj: path, committed: [start], owner: idOf(obj) };
   reindex();
   toast(`Click where ${tool === "track" ? "the camera travels" : "they walk"} to`);
   draw(); syncChrome();

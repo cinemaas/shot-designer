@@ -107,6 +107,13 @@ arm swings it at its real reach — a Fisher Jib 21 is **5'10"**, shorter than
 most people draw it — or runs it along a slider's own axis. **Arm Reach…** sets
 it to something else for a 23. Move the track and everything on it follows.
 
+**Marked positions.** Put a rig where you want it and hit **Set position**. It
+freezes where on the track, where the arm is and where the camera looks. Every
+marked position draws as a numbered camera with its arm, joined in order by a
+dashed line, so the move reads off the plan. Click a number to go back to it.
+**Track To…** on a camera lays track to where you click and puts the camera on
+it, ready to slide and mark.
+
 **The shot list into Drive.** **To Drive** writes a formatted `.xlsx` into
 *My Drive / Shot Lists* with a row per shot and **an overhead frame for each
 one**, that setup's camera lit and the rest dimmed. Sheets opens `.xlsx`

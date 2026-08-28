@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=c8ef7d45";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=c8ef7d45";
-import { EXTRA_SVG } from "./props.js?v=c8ef7d45";
-import { GAUGE } from "./track.js?v=c8ef7d45";
-import * as H from "./hcw.js?v=c8ef7d45";
+import { FXG } from "./assets.js?v=27e04500";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=27e04500";
+import { EXTRA_SVG } from "./props.js?v=27e04500";
+import { GAUGE } from "./track.js?v=27e04500";
+import * as H from "./hcw.js?v=27e04500";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
