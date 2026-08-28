@@ -103,13 +103,22 @@ const RAW = [
     `<rect x="-16" y="-16" width="32" height="32" fill="none" stroke="${D}" stroke-width="3"/>`],
   ["DOLLY", "Dolly", "camera",
     box(3, 4) + `<circle cx="0" cy="0" r="7" fill="${L}" stroke="${D}" stroke-width="3"/>`],
+  ["DOLLYJIB", "Dolly + Jib", "camera",
+    // A Fisher-type dolly seen from above with the jib post at its centre:
+    // the post is the pivot, so the arm reads as swinging about the dolly.
+    box(3, 4) +
+    `<circle cx="0" cy="0" r="13" fill="${L}" stroke="${D}" stroke-width="3"/>` +
+    `<circle cx="0" cy="0" r="5" fill="${D}" stroke="none"/>` +
+    `<line x1="-30" y1="-40" x2="30" y2="-40" stroke="${D}" stroke-width="3"/>` +
+    `<line x1="-30" y1="40" x2="30" y2="40" stroke="${D}" stroke-width="3"/>`],
   ["SLIDER", "Slider", "camera",
     `<rect x="-45" y="-5" width="90" height="10" rx="2" fill="${L}" stroke="${D}" stroke-width="3"/>` +
     `<rect x="-12" y="-9" width="24" height="18" fill="${G}" stroke="${D}" stroke-width="3"/>`],
   ["JIB", "Jib Arm", "camera",
-    `<line x1="-30" y1="0" x2="90" y2="0" stroke="${D}" stroke-width="6" stroke-linecap="round"/>` +
-    `<circle cx="0" cy="0" r="9" fill="${L}" stroke="${D}" stroke-width="3"/>` +
-    `<rect x="-42" y="-11" width="16" height="22" fill="${G}" stroke="${D}" stroke-width="3"/>`],
+    // Just the base and its pivot; the arm itself is drawn to the camera.
+    stand(4, 6) +
+    `<circle cx="0" cy="0" r="13" fill="${L}" stroke="${D}" stroke-width="3"/>` +
+    `<circle cx="0" cy="0" r="5" fill="${D}" stroke="none"/>`],
   ["STEADICAM", "Steadicam", "camera",
     `<circle cx="0" cy="0" r="13" fill="none" stroke="${D}" stroke-width="3"/>` +
     `<path d="M-9,9 A13,13 0 0 1 -9,-9" fill="none" stroke="${D}" stroke-width="6"/>` +

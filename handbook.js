@@ -79,11 +79,17 @@ middle of the run so it stays where you put it. Hold <kbd>⌥</kbd> to turn off
 the fifteen-degree detents. Track sections don't bend, so a laid run moves and
 turns as one piece rather than corner by corner.</p>
 <p><b>Add Rigged Camera…</b> gives you a dolly, a dolly with a Jib 21, a bare
-jib, or a slider, camera already on it. Drop a dolly near track and it takes the
-track; after that it only goes where the track goes. Drag the camera and the arm
-swings it at its real reach — a Fisher Jib 21 is 5'10", which is shorter than
-most people draw it. <b>Arm Reach…</b> on the rig sets it to something else if
-you're on a 23.</p>
+jib, or a slider, camera already on it. It comes apart the way the real thing
+does:</p>
+<dl>
+<dt>The base takes the track</dt><dd>Drop it near track and it takes it. After
+that the base only goes where the track goes — select it and drag to run it up
+and down.</dd>
+<dt>The arm only articulates</dt><dd>Drag the camera and it swings on the arm.
+It can't leave the arm and it can't take the track itself; the faint circle is
+the sweep it can reach. A Fisher Jib 21 is 5'10", which is shorter than most
+people draw it. <b>Arm Reach…</b> sets it to something else for a 23.</dd>
+</dl>
 <p><b>Track To…</b> on a camera lays track from where it stands to wherever you
 click, and puts the camera on it.</p>
 <h4>Positions</h4>
@@ -96,8 +102,11 @@ remove it from a slice, and a position used twice is simply tagged twice, the
 same as writing <code>1,4</code> on an actor's mark.</p>
 <p>Step the timeline with the numbers at the bottom right, or with
 <kbd>←</kbd> <kbd>→</kbd> in blocking mode, and only that position is solid
-while the others fall back. A dolly position is still a dolly position: it can
-only sit on its track, and the arm still only reaches as far as it reaches.</p>`,
+while the others fall back.</p>
+<p>A position holds both halves of the rig — where the base sits on the track
+<i>and</i> where the arm is swung. So a move reads the way you'd call it: dolly
+from A to B, arm starting swung back and coming forward. Each is still
+constrained: the base on its track, the arm within its reach.</p>`,
   },
   {
     id: "shots",

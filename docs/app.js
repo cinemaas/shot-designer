@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=82be522c";
-import * as R from "./render.js?v=82be522c";
-import { FXG } from "./assets.js?v=82be522c";
-import * as B from "./blocking.js?v=82be522c";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=82be522c";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=82be522c";
-import { HANDBOOK } from "./handbook.js?v=82be522c";
-import * as TR from "./track.js?v=82be522c";
-import * as RIG from "./rigs.js?v=82be522c";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=82be522c";
-import { Library } from "./library.js?v=82be522c";
+import * as H from "./hcw.js?v=15275326";
+import * as R from "./render.js?v=15275326";
+import { FXG } from "./assets.js?v=15275326";
+import * as B from "./blocking.js?v=15275326";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=15275326";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=15275326";
+import { HANDBOOK } from "./handbook.js?v=15275326";
+import * as TR from "./track.js?v=15275326";
+import * as RIG from "./rigs.js?v=15275326";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=15275326";
+import { Library } from "./library.js?v=15275326";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=82be522c";
+} from "./catalog.js?v=15275326";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -257,10 +257,16 @@ function drawRigArms() {
     if (Math.hypot(cx - ox, cy - oy) < 2) continue;
     const g = LAYER_G.prop;
     if (spec.arm) {
+      // The arm, and the sweep it can reach, so the geometry is obvious.
+      g.append(R.el("circle", {
+        cx: ox, cy: oy, r: H.getNum(rig, "rigArm", spec.arm),
+        fill: "none", stroke: "#8b9399", "stroke-width": 1,
+        "stroke-dasharray": "6 6", opacity: .35,
+      }));
       g.append(R.el("line", { x1: ox, y1: oy, x2: cx, y2: cy,
         stroke: "#4a5157", "stroke-width": 7, "stroke-linecap": "round", opacity: .85 }));
-      g.append(R.el("circle", { cx: ox, cy: oy, r: 7,
-        fill: "#4a5157", stroke: "none" }));
+      g.append(R.el("circle", { cx: ox, cy: oy, r: 6,
+        fill: "#4a5157", stroke: "#fff", "stroke-width": 2 }));
     } else {
       g.append(R.el("line", { x1: ox, y1: oy, x2: cx, y2: cy,
         stroke: "#4a5157", "stroke-width": 5, "stroke-linecap": "round", opacity: .7 }));
@@ -818,7 +824,7 @@ stage.addEventListener("pointerdown", (ev) => {
     mark("move");
     if (S.sel.size === 1 && RIG.rigParentID(hit)) {
       drag = { mode: "rigcam", obj: hit, moved: false };
-    } else if (S.sel.size === 1 && RIG.ridesTrack(hit)) {
+    } else if (S.sel.size === 1 && RIG.ridesTrack(hit) && !RIG.rigParentID(hit)) {
       drag = { mode: "rigslide", obj: hit, moved: false };
     } else {
       drag = { mode: "move", start: pt, moved: false,
@@ -1122,7 +1128,11 @@ function finishTool() {
   // Track drawn from a camera means that camera is now on it, not merely
   // pointed at the far end — so it can be slid along and marked like any rig.
   if (S.tool === "track" && owner && laid) {
-    const rider = byID(owner);
+    let rider = byID(owner);
+    // Track under a rigged camera belongs to the base, not the camera: the
+    // camera can only ever swing on its arm.
+    const parent = rider && byID(RIG.rigParentID(rider));
+    if (parent) rider = parent;
     if (rider) {
       H.set(laid, "fromConstraints", "");
       H.set(rider, "snapPath", idOf(laid));
@@ -1409,7 +1419,7 @@ function rigMenu(x, y, at) {
 
 /** Dropping a dolly near track puts it on the track. */
 function snapRigToNearestTrack(rig) {
-  if (!RIG.rigSpec(rig)?.ride) return;
+  if (!RIG.rigSpec(rig)?.ride || RIG.rigParentID(rig)) return;
   const here = { x: H.getNum(rig, "x"), y: H.getNum(rig, "y") };
   let best = null;
   for (const o of objects()) {
@@ -1440,6 +1450,9 @@ function placeRigOnTrack(rig) {
 /** Every camera sits where its rig puts it. */
 function reflowRigs() {
   for (const o of objects()) {
+    // A camera on an arm takes its position from the arm, so a stray track
+    // attachment on it would be two things deciding where it goes.
+    if (RIG.rigParentID(o) && H.get(o, "snapPath")) H.set(o, "snapPath", "");
     const rides = RIG.ridesTrack(o);
     if (!RIG.isRig(o) && !rides) continue;
     if (rides) placeRigOnTrack(o);

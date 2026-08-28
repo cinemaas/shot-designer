@@ -101,9 +101,11 @@ so a laid run moves and turns as one piece rather than corner by corner.
 
 **Rigged camera support.** **Add ▸ Add Rigged Camera…** gives you a dolly, a
 dolly with a jib, a bare jib, or a slider, with the camera already on it.
-Dropping a dolly near track puts it on the track. Drag it and it can only go
-where the track goes, camera along for the ride. Drag the camera and the jib
-arm swings it at its real reach — a Fisher Jib 21 is **5'10"**, shorter than
+It comes apart the way the real thing does: **the base takes the track** and
+only goes where the track goes, and **the arm only articulates** — the camera
+swings on it, can't leave it, and can't take the track itself. A faint circle
+shows the sweep the arm can reach. Drag the camera and the jib arm swings it at
+its real reach — a Fisher Jib 21 is **5'10"**, shorter than
 most people draw it — or runs it along a slider's own axis. **Arm Reach…** sets
 it to something else for a 23. Move the track and everything on it follows.
 
