@@ -168,8 +168,11 @@ on the page and stops being something you can drag by accident while you work
 cameras and actors on top of it. Locked things ignore clicks, marquees and
 Select All.</p>
 <p><b>Lock Set, Props &amp; Backgrounds</b> does the three in one go, which is
-usually the moment the room is right and you want to stop touching it. Click
-into something locked and it tells you which layer is holding it.</p>`,
+usually the moment the room is right and you want to stop touching it.</p>
+<p>Dragging locked scenery <b>pans the drawing</b> — it's a surface, not a hole,
+so grabbing the floorplan pushes the whole page around. A selection sweep only
+starts from genuinely empty canvas. Click into something locked and it tells you
+which layer is holding it.</p>`,
   },
   {
     id: "files",

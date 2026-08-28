@@ -111,8 +111,10 @@ it to something else for a 23. Move the track and everything on it follows.
 locked**, and hidden. Locked keeps the set on the page and stops it being
 something you drag by accident — it ignores clicks, marquees and Select All.
 **Lock Set, Props & Backgrounds** does the three at once, for the moment the
-room is right and you want to stop touching it. Click into something locked and
-it says which layer is holding it. `L` opens the menu.
+room is right and you want to stop touching it. Dragging locked scenery **pans
+the drawing** rather than starting a selection sweep across it — it's a surface,
+not a hole. Click into something locked and it says which layer is holding it,
+once, not on every click. `L` opens the menu.
 
 **Positions.** A camera or a rig gets more than one position the way the
 original does it: **another copy, tagged with the time slice it belongs to** —

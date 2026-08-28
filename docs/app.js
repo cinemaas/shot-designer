@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=9c9ba6f6";
-import * as R from "./render.js?v=9c9ba6f6";
-import { FXG } from "./assets.js?v=9c9ba6f6";
-import * as B from "./blocking.js?v=9c9ba6f6";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=9c9ba6f6";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=9c9ba6f6";
-import { HANDBOOK } from "./handbook.js?v=9c9ba6f6";
-import * as TR from "./track.js?v=9c9ba6f6";
-import * as RIG from "./rigs.js?v=9c9ba6f6";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=9c9ba6f6";
-import { Library } from "./library.js?v=9c9ba6f6";
+import * as H from "./hcw.js?v=82be522c";
+import * as R from "./render.js?v=82be522c";
+import { FXG } from "./assets.js?v=82be522c";
+import * as B from "./blocking.js?v=82be522c";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=82be522c";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=82be522c";
+import { HANDBOOK } from "./handbook.js?v=82be522c";
+import * as TR from "./track.js?v=82be522c";
+import * as RIG from "./rigs.js?v=82be522c";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=82be522c";
+import { Library } from "./library.js?v=82be522c";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=9c9ba6f6";
+} from "./catalog.js?v=82be522c";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -471,14 +471,7 @@ function drawSelection() {
     t.textContent = who;
     g.append(t);
   }
-  if (S.marquee) {
-    const m = S.marquee;
-    g.append(R.el("rect", {
-      x: Math.min(m.x0, m.x1), y: Math.min(m.y0, m.y1),
-      width: Math.abs(m.x1 - m.x0), height: Math.abs(m.y1 - m.y0),
-      fill: "#1f8cff18", stroke: "var(--sel)", "stroke-width": 1 / S.view.k,
-    }));
-  }
+  if (S.marquee) drawMarquee();
 }
 
 /**
@@ -530,6 +523,21 @@ function pictureBounds(obj) {
   const x = parseFloat(node.getAttribute("x")), y = parseFloat(node.getAttribute("y"));
   const w = parseFloat(node.getAttribute("width")), h = parseFloat(node.getAttribute("height"));
   return Number.isFinite(w) ? { x, y, width: w, height: h } : null;
+}
+
+/** Just the selection rectangle, without redrawing the scene under it. */
+function drawMarquee() {
+  const m = S.marquee;
+  let rect = LAYER_G.overlay.querySelector(".marquee");
+  if (!rect) {
+    rect = R.el("rect", { class: "marquee", fill: "#1f8cff18", stroke: "var(--sel)" });
+    LAYER_G.overlay.append(rect);
+  }
+  rect.setAttribute("x", Math.min(m.x0, m.x1));
+  rect.setAttribute("y", Math.min(m.y0, m.y1));
+  rect.setAttribute("width", Math.abs(m.x1 - m.x0));
+  rect.setAttribute("height", Math.abs(m.y1 - m.y0));
+  rect.setAttribute("stroke-width", 1 / S.view.k);
 }
 
 function applyView() {
@@ -656,6 +664,15 @@ function lockedUnder(client) {
     }
   }
   return null;
+}
+
+let lockedSaid = 0;
+/** Say it once, not on every click. */
+function noteLocked(name) {
+  const now = Date.now();
+  if (now - lockedSaid < 8000) return;
+  lockedSaid = now;
+  toast(`${name} locked — drag to pan, or press L to unlock`);
 }
 
 /** Can you pick this up? Hidden layers can't, locked layers won't. */
@@ -810,11 +827,16 @@ stage.addEventListener("pointerdown", (ev) => {
   } else {
     const blocked = lockedUnder(client);
     if (blocked) {
-      toast(`${blocked} is locked — press L to change that`);
+      // Locked scenery is a surface, not a hole. Dragging it pushes the
+      // drawing around rather than starting a selection sweep across it.
+      drag = { mode: "pan", sx: ev.clientX, sy: ev.clientY, vx: S.view.x, vy: S.view.y };
+      stage.classList.add("panning");
+      noteLocked(blocked);
+    } else {
+      if (!extend) S.sel.clear();
+      S.marquee = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y };
+      drag = { mode: "marquee" };
     }
-    if (!extend) S.sel.clear();
-    S.marquee = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y };
-    drag = { mode: "marquee" };
   }
   stage.setPointerCapture(ev.pointerId);
   draw(); syncChrome();
@@ -836,7 +858,7 @@ stage.addEventListener("pointermove", (ev) => {
   }
   if (drag.mode === "marquee") {
     S.marquee.x1 = pt.x; S.marquee.y1 = pt.y;
-    return draw();
+    return drawMarquee();
   }
   if (drag.mode === "move") {
     const dx = pt.x - drag.start.x, dy = pt.y - drag.start.y;
