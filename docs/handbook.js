@@ -84,7 +84,9 @@ does:</p>
 <dl>
 <dt>The base takes the track</dt><dd>Drop it near track and it takes it. After
 that the base only goes where the track goes — select it and drag to run it up
-and down.</dd>
+and down. <kbd>⌥</kbd>-drag lifts it clear of the track altogether, and dropping
+it by rails again puts it back on. There's <b>Take Off Track</b> in its menu if
+you'd rather say it than hold a key.</dd>
 <dt>The arm only articulates</dt><dd>Drag the camera and it swings on the arm.
 It can't leave the arm and it can't take the track itself; the faint circle is
 the sweep it can reach. A Fisher Jib 21 is 5'10", which is shorter than most
@@ -177,7 +179,9 @@ on the page and stops being something you can drag by accident while you work
 cameras and actors on top of it. Locked things ignore clicks, marquees and
 Select All.</p>
 <p><b>Lock Set, Props &amp; Backgrounds</b> does the three in one go, which is
-usually the moment the room is right and you want to stop touching it.</p>
+usually the moment the room is right and you want to stop touching it. Camera
+support has its own layer and isn't caught by that — a dolly is equipment, not
+set dressing, and you'll be moving it long after the room is settled.</p>
 <p>Dragging locked scenery <b>pans the drawing</b> — it's a surface, not a hole,
 so grabbing the floorplan pushes the whole page around. A selection sweep only
 starts from genuinely empty canvas. Click into something locked and it tells you

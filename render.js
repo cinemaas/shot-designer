@@ -70,8 +70,22 @@ export function setPoints(obj, pts) {
   c.text = c.children.length ? null : "";
 }
 
+// Camera support is working equipment, not set dressing. It gets its own layer
+// so that locking the set — which people do the moment the room is right —
+// doesn't also pin the dolly down.
+const RIG_KEYS = new Set(["DOLLY", "DOLLYJIB", "JIB", "SLIDER",
+                          "TRIPOD", "HIHAT", "STEADICAM", "CRANE"]);
+
 /** Which layer group an object belongs to, matching the app's layer toggles. */
-export function layerOf(tag) {
+export function layerOf(objOrTag) {
+  const tag = typeof objOrTag === "string" ? objOrTag : objOrTag.tag;
+  if (typeof objOrTag !== "string" && RIG_KEYS.has(H.get(objOrTag, "objectKey"))) {
+    return "rig";
+  }
+  return layerForTag(tag);
+}
+
+function layerForTag(tag) {
   if (tag === "ImageProp") return "prop";
   if (tag === "Camera") return "camera";
   if (tag === "Character") return "character";

@@ -224,7 +224,7 @@ export function emptyScene() {
       cameraLayer: true, trackLayer: true, lightingLayer: true,
       characterLayer: true, linesLayer: true, walkLayer: true,
       captionLayer: true, setLayer: true, propLayer: true,
-      backgroundLayer: true, storyboardLayer: true,
+      rigLayer: true, backgroundLayer: true, storyboardLayer: true,
       backgroundLayerTransparency: "1.0", disabledLayerTransparency: "0.2",
       shotDescriptionsTransparency: "1.0",
     }),

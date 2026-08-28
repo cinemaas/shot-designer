@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=15275326";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=15275326";
-import { EXTRA_SVG } from "./props.js?v=15275326";
-import { GAUGE } from "./track.js?v=15275326";
-import * as H from "./hcw.js?v=15275326";
+import { FXG } from "./assets.js?v=6973efe1";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=6973efe1";
+import { EXTRA_SVG } from "./props.js?v=6973efe1";
+import { GAUGE } from "./track.js?v=6973efe1";
+import * as H from "./hcw.js?v=6973efe1";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -70,8 +70,22 @@ export function setPoints(obj, pts) {
   c.text = c.children.length ? null : "";
 }
 
+// Camera support is working equipment, not set dressing. It gets its own layer
+// so that locking the set — which people do the moment the room is right —
+// doesn't also pin the dolly down.
+const RIG_KEYS = new Set(["DOLLY", "DOLLYJIB", "JIB", "SLIDER",
+                          "TRIPOD", "HIHAT", "STEADICAM", "CRANE"]);
+
 /** Which layer group an object belongs to, matching the app's layer toggles. */
-export function layerOf(tag) {
+export function layerOf(objOrTag) {
+  const tag = typeof objOrTag === "string" ? objOrTag : objOrTag.tag;
+  if (typeof objOrTag !== "string" && RIG_KEYS.has(H.get(objOrTag, "objectKey"))) {
+    return "rig";
+  }
+  return layerForTag(tag);
+}
+
+function layerForTag(tag) {
   if (tag === "ImageProp") return "prop";
   if (tag === "Camera") return "camera";
   if (tag === "Character") return "character";

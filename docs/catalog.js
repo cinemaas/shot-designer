@@ -121,7 +121,8 @@ export const LAYERS = [
   ["lightingLayer", "Lighting"], ["characterLayer", "Characters"],
   ["linesLayer", "Axis Lines"], ["walkLayer", "Walk Arrows"],
   ["captionLayer", "Captions"], ["setLayer", "Set"],
-  ["propLayer", "Props"], ["backgroundLayer", "Background Images"],
+  ["propLayer", "Props"], ["rigLayer", "Camera Support"],
+  ["backgroundLayer", "Background Images"],
   ["storyboardLayer", "Storyboards"],
 ];
 

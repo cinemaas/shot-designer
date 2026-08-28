@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=15275326";
-import * as R from "./render.js?v=15275326";
-import { FXG } from "./assets.js?v=15275326";
-import * as B from "./blocking.js?v=15275326";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=15275326";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=15275326";
-import { HANDBOOK } from "./handbook.js?v=15275326";
-import * as TR from "./track.js?v=15275326";
-import * as RIG from "./rigs.js?v=15275326";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=15275326";
-import { Library } from "./library.js?v=15275326";
+import * as H from "./hcw.js?v=6973efe1";
+import * as R from "./render.js?v=6973efe1";
+import { FXG } from "./assets.js?v=6973efe1";
+import * as B from "./blocking.js?v=6973efe1";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=6973efe1";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6973efe1";
+import { HANDBOOK } from "./handbook.js?v=6973efe1";
+import * as TR from "./track.js?v=6973efe1";
+import * as RIG from "./rigs.js?v=6973efe1";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=6973efe1";
+import { Library } from "./library.js?v=6973efe1";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=15275326";
+} from "./catalog.js?v=6973efe1";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -176,7 +176,7 @@ function visibleAt(obj, slice) {
 
 const LAYER_G = Object.fromEntries(
   ["grid", "background", "set", "track", "prop", "lighting", "lines", "walk",
-   "character", "camera", "caption", "overlay"].map((k) => [k, $("#l-" + k)])
+   "rig", "character", "camera", "caption", "overlay"].map((k) => [k, $("#l-" + k)])
 );
 
 function draw() {
@@ -197,7 +197,7 @@ function draw() {
     : null;
 
   for (const obj of objects()) {
-    const layer = R.layerOf(obj.tag);
+    const layer = R.layerOf(obj);
     const g = LAYER_G[layer] || LAYER_G.prop;
     const flag = layerKeyFor(layer);
     const shown = flag ? H.getBool(ls, flag, true) : true;
@@ -255,7 +255,7 @@ function drawRigArms() {
     const ox = H.getNum(rig, "x"), oy = H.getNum(rig, "y");
     const cx = H.getNum(cam, "x"), cy = H.getNum(cam, "y");
     if (Math.hypot(cx - ox, cy - oy) < 2) continue;
-    const g = LAYER_G.prop;
+    const g = LAYER_G.rig;
     if (spec.arm) {
       // The arm, and the sweep it can reach, so the geometry is obvious.
       g.append(R.el("circle", {
@@ -331,7 +331,7 @@ const layerKeyFor = (layer) => ({
   camera: "cameraLayer", track: "trackLayer", lighting: "lightingLayer",
   character: "characterLayer", lines: "linesLayer", walk: "walkLayer",
   caption: "captionLayer", set: "setLayer", prop: "propLayer",
-  background: "backgroundLayer", overlay: null,
+  rig: "rigLayer", background: "backgroundLayer", overlay: null,
 }[layer]);
 
 // A layer can be shown, shown but locked, or hidden. Locked is the useful one:
@@ -342,7 +342,7 @@ const lockedSet = () => new Set(
 const setLocked = (keys) => H.set(layerStates(), "lockedLayers", [...keys].join(","));
 
 const layerLocked = (o) => {
-  const flag = layerKeyFor(R.layerOf(o.tag));
+  const flag = layerKeyFor(R.layerOf(o));
   return !!flag && lockedSet().has(flag);
 };
 
@@ -652,7 +652,7 @@ const presentAt = (o, slice) => {
 };
 
 const layerOn = (o) => {
-  const flag = layerKeyFor(R.layerOf(o.tag));
+  const flag = layerKeyFor(R.layerOf(o));
   return !flag || H.getBool(layerStates(), flag, true);
 };
 
@@ -665,7 +665,7 @@ function lockedUnder(client) {
     if (!g) continue;
     const o = byID(g.dataset.id);
     if (o && layerOn(o) && layerLocked(o)) {
-      const key = layerKeyFor(R.layerOf(o.tag));
+      const key = layerKeyFor(R.layerOf(o));
       return (LAYERS.find(([k]) => k === key) || [, "That layer"])[1];
     }
   }
@@ -824,10 +824,18 @@ stage.addEventListener("pointerdown", (ev) => {
     mark("move");
     if (S.sel.size === 1 && RIG.rigParentID(hit)) {
       drag = { mode: "rigcam", obj: hit, moved: false };
-    } else if (S.sel.size === 1 && RIG.ridesTrack(hit) && !RIG.rigParentID(hit)) {
+    } else if (S.sel.size === 1 && RIG.ridesTrack(hit) && !RIG.rigParentID(hit)
+               && !ev.altKey) {
       drag = { mode: "rigslide", obj: hit, moved: false };
     } else {
-      drag = { mode: "move", start: pt, moved: false,
+      // ⌥ lifts a rig clear of its track rather than running it along.
+      let detached = false;
+      if (ev.altKey && RIG.ridesTrack(hit)) {
+        H.set(hit, "snapPath", "");
+        detached = true;
+        toast("Off the track — drop it near track to put it back on");
+      }
+      drag = { mode: "move", start: pt, moved: false, detached,
         origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
     }
   } else {
@@ -994,6 +1002,14 @@ stage.addEventListener("pointerup", (ev) => {
       if (hit) S.sel.add(idOf(o));
     }
     S.marquee = null;
+  }
+  // Dropping a rig by track picks it up — unless this was the drag that
+  // deliberately lifted it off, which would put it straight back.
+  if (drag?.mode === "move" && drag.moved && !drag.detached) {
+    for (const o of drag.origins) {
+      if (RIG.isRig(o.obj) && !RIG.ridesTrack(o.obj)) snapRigToNearestTrack(o.obj);
+    }
+    reflowRigs();
   }
   if (drag?.mode === "move" && !drag.moved) {
     S.dirty = S.undo.pop()?.wasDirty ?? S.dirty;           // a plain click isn't an edit
@@ -1428,7 +1444,7 @@ function snapRigToNearestTrack(rig) {
     const pct = RIG.percentOnTrack(pts, here);
     const at = RIG.alongTrack(pts, pct);
     const d = Math.hypot(at.x - here.x, at.y - here.y);
-    if (d < 120 && (!best || d < best.d)) best = { o, pct, at, d };
+    if (d < 60 && (!best || d < best.d)) best = { o, pct, at, d };
   }
   if (!best) return;
   H.set(rig, "snapPath", idOf(best.o));
@@ -2596,6 +2612,16 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "mirror") ? "Unflip Horizontally" : "Flip Horizontally", run: () => {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
+      ...(RIG.isRig(obj) && RIG.rigSpec(obj).ride ? [{
+        label: RIG.ridesTrack(obj) ? "Take Off Track" : "Put On Nearest Track",
+        run: () => {
+          mark("track attachment");
+          if (RIG.ridesTrack(obj)) H.set(obj, "snapPath", "");
+          else snapRigToNearestTrack(obj);
+          reflowRigs(); draw(); syncChrome();
+          toast(RIG.ridesTrack(obj) ? "On the track" : "Off the track");
+        },
+      }] : []),
       ...(RIG.isRig(obj) && RIG.rigSpec(obj).arm ? [{
         label: "Arm Reach…",
         run: () => sheet({
