@@ -161,7 +161,9 @@ function alongPath(pts, t) {
 
 /** OnOffEvents switch objects on and off across the timeline. */
 function visibleAt(obj, slice) {
-  if (!presentAt(obj, slice)) return false;
+  // Positions only take turns when you're stepping through them. On the page
+  // they all show at once, numbered — that's what makes it an overhead.
+  if (S.blocking && !presentAt(obj, slice)) return false;
   const evs = H.kids(H.child(obj, "ObjectEvents"), "OnOffEvent");
   if (!evs.length) return true;
   let state = true, best = -1;
@@ -235,6 +237,7 @@ function draw() {
     g.append(node);
   }
   drawRigArms();
+  if (!S.blocking) drawPositionBadges();
   declutterLabels();
   drawSelection();
   applyView();
@@ -247,30 +250,67 @@ function draw() {
  */
 /** The physical link: a jib arm, or the post a camera sits on. */
 function drawRigArms() {
+  const g = LAYER_G.rig;
   for (const rig of objects()) {
     if (!RIG.isRig(rig)) continue;
-    const cam = byID(RIG.rigCameraID(rig));
-    if (!cam) continue;
     const spec = RIG.rigSpec(rig);
     const ox = H.getNum(rig, "x"), oy = H.getNum(rig, "y");
-    const cx = H.getNum(cam, "x"), cy = H.getNum(cam, "y");
-    if (Math.hypot(cx - ox, cy - oy) < 2) continue;
-    const g = LAYER_G.rig;
+
     if (spec.arm) {
-      // The arm, and the sweep it can reach, so the geometry is obvious.
+      // The sweep the arm can reach, drawn once for the base.
       g.append(R.el("circle", {
         cx: ox, cy: oy, r: H.getNum(rig, "rigArm", spec.arm),
         fill: "none", stroke: "#8b9399", "stroke-width": 1,
         "stroke-dasharray": "6 6", opacity: .35,
       }));
-      g.append(R.el("line", { x1: ox, y1: oy, x2: cx, y2: cy,
-        stroke: "#4a5157", "stroke-width": 7, "stroke-linecap": "round", opacity: .85 }));
+    }
+
+    // A base can carry a camera at more than one swing; draw each arm.
+    for (const cam of objects()) {
+      if (RIG.rigParentID(cam) !== idOf(rig)) continue;
+      const cx = H.getNum(cam, "x"), cy = H.getNum(cam, "y");
+      if (Math.hypot(cx - ox, cy - oy) < 2) continue;
+      g.append(R.el("line", {
+        x1: ox, y1: oy, x2: cx, y2: cy, stroke: "#4a5157",
+        "stroke-width": spec.arm ? 7 : 5, "stroke-linecap": "round",
+        opacity: spec.arm ? .85 : .7,
+      }));
+    }
+
+    if (spec.arm) {
       g.append(R.el("circle", { cx: ox, cy: oy, r: 6,
         fill: "#4a5157", stroke: "#fff", "stroke-width": 2 }));
-    } else {
-      g.append(R.el("line", { x1: ox, y1: oy, x2: cx, y2: cy,
-        stroke: "#4a5157", "stroke-width": 5, "stroke-linecap": "round", opacity: .7 }));
     }
+  }
+}
+
+/**
+ * A small number on anything that exists at particular positions, so the plan
+ * reads the way a hand-drawn one does: this camera here is position 1, that one
+ * is 2. Hidden while stepping beats, where the timeline says it instead.
+ */
+function drawPositionBadges() {
+  const g = LAYER_G.overlay;
+  for (const o of objects()) {
+    const stops = stopsOf(o);
+    if (!stops.length) continue;
+    if (R.LABEL_TAGS.has(o.tag)) continue;          // labels follow their host
+
+    const p = drawnPos(o);
+    const r = Math.min(46, R.radiusOf(o) + 6);
+    const tone = o.tag === "Camera" ? R.cameraColour(o) : "#4a5157";
+    const bx = p.x + r * 0.72, by = p.y - r * 0.72;
+
+    g.append(R.el("circle", {
+      cx: bx, cy: by, r: 9, fill: tone, stroke: "#fff", "stroke-width": 2,
+    }));
+    const t = R.el("text", {
+      x: bx, y: by + 3.6, "text-anchor": "middle", fill: "#fff",
+      "font-size": 11, "font-weight": "700",
+      "font-family": "Helvetica, Arial, sans-serif",
+    });
+    t.textContent = stops.join(",");
+    g.append(t);
   }
 }
 
@@ -1398,10 +1438,8 @@ function dropTrackPiece(t) {
 function toggleStop(o, n) {
   mark("position");
   const stops = new Set(stopsOf(o));
-  const cam = byID(RIG.rigCameraID(o));
   if (stops.has(n)) stops.delete(n); else stops.add(n);
   setStops(o, [...stops]);
-  if (cam) setStops(cam, [...stops]);
   S.slice = Math.min(Math.max(0, n - 1), timeSlices().length - 1);
   draw(); syncChrome();
 }
@@ -1410,16 +1448,17 @@ function toggleStop(o, n) {
  * Another position for the same rig — a copy tagged for the next slice, still
  * on the same track with the same arm. Move it and it's position two.
  */
+/**
+ * Another position for whatever you've got hold of, and only that. The dolly
+ * gets its own 1 and 2 along the track; the camera on the arm gets its own 1
+ * and 2 around the pivot. Each stays inside what it can physically do.
+ */
 function addRigPosition(rider) {
   mark("add position");
-  const cam = byID(RIG.rigCameraID(rider));
   const slices = timeSlices();
 
   // Whatever's here now becomes position one if it wasn't tagged already.
-  if (!stopsOf(rider).length) {
-    setStops(rider, [1]);
-    if (cam) setStops(cam, [1]);
-  }
+  if (!stopsOf(rider).length) setStops(rider, [1]);
   const next = Math.max(...stopsOf(rider)) + 1;
   if (next > slices.length) {
     H.child(H.child(S.doc, "CurrentSnapshot"), "TimeSlices")
@@ -1429,19 +1468,30 @@ function addRigPosition(rider) {
   const copy = reid(structuredClone(rider));
   setStops(copy, [next]);
   canvas().children.push(copy);
-  if (cam) {
-    const camCopy = reid(structuredClone(cam));
-    setStops(camCopy, [next]);
-    H.set(camCopy, "rigParent", idOf(copy));
-    H.set(copy, "rigCamera", idOf(camCopy));
-    canvas().children.push(camCopy);
+
+  const onArm = RIG.rigParentID(rider);
+  if (onArm) {
+    // A second camera swinging on the same arm.
+    H.set(copy, "rigParent", onArm);
+  } else {
+    // A second base, with its own camera so the arm can differ there too.
+    const cam = byID(RIG.rigCameraID(rider));
+    if (cam) {
+      const camCopy = reid(structuredClone(cam));
+      setStops(camCopy, [next]);
+      H.set(camCopy, "rigParent", idOf(copy));
+      H.set(copy, "rigCamera", idOf(camCopy));
+      canvas().children.push(camCopy);
+    }
   }
+
   reindex();
   S.slice = next - 1;
   S.sel = new Set([idOf(copy)]);
   reflowRigs();
   draw(); syncChrome();
-  toast(`Position ${next} — move it, and the timeline runs between them`);
+  toast(onArm ? `Swing ${next} — move the camera round the arm`
+              : `Position ${next} — run the dolly to where it lands`);
 }
 
 function rigMenu(x, y, at) {
@@ -1504,11 +1554,13 @@ function reflowRigs() {
     const rides = RIG.ridesTrack(o);
     if (!RIG.isRig(o) && !rides) continue;
     if (rides) placeRigOnTrack(o);
-    const cam = byID(RIG.rigCameraID(o));
-    if (!cam) continue;
-    const seat = RIG.cameraSeat(o, cam);
-    H.set(cam, "x", round(seat.x));
-    H.set(cam, "y", round(seat.y));
+    if (!RIG.isRig(o)) continue;
+    for (const cam of objects()) {
+      if (RIG.rigParentID(cam) !== idOf(o)) continue;
+      const seat = RIG.cameraSeat(o, cam);
+      H.set(cam, "x", round(seat.x));
+      H.set(cam, "y", round(seat.y));
+    }
   }
 }
 
@@ -2031,8 +2083,9 @@ function syncChrome() {
   $("#status").classList.toggle("live", !!(readout || S.tool));
 
   const one = S.sel.size === 1 ? byID([...S.sel][0]) : null;
-  renderTrackPanel(isBuiltTrack(one) ? one : null,
-    one && (RIG.isRig(one) || RIG.ridesTrack(one)) ? one : null);
+  const positionable = one && (RIG.isRig(one) || RIG.ridesTrack(one)
+    || RIG.rigParentID(one) || one.tag === "Camera") ? one : null;
+  renderTrackPanel(isBuiltTrack(one) ? one : null, positionable);
 
   const banner = $("#toolbanner");
   banner.hidden = !S.tool;
@@ -2209,15 +2262,17 @@ function renderTrackPanel(t, rider) {
 
   if (rider) {
     const head = document.createElement("b");
-    head.textContent = RIG.rigSpec(rider)?.label || "Camera on track";
+    head.textContent = RIG.rigParentID(rider) ? "Camera on the arm"
+      : RIG.rigSpec(rider)?.label || "Camera";
     const stops = stopsOf(rider);
     const slices = timeSlices().length;
 
     const tally = document.createElement("span");
     tally.className = "tally";
+    const what = RIG.rigParentID(rider) ? "swing" : "position";
     tally.textContent = stops.length
-      ? `At position${stops.length > 1 ? "s" : ""} ${stops.join(", ")}`
-      : "At every position — tag it, or add another";
+      ? `At ${what}${stops.length > 1 ? "s" : ""} ${stops.join(", ")}`
+      : `At every ${what} — tag it, or add another`;
 
     const row = document.createElement("div");
     row.className = "pieces";

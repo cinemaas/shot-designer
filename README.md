@@ -125,11 +125,14 @@ once, not on every click. `L` opens the menu.
 
 **Positions.** A camera or a rig gets more than one position the way the
 original does it: **another copy, tagged with the time slice it belongs to** —
-the `stopMarks` field, which is already in the file format. **Add position** on
-a rig makes a second one on the same track with the same arm, tagged for the
-next slice; move it and that's position two. Step the timeline and only that
-position is solid. It stays constrained throughout: on its track, within its
-reach. Blocking mode reads the same field, so tagged positions and the numbers
+the `stopMarks` field, which is already in the file format. **Every position
+draws on the page at once, numbered**, because an overhead has to show the whole
+move to be worth handing to anyone; blocking mode is what steps them one by one.
+
+The base and the camera number separately. **Add position** on the dolly gives
+it a second place along the track; on the camera it gives the arm a second
+swing. So the move reads as dolly at 1 and 2, arm back at 1 and forward at 2 —
+each still only able to do what it physically can. Blocking mode reads the same field, so tagged positions and the numbers
 people type onto actors' marks are finally the same thing.
 
 **Track To…** on a camera lays track to where you click and puts the camera on

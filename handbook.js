@@ -106,8 +106,17 @@ brings it back either way.</p>
 <h4>Positions</h4>
 <p>Cameras and figures get more than one position the same way here as in the
 original: <b>a position is another copy, tagged with the time it belongs to</b>.
-Hit <b>Add position</b> on a rig and you get a second one on the same track with
-the same arm, tagged for the next slice. Move it and that's position two.</p>
+Hit <b>Add position</b> and you get a second one, tagged for the next slice.
+Move it and that's position two.</p>
+<p><b>Every position shows on the page at once, numbered.</b> That's what makes
+it an overhead — you can hand someone a sheet where the camera is visibly at 1
+and at 2, rather than a diagram that only shows one of them at a time. Blocking
+mode is the thing that steps them one by one.</p>
+<p>The dolly and the camera keep their own numbering. Pick the base and
+<b>Add position</b> gives the dolly a second place along the track; pick the
+camera and it gives the arm a second swing. So a move reads as: dolly at 1 and
+2, arm swung back at 1 and forward at 2 — each still only able to do what it
+physically can.</p>
 <p>The numbered buttons say which positions this one is at — click to add or
 remove it from a slice, and a position used twice is simply tagged twice, the
 same as writing <code>1,4</code> on an actor's mark.</p>
