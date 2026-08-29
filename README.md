@@ -160,6 +160,15 @@ Rows reorder, duplicate one step tighter (`MCU` → `CU` → `ECU`), and rename 
 place. **Export CSV** gives the AD something they can open. Lens chips are in
 the order you actually use them — 50, 85, 32, 24, 135.
 
+**People you can read.** Characters are drawn head and shoulders from above at
+real proportions — shoulders about twenty inches across, head about seven —
+with the shoulders in a deeper shade of the same colour and a nose pointing
+where they're looking. A circle tells you where somebody is; this tells you
+which way they're turned, which is what a crowded blocking page needs. It also
+takes up far less room front-to-back, so figures stop merging into each other.
+All eight colours work for either sex, and **Appearance…** switches back to the
+original circles.
+
 **Clicking what you meant to click.** Hit testing runs against the pixels that
 were actually drawn, so a big prop only responds where its shape is rather than
 across the whole rectangle it occupies — the reason dragging a camera used to

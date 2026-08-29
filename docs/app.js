@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=3f1a74d9";
-import * as R from "./render.js?v=3f1a74d9";
-import { FXG } from "./assets.js?v=3f1a74d9";
-import * as B from "./blocking.js?v=3f1a74d9";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=3f1a74d9";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=3f1a74d9";
-import { HANDBOOK } from "./handbook.js?v=3f1a74d9";
-import * as TR from "./track.js?v=3f1a74d9";
-import * as RIG from "./rigs.js?v=3f1a74d9";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=3f1a74d9";
-import { Library } from "./library.js?v=3f1a74d9";
+import * as H from "./hcw.js?v=cc9e1e10";
+import * as R from "./render.js?v=cc9e1e10";
+import { FXG } from "./assets.js?v=cc9e1e10";
+import * as B from "./blocking.js?v=cc9e1e10";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=cc9e1e10";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=cc9e1e10";
+import { HANDBOOK } from "./handbook.js?v=cc9e1e10";
+import * as TR from "./track.js?v=cc9e1e10";
+import * as RIG from "./rigs.js?v=cc9e1e10";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=cc9e1e10";
+import { Library } from "./library.js?v=cc9e1e10";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=3f1a74d9";
+} from "./catalog.js?v=cc9e1e10";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -4055,14 +4055,35 @@ function currentTheme() {
   catch { return "system"; }
 }
 
+const FIGURE_KEY = "sd.figures";
+
+function applyFigureStyle(style) {
+  R.setFigureStyle(style);
+  try { localStorage.setItem(FIGURE_KEY, style); } catch { /* private window */ }
+  draw(); syncChrome();
+}
+
+const currentFigureStyle = () => {
+  try { return localStorage.getItem(FIGURE_KEY) || "figure"; }
+  catch { return "figure"; }
+};
+
 function themeMenu(x, y) {
   const now = currentTheme();
+  const fig = currentFigureStyle();
   showPopover(x, y, [
     { head: "Appearance" },
     ...[["light", "Light"], ["dark", "Dark"], ["system", "Match the system"]]
       .map(([mode, label]) => ({
         label: (now === mode ? "◉  " : "○  ") + label,
         run: () => applyTheme(mode),
+      })),
+    "-",
+    { head: "Characters" },
+    ...[["figure", "Head and shoulders"], ["disc", "Circles"]]
+      .map(([style, label]) => ({
+        label: (fig === style ? "◉  " : "○  ") + label,
+        run: () => applyFigureStyle(style),
       })),
   ]);
 }
@@ -4076,6 +4097,7 @@ window.addEventListener("resize", () => draw());
 
 (async function boot() {
   applyTheme(currentTheme());
+  R.setFigureStyle(currentFigureStyle());
   // Following the system means following it as it changes, too.
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (currentTheme() === "system") { draw(); syncChrome(); }

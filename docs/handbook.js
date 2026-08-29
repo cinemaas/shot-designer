@@ -15,6 +15,12 @@ frame really is twelve feet.</p>
 <dt>Select</dt><dd>Click. <kbd>⌘</kbd>-click or <kbd>⇧</kbd>-click adds and
 removes. Drag across empty space to sweep up everything inside.</dd>
 </dl>
+<p>People are drawn head and shoulders from above, at the proportions they
+actually have — shoulders about twenty inches across, head about seven. The
+shoulders sit in a deeper shade of the same colour and the nose points where
+they're looking, so a crowded page still reads. Women get hair. All eight
+colours work for either. If you'd rather have the original circles,
+<b>☰ ▸ Appearance…</b> switches back.</p>
 <p>Clicking always goes for the thing you can see. Labels never steal a click
 from whatever is underneath them, so the numbers you write on a position don't
 get in the way of grabbing the person.</p>`,

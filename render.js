@@ -102,10 +102,57 @@ function layerForTag(tag) {
 
 // --- individual object art ---------------------------------------------------
 
-function drawCharacter(obj) {
+// Head and shoulders from above, at the proportions a person actually has:
+// shoulders about seventeen inches across, head about seven. A circle tells you
+// where someone is; this tells you which way they're turned without reading a
+// mark, which is what makes a crowded page legible.
+const SHOULDER_ACROSS = 17;   // half-width, so 34 units — about 1'8"
+const SHOULDER_DEEP = 7.5;   // 15 units deep, about 9 inches
+const HEAD_R = 6;            // a head is roughly seven inches across
+const HEAD_FORWARD = 1.5;
+
+/** A shade of the character's own colour, for the shoulders and the hair. */
+function shade(hex, k) {
+  const [r, g, b] = [1, 3, 5].map((i) =>
+    Math.round(Math.max(0, Math.min(255, parseInt(hex.slice(i, i + 2), 16) * k))));
+  return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+function drawFigure(obj, color, female) {
   const g = el("g");
-  const color = hexOf(H.getNum(obj, "color", 0xfc837b));
-  const female = H.getBool(obj, "female");
+
+  // Shoulders: the wide shallow mass, in a deeper tone so the head never
+  // merges into it and the pair don't read as concentric rings.
+  g.append(el("ellipse", {
+    cx: -1, cy: 0, rx: SHOULDER_DEEP, ry: SHOULDER_ACROSS,
+    fill: shade(color, 0.7), stroke: INK, "stroke-width": STROKE,
+  }));
+
+  if (female) {
+    // Hair: a band around the head, wide enough to show past the shoulders.
+    g.append(el("ellipse", {
+      cx: HEAD_FORWARD - 0.5, cy: 0, rx: HEAD_R + 3, ry: HEAD_R + 4.5,
+      fill: shade(color, 0.88), stroke: INK, "stroke-width": 2,
+    }));
+  }
+
+  g.append(el("circle", {
+    cx: HEAD_FORWARD, cy: 0, r: HEAD_R,
+    fill: color, stroke: INK, "stroke-width": 2,
+  }));
+
+  // The nose. Drawn in a deep shade of the character's own colour rather than
+  // the outline ink, which is pale in dark mode and would disappear on them.
+  const base = HEAD_FORWARD + HEAD_R - 1, tip = HEAD_FORWARD + SHOULDER_DEEP + 6;
+  g.append(el("path", {
+    d: `M${base},-4.5 L${tip},0 L${base},4.5 Z`,
+    fill: shade(color, 0.3), stroke: "none",
+  }));
+  return g;
+}
+
+function drawDisc(obj, color, female) {
+  const g = el("g");
   g.append(el("circle", {
     cx: 0, cy: 0, r: CHAR_R, fill: color, stroke: INK, "stroke-width": STROKE,
   }));
@@ -120,6 +167,17 @@ function drawCharacter(obj) {
     }));
   }
   return g;
+}
+
+export let figureStyle = "figure";        // "figure" | "disc"
+export const setFigureStyle = (s) => { figureStyle = s === "disc" ? "disc" : "figure"; };
+
+function drawCharacter(obj) {
+  const color = hexOf(H.getNum(obj, "color", 0xfc837b));
+  const female = H.getBool(obj, "female");
+  return figureStyle === "disc"
+    ? drawDisc(obj, color, female)
+    : drawFigure(obj, color, female);
 }
 
 // Body, pinch, then the field-of-view flare — traced from an exported diagram.
@@ -470,7 +528,9 @@ export function artBounds(key) {
 /** Bounding radius used for hit-testing and selection rings. */
 export function radiusOf(obj) {
   const s = Math.max(H.getNum(obj, "objectScaleX", 1), H.getNum(obj, "objectScaleY", 1));
-  if (obj.tag === "Character") return CHAR_R + STROKE / 2;
+  if (obj.tag === "Character") {
+    return figureStyle === "disc" ? CHAR_R + STROKE / 2 : SHOULDER_ACROSS + STROKE / 2;
+  }
   if (obj.tag === "Camera") return 22;
   if (LABEL_TAGS.has(obj.tag)) return 34;
   if (GENERIC_TAGS.has(obj.tag)) {

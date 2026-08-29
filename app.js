@@ -4055,14 +4055,35 @@ function currentTheme() {
   catch { return "system"; }
 }
 
+const FIGURE_KEY = "sd.figures";
+
+function applyFigureStyle(style) {
+  R.setFigureStyle(style);
+  try { localStorage.setItem(FIGURE_KEY, style); } catch { /* private window */ }
+  draw(); syncChrome();
+}
+
+const currentFigureStyle = () => {
+  try { return localStorage.getItem(FIGURE_KEY) || "figure"; }
+  catch { return "figure"; }
+};
+
 function themeMenu(x, y) {
   const now = currentTheme();
+  const fig = currentFigureStyle();
   showPopover(x, y, [
     { head: "Appearance" },
     ...[["light", "Light"], ["dark", "Dark"], ["system", "Match the system"]]
       .map(([mode, label]) => ({
         label: (now === mode ? "◉  " : "○  ") + label,
         run: () => applyTheme(mode),
+      })),
+    "-",
+    { head: "Characters" },
+    ...[["figure", "Head and shoulders"], ["disc", "Circles"]]
+      .map(([style, label]) => ({
+        label: (fig === style ? "◉  " : "○  ") + label,
+        run: () => applyFigureStyle(style),
       })),
   ]);
 }
@@ -4076,6 +4097,7 @@ window.addEventListener("resize", () => draw());
 
 (async function boot() {
   applyTheme(currentTheme());
+  R.setFigureStyle(currentFigureStyle());
   // Following the system means following it as it changes, too.
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (currentTheme() === "system") { draw(); syncChrome(); }
