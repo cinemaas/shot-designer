@@ -1020,7 +1020,20 @@ stage.addEventListener("pointerdown", (ev) => {
     else if (handle.dataset.rotate) drag = { mode: "rotate", obj, start: pt };
     else if (handle.dataset.scale) drag = { mode: "scale", obj, start: pt,
       s0: H.getNum(obj, "objectScaleX", 1), r0: Math.hypot(pt.x - H.getNum(obj, "x"), pt.y - H.getNum(obj, "y")) };
-    else drag = { mode: "point", obj, index: +handle.dataset.point };
+    else {
+      // An arrow's end belongs to whoever is on it: dragging that end walks
+      // the person there rather than leaving the arrow pointing at nobody.
+      const i = +handle.dataset.point;
+      const pts = R.pointsOf(obj);
+      const endID = i === 0 ? H.get(obj, "fromConstraints")
+        : i === pts.length - 1 ? H.get(obj, "toConstraints") : "";
+      const person = endID && byID(endID);
+      drag = person
+        ? { mode: "move", start: pt, moved: false, viaArrow: true,
+            origins: [snapshotPos(person)] }
+        : { mode: "point", obj, index: i };
+      if (person) { S.sel = new Set([idOf(person)]); }
+    }
     mark("move");
     stage.setPointerCapture(ev.pointerId);
     return;
@@ -1100,7 +1113,7 @@ stage.addEventListener("pointermove", (ev) => {
       if (o.pts) R.setPoints(o.obj, o.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })));
       else { H.set(o.obj, "x", round(o.x + dx)); H.set(o.obj, "y", round(o.y + dy)); }
     }
-    reflowConstraints(new Set(S.sel));
+    reflowConstraints(new Set(drag.origins.map((o) => idOf(o.obj))));
     reflowRigs();
     sendLiveEdit();
     return draw();

@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=be7a9f58";
-import * as R from "./render.js?v=be7a9f58";
-import { FXG } from "./assets.js?v=be7a9f58";
-import * as B from "./blocking.js?v=be7a9f58";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=be7a9f58";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=be7a9f58";
-import { HANDBOOK } from "./handbook.js?v=be7a9f58";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=be7a9f58";
-import * as V3 from "./view3d.js?v=be7a9f58";
-import * as TR from "./track.js?v=be7a9f58";
-import * as RIG from "./rigs.js?v=be7a9f58";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=be7a9f58";
-import { Library } from "./library.js?v=be7a9f58";
+import * as H from "./hcw.js?v=30972e19";
+import * as R from "./render.js?v=30972e19";
+import { FXG } from "./assets.js?v=30972e19";
+import * as B from "./blocking.js?v=30972e19";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=30972e19";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=30972e19";
+import { HANDBOOK } from "./handbook.js?v=30972e19";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=30972e19";
+import * as V3 from "./view3d.js?v=30972e19";
+import * as TR from "./track.js?v=30972e19";
+import * as RIG from "./rigs.js?v=30972e19";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=30972e19";
+import { Library } from "./library.js?v=30972e19";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=be7a9f58";
+} from "./catalog.js?v=30972e19";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1020,7 +1020,20 @@ stage.addEventListener("pointerdown", (ev) => {
     else if (handle.dataset.rotate) drag = { mode: "rotate", obj, start: pt };
     else if (handle.dataset.scale) drag = { mode: "scale", obj, start: pt,
       s0: H.getNum(obj, "objectScaleX", 1), r0: Math.hypot(pt.x - H.getNum(obj, "x"), pt.y - H.getNum(obj, "y")) };
-    else drag = { mode: "point", obj, index: +handle.dataset.point };
+    else {
+      // An arrow's end belongs to whoever is on it: dragging that end walks
+      // the person there rather than leaving the arrow pointing at nobody.
+      const i = +handle.dataset.point;
+      const pts = R.pointsOf(obj);
+      const endID = i === 0 ? H.get(obj, "fromConstraints")
+        : i === pts.length - 1 ? H.get(obj, "toConstraints") : "";
+      const person = endID && byID(endID);
+      drag = person
+        ? { mode: "move", start: pt, moved: false, viaArrow: true,
+            origins: [snapshotPos(person)] }
+        : { mode: "point", obj, index: i };
+      if (person) { S.sel = new Set([idOf(person)]); }
+    }
     mark("move");
     stage.setPointerCapture(ev.pointerId);
     return;
@@ -1100,7 +1113,7 @@ stage.addEventListener("pointermove", (ev) => {
       if (o.pts) R.setPoints(o.obj, o.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })));
       else { H.set(o.obj, "x", round(o.x + dx)); H.set(o.obj, "y", round(o.y + dy)); }
     }
-    reflowConstraints(new Set(S.sel));
+    reflowConstraints(new Set(drag.origins.map((o) => idOf(o.obj))));
     reflowRigs();
     sendLiveEdit();
     return draw();

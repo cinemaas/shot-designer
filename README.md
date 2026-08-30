@@ -181,12 +181,15 @@ library use it, so scenes that were already paged now open paged instead of
 stacked on top of each other. The page button shows `1/5`, pages can be named,
 and there's an all-at-once view when you want it.
 
-**People you can read.** Characters are drawn the way a plan draws them: a head
-with a shoulder band curving round behind, open at the front, and a mark showing
-which way they're looking. A line drawing rather than a blob, so a dozen on a
-page stay separate and the set shows through them. Women get a second band for
-hair; all eight colours work for either. **Appearance…** also offers solid head
-and shoulders, or the original circles.
+**People you can read.** A head on shoulders, seen from above. The head keeps
+the original's own marks — one line for a man, two for a woman — at the size a
+head actually is, sitting in front of a shoulder bar. A ball in front of a wider
+bar reads as a person however small the page gets, and takes far less room than
+a two-foot circle. **Appearance…** also offers solid head and shoulders, or the
+original circles.
+
+Dragging the end of a walk arrow **walks the person on it**, either end, and the
+arrow keeps its clearance as they go.
 
 **Clicking what you meant to click.** Hit testing runs against the pixels that
 were actually drawn, so a big prop only responds where its shape is rather than

@@ -181,50 +181,52 @@ export const setFigureStyle = (s) => {
  * drawing rather than a blob, so a dozen of them on a page still read as
  * separate people and you can see the set through them.
  */
-const SHOULDER_R = 13;
+const PLAN_SHOULDER = 17;    // half the shoulder width — 34 units, about 1'8"
+const PLAN_DEPTH = 5.5;      // 11 units thick, about 6 inches
+const PLAN_HEAD = 9;
 
-function arcPath(r, fromDeg, toDeg) {
-  const rad = (d) => (d * Math.PI) / 180;
-  const a = { x: Math.cos(rad(fromDeg)) * r, y: Math.sin(rad(fromDeg)) * r };
-  const b = { x: Math.cos(rad(toDeg)) * r, y: Math.sin(rad(toDeg)) * r };
-  const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
-  return `M${a.x.toFixed(2)},${a.y.toFixed(2)} ` +
-         `A${r},${r} 0 ${large} 1 ${b.x.toFixed(2)},${b.y.toFixed(2)}`;
-}
-
+/**
+ * The original's head — a disc carrying the facing chords, one line for a man
+ * and two for a woman — sized like a head, with the shoulders behind it as a
+ * bar. A ball in front of a wider bar reads as a person from above at any size,
+ * and it keeps the marks people already read without thinking.
+ */
 function drawPlanFigure(obj, color, female) {
   const g = el("g");
+  const back = -4;
 
-  // Shoulders: a band sweeping round the back, leaving the front open.
-  g.append(el("path", {
-    d: arcPath(SHOULDER_R, 62, 298),
-    fill: "none", stroke: INK, "stroke-width": 8.5, "stroke-linecap": "round",
+  // Shoulders: a capsule across the facing, sitting behind the head.
+  g.append(el("line", {
+    x1: back, y1: -PLAN_SHOULDER, x2: back, y2: PLAN_SHOULDER,
+    stroke: INK, "stroke-width": PLAN_DEPTH * 2 + 5, "stroke-linecap": "round",
   }));
-  g.append(el("path", {
-    d: arcPath(SHOULDER_R, 62, 298),
-    fill: "none", stroke: color, "stroke-width": 5.5, "stroke-linecap": "round",
+  g.append(el("line", {
+    x1: back, y1: -PLAN_SHOULDER, x2: back, y2: PLAN_SHOULDER,
+    stroke: shade(color, 0.74), "stroke-width": PLAN_DEPTH * 2,
+    "stroke-linecap": "round",
   }));
 
   if (female) {
-    // Hair: a second, longer band outside the shoulders.
-    g.append(el("path", {
-      d: arcPath(SHOULDER_R + 5.5, 96, 264),
-      fill: "none", stroke: INK, "stroke-width": 5.5, "stroke-linecap": "round",
-    }));
-    g.append(el("path", {
-      d: arcPath(SHOULDER_R + 5.5, 96, 264),
-      fill: "none", stroke: color, "stroke-width": 2.8, "stroke-linecap": "round",
+    // Hair: a collar around the back of the head.
+    g.append(el("circle", {
+      cx: 4, cy: 0, r: PLAN_HEAD + 3.2,
+      fill: shade(color, 0.88), stroke: INK, "stroke-width": 2.4,
     }));
   }
 
   g.append(el("circle", {
-    cx: 0, cy: 0, r: 6.5, fill: color, stroke: INK, "stroke-width": 2.5,
+    cx: 5, cy: 0, r: PLAN_HEAD, fill: color, stroke: INK, "stroke-width": 2.6,
   }));
-  // Which way they're looking: a short mark out of the open side.
-  g.append(el("line", {
-    x1: 5, y1: 0, x2: SHOULDER_R + 3, y2: 0,
-    stroke: INK, "stroke-width": 2.5, "stroke-linecap": "round",
-  }));
+
+  // The facing marks, where the original puts them on its own circle.
+  for (const f of female ? [0.30, 0.59] : [0.59]) {
+    const d = PLAN_HEAD * f;
+    const h = Math.sqrt(PLAN_HEAD * PLAN_HEAD - d * d);
+    g.append(el("line", {
+      x1: 5 + d, y1: -h, x2: 5 + d, y2: h,
+      stroke: INK, "stroke-width": 2.4, "stroke-linecap": "butt",
+    }));
+  }
   return g;
 }
 
@@ -621,7 +623,7 @@ export function radiusOf(obj) {
   if (obj.tag === "Character") {
     if (figureStyle === "disc") return CHAR_R + STROKE / 2;
     if (figureStyle === "figure") return SHOULDER_ACROSS + STROKE / 2;
-    return SHOULDER_R + 6;
+    return PLAN_SHOULDER + 3;
   }
   if (obj.tag === "Camera") return 22;
   if (LABEL_TAGS.has(obj.tag)) return 34;

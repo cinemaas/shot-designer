@@ -15,13 +15,14 @@ frame really is twelve feet.</p>
 <dt>Select</dt><dd>Click. <kbd>⌘</kbd>-click or <kbd>⇧</kbd>-click adds and
 removes. Drag across empty space to sweep up everything inside.</dd>
 </dl>
-<p>People are drawn the way a plan draws them: a head with a shoulder band
-curving round behind it, open at the front, with a short mark showing which way
-they're looking. It's a line drawing rather than a blob, so a dozen of them on
-one page stay separate and you can still see the set underneath. Women get a
-second band for hair. All eight colours work for either.</p>
-<p><b>☰ ▸ Appearance…</b> has two alternatives if you'd rather: solid head and
-shoulders, or the original circles.</p>
+<p>People are a head on a pair of shoulders, seen from above. The head carries
+the original's own marks — one line for a man, two for a woman — so the thing
+you already read at a glance is unchanged; it's just the size a head is, sitting
+in front of a shoulder bar. A ball in front of a wider bar reads as a person
+however small the page gets, and takes up far less room than a two-foot circle,
+which is what stops a crowded plan turning to soup.</p>
+<p><b>☰ ▸ Appearance…</b> has two alternatives: solid head and shoulders, or the
+original circles.</p>
 <p>Clicking always goes for the thing you can see. Labels never steal a click
 from whatever is underneath them, so the numbers you write on a position don't
 get in the way of grabbing the person.</p>`,
@@ -52,6 +53,9 @@ assignments that are already in the file.</p>`,
     body: `
 <p>Drag to move. Arrow keys nudge two units, <kbd>⇧</kbd> plus arrows moves
 twenty. <kbd>[</kbd> and <kbd>]</kbd> rotate fifteen degrees at a time.</p>
+<p>Dragging the end of a walk arrow <b>walks the person on it</b> rather than
+leaving the arrow pointing at nobody — either end, coming or going. The arrow
+keeps its clearance from them as they go.</p>
 <p>A selected prop gets a box in its own rotated frame with three handles: one
 edge for <b>width</b>, one for <b>depth</b>, and the corner for <b>both</b>.
 Hold <kbd>⇧</kbd> on the corner to keep its shape. So a table can be made long
