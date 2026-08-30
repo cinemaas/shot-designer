@@ -57,7 +57,10 @@ twenty. <kbd>[</kbd> and <kbd>]</kbd> rotate fifteen degrees at a time.</p>
 <p><b>Walk To…</b> on a person, then <b>click wherever they go next</b>. Each
 click drops another of them there, turned the way they travelled, joined to the
 one before by an arrow and numbered — position 1, 2, 3. Keep clicking for as
-long as the move goes on; <kbd>⏎</kbd> stops.</p>
+long as the move goes on; <kbd>⏎</kbd> stops, and so does clicking on a
+position that's already there — nobody wants two of somebody standing in the
+same spot, so reaching back for the one you just placed picks it up to drag
+instead of dropping another on top of it.</p>
 <p>That's how the scenes in this library are built: one actor as ten positions
 in a chain, which is why the whole move reads off a single sheet.</p>
 <h4>Moving a camera — position 1 and position 2</h4>

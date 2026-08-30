@@ -181,51 +181,36 @@ export const setFigureStyle = (s) => {
  * drawing rather than a blob, so a dozen of them on a page still read as
  * separate people and you can see the set through them.
  */
-const PLAN_SHOULDER = 18;    // half the shoulder width — 34 units, about 1'8"
-const PLAN_DEPTH = 5.5;      // 11 units thick, about 6 inches
-const PLAN_HEAD = 8;
+// Plan-view figures follow the architectural convention: a head circle with
+// the shoulders and upper arms as an arc curving away behind it. Dimensions
+// are the ones space planners use — 18" across the shoulders for a man, 14"
+// for a woman — which is what tells the two apart. No faces: the head sitting
+// forward of the arc is the direction, and that's all a plan needs.
+const SHOULDER_M = 14;       // half of 18" across, at 20 units to the foot
+const SHOULDER_F = 11;       // half of 14"
+const PLAN_HEAD = 6.8;
+const ARM = 7.5;             // how thick the shoulder line draws
+const PLAN_SHOULDER = SHOULDER_M;   // what the hit radius is sized from
 
-/**
- * A person from above, drawn the way a restroom sign works: it's all
- * silhouette. Shoulders as a bar, a head sitting just forward of it with a
- * nose on the front, and — for a woman — hair showing past the head at the
- * sides and back. No internal lines to squint at; the outline does the work,
- * which is what survives being printed small.
- */
+const shoulderHalf = (female) => (female ? SHOULDER_F : SHOULDER_M);
+
+/** Shoulders: a wide, shallow curve behind the head — not a horseshoe. */
+const shoulderPath = (sh) => `M0,${-sh} Q${-sh * 0.75},0 0,${sh}`;
+
 function drawPlanFigure(obj, color, female) {
   const g = el("g");
-  const SH_X = -5;                 // shoulders sit behind
-  const HEAD_X = 2.5;              // head just forward of them — not out front
-  const HAIR = PLAN_HEAD + 3.4;
-
-  g.append(el("line", {
-    x1: SH_X, y1: -PLAN_SHOULDER, x2: SH_X, y2: PLAN_SHOULDER,
-    stroke: INK, "stroke-width": PLAN_DEPTH * 2 + 5, "stroke-linecap": "round",
-  }));
-  g.append(el("line", {
-    x1: SH_X, y1: -PLAN_SHOULDER, x2: SH_X, y2: PLAN_SHOULDER,
-    stroke: shade(color, 0.68), "stroke-width": PLAN_DEPTH * 2,
-    "stroke-linecap": "round",
-  }));
-
-  if (female) {
-    // Hair: an oval set back and wider than the head, so it flares at the
-    // sides and behind and leaves the face and nose completely clear. Not a
-    // ring round the head — a bob seen from above.
-    g.append(el("ellipse", {
-      cx: HEAD_X - 3.5, cy: 0, rx: PLAN_HEAD + 1, ry: PLAN_HEAD + 5,
-      fill: shade(color, 0.5), stroke: INK, "stroke-width": 2.6,
-    }));
-  }
-
-  // Head, with a small nose for facing — a bump, not a beak.
-  const n = PLAN_HEAD + 3;
-  const d = PLAN_HEAD * 0.62;
-  const h = Math.sqrt(PLAN_HEAD * PLAN_HEAD - d * d);
+  const sh = shoulderHalf(female);
+  const head = { cx: 3.5, cy: 0, r: PLAN_HEAD };
   g.append(el("path", {
-    d: `M${HEAD_X + d},${-h} A${PLAN_HEAD},${PLAN_HEAD} 0 1 0 ${HEAD_X + d},${h} ` +
-       `L${HEAD_X + n},0 Z`,
-    fill: color, stroke: INK, "stroke-width": 2.6, "stroke-linejoin": "round",
+    d: shoulderPath(sh), fill: "none", stroke: INK,
+    "stroke-width": ARM + 5, "stroke-linecap": "round",
+  }));
+  g.append(el("path", {
+    d: shoulderPath(sh), fill: "none", stroke: shade(color, 0.78),
+    "stroke-width": ARM, "stroke-linecap": "round",
+  }));
+  g.append(el("circle", {
+    ...head, fill: color, stroke: INK, "stroke-width": 2.6,
   }));
   return g;
 }
@@ -250,7 +235,7 @@ function drawCharacter(obj) {
  * as a second body.
  */
 function seatBack(color) {
-  const r = PLAN_SHOULDER + 5;
+  const r = PLAN_SHOULDER + 4;
   return el("path", {
     d: `M4,${-r} L-21,${-r} L-21,${r} L4,${r}`,
     fill: "none", stroke: INK, "stroke-width": 4,
@@ -266,19 +251,13 @@ function seatBack(color) {
 function drawLying(obj, color, female) {
   const g = el("g");
   const HALF = 20 * 3;                       // six feet, at 20 units to the foot
-  const W = 20 * 0.8;                        // shoulders, lying down
-  const neck = HALF - PLAN_HEAD * 2 - 2;     // where the body stops
+  const W = shoulderHalf(female);
+  const neck = HALF - PLAN_HEAD * 2 - 4;
 
   g.append(el("rect", {
     x: -HALF, y: -W, width: HALF + neck, height: W * 2, rx: W,
-    fill: shade(color, 0.74), stroke: INK, "stroke-width": 2.6,
+    fill: shade(color, 0.78), stroke: INK, "stroke-width": 2.6,
   }));
-  if (female) {
-    g.append(el("ellipse", {
-      cx: HALF - PLAN_HEAD - 3.5, cy: 0, rx: PLAN_HEAD + 1, ry: PLAN_HEAD + 5,
-      fill: shade(color, 0.5), stroke: INK, "stroke-width": 2.4,
-    }));
-  }
   g.append(el("circle", {
     cx: HALF - PLAN_HEAD, cy: 0, r: PLAN_HEAD,
     fill: color, stroke: INK, "stroke-width": 2.6,

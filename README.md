@@ -86,6 +86,12 @@ Nothing in the 376-scene library uses `numSnapshot` > 1, so there was no
 ground-truth file for this — `posMarks` is our own field, which means these
 scenes still open in the original, just without the move.
 
+**Plan figures.** People are drawn the way space planners draw them: a head
+circle with the shoulders and upper arms curving away behind it, at the real
+dimensions — 18 inches across the shoulders for a man, 14 for a woman, which is
+what tells the two apart. No faces. The head sitting forward of the arc is the
+direction, and that is all a plan needs.
+
 **Posture.** People stand, sit or lie down. It sets the height the lens sees
 them at and the floor they occupy: someone lying down is drawn at their real six
 feet, pointed the way they're facing, and a seated figure gets a chair bracket.

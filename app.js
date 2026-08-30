@@ -1398,7 +1398,15 @@ stage.addEventListener("pointerup", (ev) => {
   // fact instead of having to plan the move before you place the camera.
   if (drag?.mode === "move" && drag.moved) {
     for (const o of drag.origins) {
-      if (marksOf(o.obj).length >= 2) setMark(o.obj, S.slice + 1);
+      if (marksOf(o.obj).length < 2) continue;
+      setMark(o.obj, S.slice + 1);
+      // The object's own x/y stays at position 1, so a scene opened in the
+      // original app shows everybody where they start rather than where the
+      // playhead happened to be parked.
+      const first = marksOf(o.obj)[0];
+      H.set(o.obj, "x", round(first.x));
+      H.set(o.obj, "y", round(first.y));
+      if (R.hasRotator(o.obj)) R.setAngle(o.obj, first.a);
     }
   }
   stage.classList.remove("panning");
@@ -1573,6 +1581,20 @@ function finishTool() {
 
 function toolClick(pt, ev) {
   if (S.chain) {
+    // Clicking on a position that's already there means "that's the lot" —
+    // nobody wants two of somebody standing in the same spot. Without this,
+    // going back to nudge the position you just placed drops another one on
+    // top of it, which reads as the whole thing having gone wrong.
+    const onTop = byID(S.chain.last);
+    const near = onTop && Math.hypot(pt.x - H.getNum(onTop, "x"),
+                                     pt.y - H.getNum(onTop, "y")) < R.radiusOf(onTop) + 6;
+    const hit = hitTest(pt, ev ? { x: ev.clientX, y: ev.clientY } : null);
+    if (near || (hit && !R.POINT_TAGS.has(hit.tag))) {
+      endChain();
+      // Hand the click straight on: they were reaching for that object.
+      if (hit) { S.sel = new Set([idOf(hit)]); draw(); syncChrome(); }
+      return;
+    }
     placeChainPoint(pt);
     if (ev.detail >= 2) endChain();
     return;
