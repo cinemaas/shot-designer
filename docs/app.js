@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=f7ec8f5e";
-import * as R from "./render.js?v=f7ec8f5e";
-import { FXG } from "./assets.js?v=f7ec8f5e";
-import * as B from "./blocking.js?v=f7ec8f5e";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=f7ec8f5e";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f7ec8f5e";
-import { HANDBOOK } from "./handbook.js?v=f7ec8f5e";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=f7ec8f5e";
-import * as V3 from "./view3d.js?v=f7ec8f5e";
-import * as TR from "./track.js?v=f7ec8f5e";
-import * as RIG from "./rigs.js?v=f7ec8f5e";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=f7ec8f5e";
-import { Library } from "./library.js?v=f7ec8f5e";
+import * as H from "./hcw.js?v=410c2dc3";
+import * as R from "./render.js?v=410c2dc3";
+import { FXG } from "./assets.js?v=410c2dc3";
+import * as B from "./blocking.js?v=410c2dc3";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=410c2dc3";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=410c2dc3";
+import { HANDBOOK } from "./handbook.js?v=410c2dc3";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=410c2dc3";
+import * as V3 from "./view3d.js?v=410c2dc3";
+import * as TR from "./track.js?v=410c2dc3";
+import * as RIG from "./rigs.js?v=410c2dc3";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=410c2dc3";
+import { Library } from "./library.js?v=410c2dc3";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=f7ec8f5e";
+} from "./catalog.js?v=410c2dc3";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -205,26 +205,82 @@ function slicePositions() {
     moves.set(idOf(o), poseAt(marks, t));
   }
 
-  const walkT = n > 1 ? t / (n - 1) : 0;
-  if (walkT === 0) return moves;
+  // Walk chains. On the page every position shows at once, numbered — that's
+  // what makes it an overhead. The moment the playhead moves off the first
+  // beat it becomes one person walking instead: the head of the chain travels
+  // the route on the chain's own timing, and the positions it is standing in
+  // for get out of the way. Showing the walker and the parked copies at the
+  // same time was the thing that read as broken.
+  S.hidden = new Set();
+  if (t <= 0) return moves;
 
-  for (const o of objects()) {
-    if (!R.POINT_TAGS.has(o.tag) || o.tag === "AxisLine") continue;
-    const moverID = H.get(o, "fromConstraints");
-    const mover = moverID && byID(moverID);
-    if (!mover) continue;
+  for (const start of chainHeads()) {
+    const legs = chainFrom(start);
+    if (!legs.length) continue;
+    const stops = [Math.max(1, stopsOf(start)[0] || 1),
+                   ...legs.map((l, i) => Math.max(1, stopsOf(l.to)[0] || i + 2))];
+    const now = t + 1;                              // marks are 1-based
+    let leg = 0;
+    while (leg < legs.length - 1 && now >= stops[leg + 1]) leg++;
+    const a = stops[leg], b = stops[leg + 1];
+    const f = b > a ? Math.max(0, Math.min(1, (now - a) / (b - a))) : 1;
 
-    const pts = R.pointsOf(o);
-    if (pts.length < 2) continue;
-    const dest = byID(H.get(o, "toConstraints"));
-    const route = [
-      { x: H.getNum(mover, "x"), y: H.getNum(mover, "y") },
-      ...pts.slice(1, -1),
-      dest ? { x: H.getNum(dest, "x"), y: H.getNum(dest, "y") } : pts[pts.length - 1],
-    ];
-    if (!moves.has(moverID)) moves.set(moverID, alongPath(route, walkT));
+    const here = leg === 0 ? start : legs[leg - 1].to;
+    const arrived = f >= 1;
+
+    // Everything the walker is standing in for steps aside. Once they've
+    // arrived it's the position itself that shows, so the number under it is
+    // the one you'd expect rather than the number of wherever they set off.
+    for (const l of legs) S.hidden.add(idOf(l.to));
+    S.hidden.add(idOf(start));
+    const walker = arrived ? legs[leg].to : here;
+    S.hidden.delete(idOf(walker));
+    if (!arrived) moves.set(idOf(walker), alongPath(legs[leg].route(here), f));
   }
   return moves;
+}
+
+/** People a walk chain starts from: linked onward, but nothing links to them. */
+function chainHeads() {
+  const targets = new Set();
+  for (const o of objects()) {
+    if (o.tag !== "WalkArrow" && o.tag !== "Track") continue;
+    const to = H.get(o, "toConstraints");
+    if (to) targets.add(to);
+  }
+  return objects().filter((o) =>
+    !targets.has(idOf(o)) &&
+    objects().some((q) => (q.tag === "WalkArrow" || q.tag === "Track") &&
+                          H.get(q, "fromConstraints") === idOf(o)));
+}
+
+/** The legs of a chain, in order, each knowing how to lay out its own route. */
+function chainFrom(start) {
+  const legs = [];
+  const seen = new Set([idOf(start)]);
+  let at = start;
+  for (let guard = 0; guard < 64; guard++) {
+    const arrow = objects().find((q) =>
+      (q.tag === "WalkArrow" || q.tag === "Track") &&
+      H.get(q, "fromConstraints") === idOf(at));
+    if (!arrow) break;
+    const to = byID(H.get(arrow, "toConstraints"));
+    if (!to || seen.has(idOf(to))) break;
+    seen.add(idOf(to));
+    // The arrow's ends are held clear of the figures so the drawing reads, so
+    // the walk runs person to person, using the arrow's middle as the way through.
+    const route = (from) => {
+      const pts = R.pointsOf(arrow);
+      return [
+        { x: H.getNum(from, "x"), y: H.getNum(from, "y") },
+        ...pts.slice(1, -1),
+        { x: H.getNum(to, "x"), y: H.getNum(to, "y") },
+      ];
+    };
+    legs.push({ arrow, to, route });
+    at = to;
+  }
+  return legs;
 }
 
 /** Where an object is actually drawn right now, timeline included. */
@@ -266,6 +322,7 @@ function visibleAt(obj, slice) {
   // Positions only take turns when you're stepping through them. On the page
   // they all show at once, numbered — that's what makes it an overhead.
   if (S.blocking && !presentAt(obj, slice)) return false;
+  if (S.hidden?.has(idOf(obj))) return false;
   const evs = H.kids(H.child(obj, "ObjectEvents"), "OnOffEvent");
   if (!evs.length) return true;
   let state = true, best = -1;
@@ -388,15 +445,20 @@ function drawMoves() {
       "stroke-linecap": "round", "stroke-linejoin": "round",
     }));
 
+    // Sit the number beside each position, not on top of it — the figure is
+    // standing there and the whole point is to be able to see them.
+    const off = Math.min(46, R.radiusOf(o) + 6) * 0.72;
     for (const m of marks) {
+      const bx = m.x + off, by = m.y - off;
       g.append(R.el("circle", {
-        cx: m.x, cy: m.y, r: 9, fill: "var(--bg)", stroke: col,
-        "stroke-width": 2.4, opacity: lit ? 1 : 0.65,
+        cx: bx, cy: by, r: 9, fill: col, stroke: "#fff", "stroke-width": 2,
+        opacity: lit ? 1 : 0.7,
       }));
       const t = R.el("text", {
-        x: m.x, y: m.y + 4, "text-anchor": "middle",
-        "font-size": 12, "font-weight": 600, fill: col,
-        opacity: lit ? 1 : 0.65,
+        x: bx, y: by + 3.6, "text-anchor": "middle", fill: "#fff",
+        "font-size": 11, "font-weight": "700",
+        "font-family": "Helvetica, Arial, sans-serif",
+        opacity: lit ? 1 : 0.7,
       });
       t.textContent = m.slice;
       g.append(t);
@@ -431,7 +493,10 @@ function renderLensView() {
   const shot = objects().find((o) => o.tag === "ShotVersion" &&
     H.get(o, "attachObjectID") === idOf(cam));
   const mm = shot ? parseFloat(H.get(shot, "versionLens")) || 0 : 0;
-  const view = V3.cameraAt(cam, fmt, mm, drawnPos(cam));
+  const rigID = RIG.rigParentID(cam);
+  const rig = rigID ? byID(rigID) : null;
+  const lensFt = RIG.lensHeightOn(cam, rig);
+  const view = V3.cameraAt(cam, fmt, mm, drawnPos(cam), lensFt * UNITS_PER_FOOT);
 
   const W = 320, HGT = Math.round(W * (fmt.h / fmt.w));
   const svg = R.el("svg", { viewBox: `0 0 ${W} ${HGT}`, width: W, height: HGT });
@@ -576,6 +641,8 @@ function drawPositionBadges() {
     const stops = stopsOf(o);
     if (!stops.length) continue;
     if (R.LABEL_TAGS.has(o.tag)) continue;          // labels follow their host
+    if (S.hidden?.has(idOf(o))) continue;           // standing aside for the walker
+    if (marksOf(o).length >= 2) continue;           // its own move does the numbering
 
     const p = drawnPos(o);
     const r = Math.min(46, R.radiusOf(o) + 6);
@@ -2472,7 +2539,32 @@ const zoomStep = (f) => {
 // ---------------------------------------------------------------- playback
 
 let playTimer = null;
-const SLICE_MS = 1400;                      // how long one position takes to reach the next
+const SLICE_MS = 1400;             // a short move; longer ones take proportionally longer
+const SLICE_MS_MAX = 5200;         // ...up to this, so a long dolly does not crawl forever
+const EASE_FEET = 24;              // distance at which a move hits the long end
+
+/**
+ * Real camera moves are not all the same length and do not start at speed.
+ * A grip ramps on and settles off, and a twenty-foot push takes longer than a
+ * two-foot nudge — so time each beat by how far the furthest thing actually
+ * travels, and ease it rather than running it linear.
+ */
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+function beatDuration(from, to) {
+  let far = 0;
+  for (const o of objects()) {
+    const marks = marksOf(o);
+    if (marks.length < 2) continue;
+    const a = poseAt(marks, from), b = poseAt(marks, to);
+    if (!a || !b) continue;
+    far = Math.max(far, Math.hypot(b.x - a.x, b.y - a.y));
+  }
+  const feet = far / UNITS_PER_FOOT;
+  const k = Math.min(1, feet / EASE_FEET);
+  return SLICE_MS + (SLICE_MS_MAX - SLICE_MS) * k;
+}
 
 /**
  * Playback runs the playhead as a float rather than stepping slice to slice,
@@ -2483,10 +2575,18 @@ function startPlay() {
   if (n < 2) return toast("Nothing to play — give something a second position first");
   S.playing = true;
   S.time = 0;
+  // Each beat gets its own length, so a long travel reads as a long travel.
+  const durs = [];
+  for (let i = 0; i < n - 1; i++) durs.push(beatDuration(i, i + 1));
+  const total = durs.reduce((a, b) => a + b, 0) + SLICE_MS * 0.6;
   let t0 = performance.now();
   const step = (now) => {
     if (!S.playing) return;
-    S.time = ((now - t0) / SLICE_MS) % (n - 1 + 0.6);   // a beat's rest at the end
+    let ms = (now - t0) % total;
+    let i = 0;
+    while (i < durs.length && ms > durs[i]) { ms -= durs[i]; i++; }
+    // eased within the beat, so it ramps on and settles off
+    S.time = i >= durs.length ? n - 1 : i + easeInOut(Math.min(1, ms / durs[i]));
     S.time = Math.min(S.time, n - 1);
     S.slice = Math.min(n - 1, Math.round(S.time));
     draw(); syncChrome();

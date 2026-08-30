@@ -63,6 +63,11 @@ same spot, so reaching back for the one you just placed picks it up to drag
 instead of dropping another on top of it.</p>
 <p>That's how the scenes in this library are built: one actor as ten positions
 in a chain, which is why the whole move reads off a single sheet.</p>
+<p>On the page every position shows at once, numbered. The moment you step off
+the first beat it becomes <b>one person walking</b>: the figure travels the
+route and the positions it is standing in for ghost back, so you see a move
+rather than a crowd. Land on a whole beat and it's that position itself
+showing, with its own number.</p>
 <h4>Moving a camera — position 1 and position 2</h4>
 <p>You don't have to plan a move before you place the camera. Put the camera
 where it starts, then <b>Add a Move…</b> — or <kbd>M</kbd>. That pins where it
@@ -80,6 +85,9 @@ marks rather than jumping. People work the same way.</p>
 leaving the arrow pointing at nobody — either end, coming or going. The arrow
 keeps its clearance from them as they go.</p>
 <h4>Standing, sitting, on the floor</h4>
+<p>Men get one line across the face, women two — the same mark the original
+uses, so scenes read the same way they always did. Shoulders are drawn at the
+real widths too, 18 inches against 14.</p>
 <p>Right-click a person for <b>Posture</b>. It isn't decoration — it sets the
 height the lens sees them at (a seated head tops out around 4'4", a standing one
 at 5'9") and it changes the floor they take up. Somebody lying down is drawn at

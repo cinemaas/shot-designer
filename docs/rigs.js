@@ -10,9 +10,9 @@
 // in the file format. The camera-to-rig link is ours; a scene opened in the
 // original still reads, the camera just comes off the rig.
 
-import * as H from "./hcw.js?v=f7ec8f5e";
-import * as R from "./render.js?v=f7ec8f5e";
-import { UNITS_PER_FOOT } from "./catalog.js?v=f7ec8f5e";
+import * as H from "./hcw.js?v=410c2dc3";
+import * as R from "./render.js?v=410c2dc3";
+import { UNITS_PER_FOOT } from "./catalog.js?v=410c2dc3";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -116,4 +116,21 @@ export function makeRig(kind, x, y, angle = -Math.PI / 2) {
   H.set(cam, "x", seat.x);
   H.set(cam, "y", seat.y);
   return { rig, cam };
+}
+
+/**
+ * How high the lens ends up on a given bit of support. A hi-hat and a jib do
+ * not see the same room, and this is the number that decides it. Feet.
+ */
+export const RIG_LENS_HEIGHT = {
+  HIHAT: 0.9, TRIPOD: 4.5, DOLLY: 3.4, DOLLYJIB: 5.2, JIB: 6.5,
+  SLIDER: 3.6, STEADICAM: 4.4, CRANE: 9.0, HANDHELD: 5.2,
+};
+
+/** Lens height in feet for a camera: its own override, else its rig, else tripod. */
+export function lensHeightOn(cam, rig) {
+  const own = H.getNum(cam, "lensHeight", 0);
+  if (own > 0) return own;
+  const key = rig ? H.get(rig, "objectKey") : "";
+  return RIG_LENS_HEIGHT[key] ?? RIG_LENS_HEIGHT.TRIPOD;
 }
