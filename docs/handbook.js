@@ -78,6 +78,11 @@ stops.</p>
 height and tilt — change your mind as often as you like. Playing the move runs
 between them and carries <b>everything</b>: it travels, swings, rises and tilts
 from one position to the next.</p>
+<p>On the timeline the positions stop being separate cameras and become one
+camera making one move, so it doesn't matter which of them you have selected —
+press play from position 3 and you watch the whole move, through the lens, from
+wherever the camera has got to. Park on a beat and the sliders drive
+<i>that</i> position, so you can land on position 2 and finesse it.</p>
 <h4>The other way — positions on one camera</h4>
 <p>You don't have to plan a move before you place the camera. Put the camera
 where it starts, then <b>Add a Move…</b> — or <kbd>M</kbd>. That pins where it

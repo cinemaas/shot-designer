@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=2dcad2c5";
-import * as R from "./render.js?v=2dcad2c5";
-import { FXG } from "./assets.js?v=2dcad2c5";
-import * as B from "./blocking.js?v=2dcad2c5";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=2dcad2c5";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=2dcad2c5";
-import { HANDBOOK } from "./handbook.js?v=2dcad2c5";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=2dcad2c5";
-import * as V3 from "./view3d.js?v=2dcad2c5";
-import * as TR from "./track.js?v=2dcad2c5";
-import * as RIG from "./rigs.js?v=2dcad2c5";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=2dcad2c5";
-import { Library } from "./library.js?v=2dcad2c5";
+import * as H from "./hcw.js?v=8fc282b9";
+import * as R from "./render.js?v=8fc282b9";
+import { FXG } from "./assets.js?v=8fc282b9";
+import * as B from "./blocking.js?v=8fc282b9";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=8fc282b9";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=8fc282b9";
+import { HANDBOOK } from "./handbook.js?v=8fc282b9";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=8fc282b9";
+import * as V3 from "./view3d.js?v=8fc282b9";
+import * as TR from "./track.js?v=8fc282b9";
+import * as RIG from "./rigs.js?v=8fc282b9";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=8fc282b9";
+import { Library } from "./library.js?v=8fc282b9";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=2dcad2c5";
+} from "./catalog.js?v=8fc282b9";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -654,6 +654,32 @@ function drawMoves() {
  * right heights — enough to answer "is she behind the sofa" in the moment,
  * which is the whole point of standing next to a director with a plan.
  */
+/**
+ * The chain a camera belongs to, if any — every position of the same move.
+ */
+function chainOf(cam) {
+  for (const head of chainHeads()) {
+    const legs = chainFrom(head);
+    const members = [head, ...legs.map((l) => l.to)];
+    if (members.some((m) => idOf(m) === idOf(cam))) return members;
+  }
+  return null;
+}
+
+/**
+ * Which camera the lens view should be showing. On the page each position is
+ * its own camera and you look through the one you picked. On the timeline the
+ * positions are one camera making one move, so whichever of them you happen to
+ * have selected, you see the move — you shouldn't have to pick position 1
+ * before pressing play.
+ */
+function liveCamera(cam) {
+  if (!S.playing && S.slice === 0) return cam;
+  const members = chainOf(cam);
+  if (!members) return cam;
+  return members.find((m) => !S.hidden?.has(idOf(m))) || cam;
+}
+
 function renderLensView() {
   const box = $("#lensview");
   if (!box) return;
@@ -663,21 +689,38 @@ function renderLensView() {
 
   if (!S.lensView || !cam || cam.tag !== "Camera") { box.hidden = true; return; }
   box.hidden = false;
-  box.replaceChildren();
+
+  // A camera in a move shows the move, from wherever you're parked.
+  const shown = liveCamera(cam);
+
+  // The frame is redrawn constantly; the controls are not. Replacing them on
+  // every draw tore the slider out from under the pointer, which is why they
+  // could only be clicked and never dragged.
+  let frame = box.querySelector(".lensframe");
+  if (!frame) {
+    box.replaceChildren();
+    frame = document.createElement("div");
+    frame.className = "lensframe";
+    box.append(frame);
+  }
+  frame.replaceChildren();
 
   const fmt = packageFormat();
   const shot = objects().find((o) => o.tag === "ShotVersion" &&
     H.get(o, "attachObjectID") === idOf(cam));
   const mm = shot ? parseFloat(H.get(shot, "versionLens")) || 0 : 0;
-  const rigID = RIG.rigParentID(cam);
+  const rigID = RIG.rigParentID(shown);
   const rig = rigID ? byID(rigID) : null;
-  // On a marked move the height and the tilt travel with it, so what you see
-  // at this point on the timeline is where the jib actually is.
-  const moved = S.moves?.get(idOf(cam));
-  const lensFt = moved?.h != null ? moved.h : RIG.lensHeightOn(cam, rig);
-  const pitch = moved?.tilt != null ? moved.tilt : V3.tiltOf(cam);
-  const view = V3.cameraAt(cam, fmt, mm, drawnPos(cam),
+  // The height and the tilt travel with the move, so what you see is where
+  // the rig actually is at this point on the timeline — and `shown` is the
+  // position of the move that is live, not necessarily the one you clicked.
+  const moved = S.moves?.get(idOf(shown));
+  const lensFt = moved?.h != null ? moved.h : RIG.lensHeightOn(shown, rig);
+  const pitch = moved?.tilt != null ? moved.tilt : V3.tiltOf(shown);
+  const view = V3.cameraAt(shown, fmt, mm, drawnPos(shown),
                            lensFt * UNITS_PER_FOOT, pitch);
+  // Mid-move the pan is between two positions, so take it from the move.
+  if (moved?.a != null) view.yaw = moved.a;
 
   const W = 320, HGT = Math.round(W * (fmt.h / fmt.w));
   const svg = R.el("svg", { viewBox: `0 0 ${W} ${HGT}`, width: W, height: HGT });
@@ -706,14 +749,14 @@ function renderLensView() {
   // The frame itself, plus what it is.
   svg.append(R.el("rect", { x: .5, y: .5, width: W - 1, height: HGT - 1,
     fill: "none", stroke: "#16181a", "stroke-width": 1 }));
-  box.append(svg);
+  frame.append(svg);
 
   const cap = document.createElement("div");
   cap.className = "cap";
   const name = shot ? H.get(shot, "headerText") : "Camera";
   cap.textContent = `${name}${mm ? ` · ${mm}mm` : " · no lens set"} · ` +
     `${formatKey(fmt).replace(/^\S+ /, "")}`;
-  box.append(cap);
+  frame.append(cap);
 
   // An empty frame usually means the plan isn't drawn to distance rather than
   // that the shot is empty, so say which and how far rather than nothing.
@@ -735,17 +778,40 @@ function renderLensView() {
       ? `Nobody in frame — nearest is ${nameOf(near.o)} at ` +
         `${feet(near.d)}. On a ${mm || 32}mm that's inside the minimum.`
       : "Nobody in frame";
-    box.append(note);
+    frame.append(note);
   }
 
   // Fly the camera from here: height, tilt and pan as sliders, so you can
   // find the frame by looking at it instead of guessing numbers on the plan.
   // Everything moves the real camera, so the overhead follows as you drag.
+  //
+  // These are built once per camera and then left alone. Redrawing them on
+  // every frame is what stopped them being draggable: the input you had hold
+  // of was removed from the page the moment it fired.
+  const stamp = idOf(shown) + "|" + (marksOf(shown).length >= 2);
+  if (box.dataset.rig === stamp) {
+    // Same camera; just keep the readouts honest unless one is being dragged.
+    for (const i of box.querySelectorAll(".lensrig input")) {
+      if (document.activeElement === i || i.dataset.busy) continue;
+      const read = { h: () => lensFt, t: () => Math.round(pitch * 180 / Math.PI),
+                     p: () => Math.round(view.yaw * 180 / Math.PI) }[i.dataset.k];
+      if (!read) continue;
+      const v = read();
+      if (Math.abs(parseFloat(i.value) - v) > 0.001) {
+        i.value = v;
+        i.parentElement.querySelector(".v").textContent = i._fmt ? i._fmt(v) : v;
+      }
+    }
+    return;
+  }
+  box.dataset.rig = stamp;
+  for (const old of box.querySelectorAll(".lensrig, .lensbar")) old.remove();
+
   const flyer = document.createElement("div");
   flyer.className = "lensrig";
-  const marked = marksOf(cam).length >= 2;
+  const marked = marksOf(shown).length >= 2;
 
-  const slider = (label, min, max, step, value, fmt, apply) => {
+  const slider = (label, key, min, max, step, value, fmt, apply) => {
     const line = document.createElement("label");
     const name = document.createElement("span");
     name.className = "n"; name.textContent = label;
@@ -753,6 +819,8 @@ function renderLensView() {
     out.className = "v"; out.textContent = fmt(value);
     const i = document.createElement("input");
     i.type = "range"; i.min = min; i.max = max; i.step = step; i.value = value;
+    i.dataset.k = key;
+    i._fmt = fmt;
     let queued = null;
     i.oninput = () => {
       const v = parseFloat(i.value);
@@ -762,20 +830,26 @@ function renderLensView() {
       // redrawn per input event is what made dragging these feel like glue.
       if (queued == null) queued = requestAnimationFrame(() => { queued = null; draw(); });
     };
-    i.onpointerdown = () => mark("camera");
-    i.onchange = () => { draw(); syncChrome(); };
+    i.onpointerdown = () => { i.dataset.busy = "1"; mark("camera"); };
+    const done = () => { delete i.dataset.busy; draw(); syncChrome(); };
+    i.onpointerup = done;
+    i.onpointercancel = done;
+    i.onchange = done;
     line.append(name, i, out);
     flyer.append(line);
   };
 
-  slider("Height", 0.5, 16, 0.25, lensFt, (v) => v.toFixed(2) + "'",
-         (v) => H.set(cam, "lensHeight", v));
-  slider("Tilt", -50, 50, 1, Math.round(pitch * 180 / Math.PI),
+  // They drive whichever position of the move is live, so parking on beat 2
+  // and sliding Pan swings position 2 — which is the point of being able to
+  // land on a position and finesse it.
+  slider("Height", "h", 0.5, 16, 0.25, lensFt, (v) => v.toFixed(2) + "'",
+         (v) => H.set(shown, "lensHeight", v));
+  slider("Tilt", "t", -50, 50, 1, Math.round(pitch * 180 / Math.PI),
          (v) => (v > 0 ? "+" : "") + v + "\u00b0",
-         (v) => H.set(cam, "tiltAngle", v));
-  slider("Pan", -180, 180, 1, Math.round(R.angleOf(cam) * 180 / Math.PI),
+         (v) => H.set(shown, "tiltAngle", v));
+  slider("Pan", "p", -180, 180, 1, Math.round(view.yaw * 180 / Math.PI),
          (v) => v + "\u00b0",
-         (v) => R.setAngle(cam, v * Math.PI / 180));
+         (v) => R.setAngle(shown, v * Math.PI / 180));
   box.append(flyer);
 
   const row = document.createElement("div");
@@ -788,8 +862,10 @@ function renderLensView() {
   };
   // With a move on it every adjustment records itself, so there is nothing to
   // press; without one, this is how you start a move from the framing you like.
-  if (!marked) btn("Add a Move", "Make this the first position of a move",
-                   () => addMove(cam));
+  if (!marked && !chainOf(cam)) {
+    btn("Move To…", "Drop the next position of this move on the plan",
+        () => startFromHere("move", cam));
+  }
   btn("Storyboard", "Drop this frame on the plan as a storyboard",
       () => frameToStoryboard(cam, svg, W, HGT, mm, fmt));
   btn("Save PNG", "Save the frame as a picture",
@@ -4205,7 +4281,7 @@ function cameraRig3D(cam) {
       if (Number.isFinite(ft) && ft > 0) H.set(cam, "lensHeight", ft);
       if (Number.isFinite(deg)) H.set(cam, "tiltAngle", deg);
       // If it's mid-move, this is what that position looks like.
-      if (marksOf(cam).length >= 2) setMark(cam, S.slice + 1);
+      if (marksOf(shown).length >= 2) setMark(shown, S.slice + 1);
       draw(); syncChrome();
       toast(`${lensFtOf(cam).toFixed(2)} ft · ${(V3.tiltOf(cam) * 180 / Math.PI).toFixed(1)}°`);
     },
