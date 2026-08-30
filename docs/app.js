@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=04ff3e0f";
-import * as R from "./render.js?v=04ff3e0f";
-import { FXG } from "./assets.js?v=04ff3e0f";
-import * as B from "./blocking.js?v=04ff3e0f";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=04ff3e0f";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=04ff3e0f";
-import { HANDBOOK } from "./handbook.js?v=04ff3e0f";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=04ff3e0f";
-import * as V3 from "./view3d.js?v=04ff3e0f";
-import * as TR from "./track.js?v=04ff3e0f";
-import * as RIG from "./rigs.js?v=04ff3e0f";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=04ff3e0f";
-import { Library } from "./library.js?v=04ff3e0f";
+import * as H from "./hcw.js?v=f7ec8f5e";
+import * as R from "./render.js?v=f7ec8f5e";
+import { FXG } from "./assets.js?v=f7ec8f5e";
+import * as B from "./blocking.js?v=f7ec8f5e";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=f7ec8f5e";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f7ec8f5e";
+import { HANDBOOK } from "./handbook.js?v=f7ec8f5e";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=f7ec8f5e";
+import * as V3 from "./view3d.js?v=f7ec8f5e";
+import * as TR from "./track.js?v=f7ec8f5e";
+import * as RIG from "./rigs.js?v=f7ec8f5e";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=f7ec8f5e";
+import { Library } from "./library.js?v=f7ec8f5e";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=04ff3e0f";
+} from "./catalog.js?v=f7ec8f5e";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1398,7 +1398,15 @@ stage.addEventListener("pointerup", (ev) => {
   // fact instead of having to plan the move before you place the camera.
   if (drag?.mode === "move" && drag.moved) {
     for (const o of drag.origins) {
-      if (marksOf(o.obj).length >= 2) setMark(o.obj, S.slice + 1);
+      if (marksOf(o.obj).length < 2) continue;
+      setMark(o.obj, S.slice + 1);
+      // The object's own x/y stays at position 1, so a scene opened in the
+      // original app shows everybody where they start rather than where the
+      // playhead happened to be parked.
+      const first = marksOf(o.obj)[0];
+      H.set(o.obj, "x", round(first.x));
+      H.set(o.obj, "y", round(first.y));
+      if (R.hasRotator(o.obj)) R.setAngle(o.obj, first.a);
     }
   }
   stage.classList.remove("panning");
@@ -1573,6 +1581,20 @@ function finishTool() {
 
 function toolClick(pt, ev) {
   if (S.chain) {
+    // Clicking on a position that's already there means "that's the lot" —
+    // nobody wants two of somebody standing in the same spot. Without this,
+    // going back to nudge the position you just placed drops another one on
+    // top of it, which reads as the whole thing having gone wrong.
+    const onTop = byID(S.chain.last);
+    const near = onTop && Math.hypot(pt.x - H.getNum(onTop, "x"),
+                                     pt.y - H.getNum(onTop, "y")) < R.radiusOf(onTop) + 6;
+    const hit = hitTest(pt, ev ? { x: ev.clientX, y: ev.clientY } : null);
+    if (near || (hit && !R.POINT_TAGS.has(hit.tag))) {
+      endChain();
+      // Hand the click straight on: they were reaching for that object.
+      if (hit) { S.sel = new Set([idOf(hit)]); draw(); syncChrome(); }
+      return;
+    }
     placeChainPoint(pt);
     if (ev.detail >= 2) endChain();
     return;
