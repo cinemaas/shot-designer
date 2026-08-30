@@ -126,6 +126,11 @@ whatever their facing) and is what the AI brief calls them. Naming somebody
 saves them, so Add Character offers them by name and drops them in already
 coloured and cast.
 
+**One camera on the timeline.** The positions of a move are separate cameras on
+the page and one camera on the timeline: the lens view follows whichever
+position is live regardless of which you selected, so play works from any of
+them. Parked on a beat, the sliders drive that position.
+
 **Flying the camera.** The lens panel carries Height, Tilt and Pan sliders that
 drive the real camera, so the overhead follows as you drag and a camera with a
 move keeps whatever you land on. Swivelling works three ways — the handle,
