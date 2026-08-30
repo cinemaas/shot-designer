@@ -99,6 +99,21 @@ off the drawn curve rather than the straight chord, so what moves goes where
 the line goes. `⌥`-click a point to remove it. Bends on a marked move live in
 `posBends`, keyed by leg.
 
+**Moves in three dimensions.** A camera mark carries lens height and tilt as
+well as x, y and pan, so a jib rise that tilts down through the move plays as
+one thing. Tilt is a real angle now (`tiltAngle`, degrees) rather than the
+original's two flags, which are still read and kept in step. While the playhead
+sits on a beat the object is genuinely parked at that position, so every tool
+edits the position you can see — before that it drew at one place and pivoted
+about another, which made panning past the first mark miserable.
+
+**Storyboards from the lens view.** Three buttons under the through-the-lens
+panel: drop the frame on the plan as a real storyboard object, save it as a
+PNG, or copy a written brief of the shot — lens, format, lens height, field of
+view, room size off the drawn walls, and every person in frame with distance,
+framing, facing and posture. All measured, none of it invented, so the frame
+and the words can go to an image model together.
+
 **Posture.** People stand, sit or lie down. It sets the height the lens sees
 them at and the floor they occupy: someone lying down is drawn at their real six
 feet, pointed the way they're facing, and a seated figure gets a chair bracket.

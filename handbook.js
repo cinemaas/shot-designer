@@ -73,6 +73,15 @@ showing, with its own number.</p>
 where it starts, then <b>Add a Move…</b> — or <kbd>M</kbd>. That pins where it
 stands as <b>position 1</b>, adds a second slice and drops you on it. Now just
 <b>drag the camera where it ends up</b>: that becomes position 2.</p>
+<p>A camera move is a move in three dimensions: each position holds the
+<b>lens height</b> and the <b>tilt</b> as well as where it stands and which way
+it points. <b>Height &amp; Tilt…</b> takes both as numbers. Set a jib low and
+level at position 1, high and tilted down at position 2, and it rises and
+tilts through the move — the plan writes the height and the tilt under any
+position where they change, and the through-the-lens view follows them.</p>
+<p>While you are parked on a beat the camera really is at that position, so
+panning it, tilting it and dragging it all behave exactly as they do on a
+camera with no move at all — and whatever you do is recorded to that position.</p>
 <p>From then on, dragging that camera while parked on a slice re-pins <i>that</i>
 position, so you can keep adjusting either end without starting over.
 <b>Add Position 3…</b> extends the move, <kbd>M</kbd> pins the current slice, and
@@ -97,6 +106,20 @@ keeps its clearance from them as they go.</p>
 <p>Men get one line across the face, women two — the same mark the original
 uses, so scenes read the same way they always did. Shoulders are drawn at the
 real widths too, 18 inches against 14.</p>
+<h4>Getting a frame out of the lens view</h4>
+<p>Three buttons under the through-the-lens view. <b>Storyboard</b> drops that
+frame onto the plan as a real storyboard object beside its camera — drag it
+where you want it, and it saves in the scene like any other. <b>Save PNG</b>
+writes the frame out at four times the size. <b>AI Brief</b> copies a written
+description of that exact shot: the lens and format from your package, the lens
+height off whatever it is rigged on, the field of view in degrees, the size of
+the room off the walls you drew, and every person in frame with their distance
+from the lens, where they sit in the frame, which way they face and whether
+they are standing, sitting or on the floor.</p>
+<p>Hand an image model the frame and the brief together and it has the geometry
+as a picture and the facts as words, which is a great deal closer to your shot
+than describing it from memory. Nothing in the brief is invented — it is all
+measured off the scene.</p>
 <p>Right-click a person for <b>Posture</b>. It isn't decoration — it sets the
 height the lens sees them at (a seated head tops out around 4'4", a standing one
 at 5'9") and it changes the floor they take up. Somebody lying down is drawn at

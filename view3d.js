@@ -90,7 +90,27 @@ const heightOf = (obj) => {
 // --- the camera --------------------------------------------------------------
 
 /** A camera you can project through: where it is, where it looks, how wide. */
-export function cameraAt(cam, fmt, lensMM, pos, height) {
+/**
+ * How far the camera is tilted, in radians, up positive. Scenes made in the
+ * original only have the two flags, so those still read as about ten degrees;
+ * anything set here is a real angle, because a jib move needs to tilt through
+ * a number rather than a switch.
+ */
+export function tiltOf(cam) {
+  const deg = H.getNum(cam, "tiltAngle", NaN);
+  if (Number.isFinite(deg)) return (deg * Math.PI) / 180;
+  const rot = H.child(cam, "SubObjects")?.children
+    .find((s) => s.tag === "RotatorCamera");
+  if (!rot) return 0;
+  return (H.getBool(rot, "tiltUp") ? 0.18 : 0) - (H.getBool(rot, "tiltDown") ? 0.18 : 0);
+}
+
+export const lensHeightFt = (cam) => {
+  const own = H.getNum(cam, "lensHeight", 0);
+  return own > 0 ? own : HEIGHTS.lens / UNITS_PER_FOOT;
+};
+
+export function cameraAt(cam, fmt, lensMM, pos, height, pitch) {
   const p = pos || { x: H.getNum(cam, "x"), y: H.getNum(cam, "y") };
   // Lens height: the camera's own if it has been set, else whatever it is
   // sitting on, else a normal tripod. A hi-hat and a jib do not see the same
@@ -98,14 +118,9 @@ export function cameraAt(cam, fmt, lensMM, pos, height) {
   const own = H.getNum(cam, "lensHeight", 0);
   const z = height != null ? height : (own > 0 ? ft(own) : HEIGHTS.lens);
   const fov = fieldOfView(lensMM > 0 ? lensMM : 32, fmt);
-  const rot = H.child(cam, "SubObjects")?.children
-    .find((s) => s.tag === "RotatorCamera");
-  const tilt = rot
-    ? (H.getBool(rot, "tiltUp") ? 0.18 : 0) - (H.getBool(rot, "tiltDown") ? 0.18 : 0)
-    : 0;
   return {
     x: p.x, y: p.y, z,
-    yaw: R.angleOf(cam), pitch: tilt,
+    yaw: R.angleOf(cam), pitch: pitch != null ? pitch : tiltOf(cam),
     tanH: Math.tan(fov.h / 2), tanV: Math.tan(fov.v / 2),
   };
 }
@@ -269,10 +284,80 @@ function band(quad, a, b, z0, z1, fill, stroke) {
   quad.band ? quad.band(a, b, z0, z1, fill, stroke) : quad(a, b, z1, fill, stroke, z0);
 }
 
+/**
+ * An upright box in the world, given its centre, size and facing. Four walls
+ * and a lid — enough for a knee or a torso to read as a solid thing rather
+ * than a flat card, which is what makes a posture legible down the lens and
+ * to anything else looking at the frame.
+ */
+function box(out, cam, c, { len, wide, z0, z1, facing, fill, stroke = "#1a1f24" }) {
+  const cs = Math.cos(facing), sn = Math.sin(facing);
+  const at = (lx, ly) => ({ x: c.x + lx * cs - ly * sn, y: c.y + lx * sn + ly * cs });
+  const q = [at(-len / 2, -wide / 2), at(len / 2, -wide / 2),
+             at(len / 2, wide / 2), at(-len / 2, wide / 2)];
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4];
+    const face = [project(cam, a.x, a.y, z0), project(cam, b.x, b.y, z0),
+                  project(cam, b.x, b.y, z1), project(cam, a.x, a.y, z1)];
+    if (face.some((v) => !v)) continue;
+    out.push({ pts: face, fill, stroke,
+               depth: (face[0].depth + face[1].depth) / 2 });
+  }
+  const lid = q.map((p) => project(cam, p.x, p.y, z1));
+  if (!lid.some((v) => !v)) {
+    out.push({ pts: lid, fill, stroke,
+               depth: Math.min(...lid.map((v) => v.depth)) - 0.01 });
+  }
+}
+
+const shadeHex = (hex, k) => {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return "#" + [f(n >> 16 & 255), f(n >> 8 & 255), f(n & 255)]
+    .map((v) => v.toString(16).padStart(2, "0")).join("");
+};
+
+/**
+ * Somebody sitting, built as the shape a sitting person actually is: shins up
+ * off the floor, thighs out in front at seat height, torso above that. A
+ * shorter slab reads as a short person; this reads as someone in a chair.
+ */
+function seated(out, cam, p, colour, facing) {
+  const SEAT = ft(1.5), KNEE = ft(1.35);
+  const cs = Math.cos(facing), sn = Math.sin(facing);
+  const fwd = (d) => ({ x: p.x + Math.cos(facing) * d, y: p.y + Math.sin(facing) * d });
+
+  // Shins, at the front, from the floor to the knee. Kept apart and darker so
+  // they read as two legs even when the lens is square on and everything is
+  // foreshortened into a stack.
+  for (const side of [-1, 1]) {
+    const q = fwd(ft(1.5));
+    box(out, cam, {
+      x: q.x - Math.sin(facing) * side * ft(0.42),
+      y: q.y + Math.cos(facing) * side * ft(0.42),
+    }, { len: ft(0.7), wide: ft(0.6), z0: 0, z1: KNEE,
+         facing, fill: shadeHex(colour, 0.58) });
+  }
+  // Thighs, level, running forward from the seat — wider than the torso, so
+  // the knees show past it head-on. That's the read that says "sitting".
+  box(out, cam, fwd(ft(0.8)), { len: ft(1.75), wide: ft(1.85),
+    z0: KNEE, z1: SEAT, facing, fill: shadeHex(colour, 0.76) });
+  // Torso.
+  box(out, cam, p, { len: ft(0.85), wide: ft(1.55), z0: SEAT, z1: POSTURES.sit.eye,
+    facing, fill: colour });
+  headBlock(out, cam, p, colour, POSTURES.sit.eye, POSTURES.sit.top, facing);
+}
+
+/** The head, as a small block so it sits proud of whatever is under it. */
+function headBlock(out, cam, p, colour, z0, z1, facing) {
+  box(out, cam, p, { len: ft(0.72), wide: ft(0.72), z0, z1, facing, fill: colour });
+}
+
 /** A person: a body slab facing the camera, with a head on top — or, if
  *  they're on the floor, a low box lying the way they're pointed. */
 function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0) {
   if (posture.lying) return lying(out, cam, p, colour, posture, facing);
+  if (posture === POSTURES.sit) return seated(out, cam, p, colour, facing);
   const halfW = ft(0.85);
   // Face the slab at the camera so it always reads as a person.
   const toCam = Math.atan2(cam.y - p.y, cam.x - p.x) + Math.PI / 2;
@@ -297,36 +382,30 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
              depth: (head[0].depth + head[1].depth) / 2 - 0.02 });
 }
 
-/** Somebody on the floor: a six-foot box along their facing, head at the front. */
+/**
+ * Somebody on the floor. Split into legs, torso and a raised head so the
+ * silhouette reads as a body lying down rather than a crate — from the side,
+ * from the end, and to anything else looking at the frame.
+ */
 function lying(out, cam, p, colour, posture, facing) {
-  const L = posture.length / 2, W = posture.width / 2;
-  const cs = Math.cos(facing), sn = Math.sin(facing);
-  const at = (lx, ly) => ({ x: p.x + lx * cs - ly * sn, y: p.y + lx * sn + ly * cs });
-  const corners = [at(-L, -W), at(L, -W), at(L, W), at(-L, W)];
+  const W = posture.width;
+  const fwd = (d) => ({ x: p.x + Math.cos(facing) * d, y: p.y + Math.sin(facing) * d });
 
-  for (let i = 0; i < 4; i++) {
-    const a = corners[i], b = corners[(i + 1) % 4];
-    const q = [project(cam, a.x, a.y, 0), project(cam, b.x, b.y, 0),
-               project(cam, b.x, b.y, posture.eye), project(cam, a.x, a.y, posture.eye)];
-    if (q.some((v) => !v)) continue;
-    out.push({ pts: q, fill: colour, stroke: "#1a1f24",
-               depth: (q[0].depth + q[1].depth) / 2 });
-  }
-  const top = corners.map((c) => project(cam, c.x, c.y, posture.eye));
-  if (!top.some((v) => !v)) {
-    out.push({ pts: top, fill: colour, stroke: "#1a1f24",
-               depth: Math.min(...top.map((v) => v.depth)) - 0.01 });
-  }
-
-  // The head, so you can tell which end is which down the lens.
-  const h = at(L - ft(0.45), 0);
-  const hw = ft(0.42);
-  const hq = [project(cam, h.x - hw, h.y - hw, posture.eye),
-              project(cam, h.x + hw, h.y - hw, posture.eye),
-              project(cam, h.x + hw, h.y + hw, posture.top),
-              project(cam, h.x - hw, h.y + hw, posture.top)];
-  if (!hq.some((v) => !v)) {
-    out.push({ pts: hq, fill: colour, stroke: "#1a1f24", round: true,
-               depth: Math.min(...hq.map((v) => v.depth)) - 0.02 });
+  // Legs: the far half, narrower and lower.
+  box(out, cam, fwd(-ft(1.55)), { len: ft(2.9), wide: W * 0.72,
+    z0: 0, z1: ft(0.62), facing, fill: shadeHex(colour, 0.72) });
+  // Torso: the near half, wider and taller — a chest off the floor.
+  box(out, cam, fwd(ft(0.55)), { len: ft(2.3), wide: W,
+    z0: 0, z1: ft(0.95), facing, fill: colour });
+  // Head, proud at the front so which end is which is never in doubt.
+  headBlock(out, cam, fwd(ft(2.1)), colour, ft(0.3), ft(1.25), facing);
+  // Arms along the sides, which is what stops it reading as a box.
+  for (const side of [-1, 1]) {
+    const a = {
+      x: p.x + Math.cos(facing) * ft(0.5) - Math.sin(facing) * side * W * 0.92,
+      y: p.y + Math.sin(facing) * ft(0.5) + Math.cos(facing) * side * W * 0.92,
+    };
+    box(out, cam, a, { len: ft(2), wide: ft(0.42), z0: 0, z1: ft(0.5),
+      facing, fill: shadeHex(colour, 0.8) });
   }
 }
