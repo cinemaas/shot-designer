@@ -137,6 +137,26 @@ const salt = state.salt && !rekey
 const key = crypto.pbkdf2Sync(passphrase, salt, ITERATIONS, 32, "sha256");
 state.salt = salt.toString("base64");
 
+// Publishing is incremental, so a wrong passphrase wouldn't fail — it would
+// re-encrypt only the changed scenes with a key that doesn't match the rest,
+// and the library would half-open. Check against what's already published.
+const indexPath = join(DOCS, "library", "index.json");
+if (!rekey && existsSync(indexPath)) {
+  try {
+    const prev = JSON.parse(readFileSync(indexPath, "utf8"));
+    if (prev.data && prev.kdf?.salt === state.salt) {
+      const raw = Buffer.from(prev.data, "base64");
+      const d = crypto.createDecipheriv("aes-256-gcm", key, raw.subarray(0, 12));
+      d.setAuthTag(raw.subarray(raw.length - 16));
+      Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]);
+    }
+  } catch {
+    console.error("\nThat passphrase doesn't open the library that's already " +
+      "published.\nUse the right one, or --rekey to re-encrypt everything.");
+    process.exit(1);
+  }
+}
+
 function seal(plaintext) {
   const iv = crypto.randomBytes(12);
   const c = crypto.createCipheriv("aes-256-gcm", key, iv);
