@@ -473,7 +473,7 @@ function renderLensView() {
   // that the shot is empty, so say which and how far rather than nothing.
   const inFrame = objects().some((o) => o.tag === "Character" && (() => {
     const p = drawnPos(o);
-    const q = V3.project(view, p.x, p.y, V3.HEIGHTS.head);
+    const q = V3.project(view, p.x, p.y, V3.postureOf(o).eye);
     return q && Math.abs(q.u) <= 1;
   })());
   if (!inFrame) {
@@ -2826,6 +2826,11 @@ function showPopover(x, y, items) {
       b.append(t);
     }
     b.append(document.createTextNode(it.label));
+    if (it.tick) {
+      const c = document.createElement("span");
+      c.className = "k"; c.textContent = "✓";
+      b.append(c);
+    }
     if (it.key) {
       const k = document.createElement("span");
       k.className = "k"; k.textContent = it.key;
@@ -3217,6 +3222,12 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "female") ? "Make Male" : "Make Female", run: () => {
         mark("character"); H.set(obj, "female", !H.getBool(obj, "female")); draw();
       } },
+      { head: "Posture" },
+      ...Object.entries(V3.POSTURES).map(([key, spec]) => ({
+        label: spec.label,
+        tick: (H.get(obj, "posture") || "stand") === key,
+        run: () => setPosture(obj, key),
+      })),
       { head: "Colour" },
       ...CHARACTER_COLORS.map(([name, col], i) => ({
         label: name, swatch: "#" + col.toString(16).padStart(6, "0"),
@@ -3406,6 +3417,21 @@ function addMove(obj) {
   }
   S.sel = new Set([idOf(obj)]);
   reindex(); draw(); syncChrome();
+}
+
+/**
+ * Standing, sitting, or on the floor. It's not decoration: it sets the height
+ * the lens sees them at, and somebody lying down takes six feet of floor,
+ * which is the thing that decides whether the shot works.
+ */
+function setPosture(obj, key) {
+  mark("posture");
+  for (const id of (S.sel.has(idOf(obj)) ? S.sel : new Set([idOf(obj)]))) {
+    const o = byID(id);
+    if (o?.tag === "Character") H.set(o, "posture", key);
+  }
+  draw(); syncChrome();
+  toast(V3.POSTURES[key].label);
 }
 
 /** Pin this object here, at the slice you're currently parked on. */

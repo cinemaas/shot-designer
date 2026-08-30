@@ -45,6 +45,7 @@ The point of the exercise. All of it works.
 | `⌫` | Delete |
 | Arrows | Nudge 2 units, `⇧` for 20 |
 | `[` `]` | Rotate 15° |
+| `M` | Give it a move, or pin the current position |
 | Drag box edges | Squeeze / stretch one axis (corner + `⇧` keeps the shape) |
 | `⌘S` `⇧⌘S` `⌘O` `⌘N` | Save, Save As, Open, New |
 | `⌘E` | Export PNG |
@@ -69,6 +70,26 @@ the numbers people type into labels (`1,4`, `5/6`) say which beat each position
 belongs to. Blocking mode reads both, works out the beats, and lets you step
 through them one at a time with `←` `→`. Earlier positions ghost back so you can
 still see the path. Nothing to set up: it reads scenes you already made.
+
+**Moves you set after the fact.** A camera move used to mean duplicating the
+camera and joining the copies with track, which meant play slid the original
+onto a parked twin. Now a move lives on the object itself as `posMarks` — a
+position per time slice, holding x, y and facing. `M` (or **Add a Move…**) pins
+where it stands as position 1 and drops you on slice 2; drag it and that becomes
+position 2. From then on dragging while parked on a slice re-pins that position.
+The move draws on the plan as a dashed numbered run in the object's own colour,
+and play runs the playhead as a float so things travel and turn rather than
+teleport. Track is for dollies now, and deleting a camera takes its dolly, that
+dolly's track, and any arrows and labels hanging off it.
+
+Nothing in the 376-scene library uses `numSnapshot` > 1, so there was no
+ground-truth file for this — `posMarks` is our own field, which means these
+scenes still open in the original, just without the move.
+
+**Posture.** People stand, sit or lie down. It sets the height the lens sees
+them at and the floor they occupy: someone lying down is drawn at their real six
+feet, pointed the way they're facing, and a seated figure gets a chair bracket.
+Both the plan and the through-the-lens view read from the same numbers.
 
 **Readable labels.** Shot descriptions get dropped where there's room at the
 time and end up stacked on top of each other once a scene has twenty cameras in
