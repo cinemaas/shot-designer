@@ -114,6 +114,18 @@ view, room size off the drawn walls, and every person in frame with distance,
 framing, facing and posture. All measured, none of it invented, so the frame
 and the words can go to an image model together.
 
+**Camera moves are a chain, like Walk To.** `Move To…` drops another camera at
+each click, numbered and linked, position 1 staying put. Each is a real object
+you can grab, drag, swing and re-height whenever you like — the point being
+that you can change your mind. Playback carries the whole pose between
+positions: it travels, pans, rises and tilts. Verified halfway between
+positions 2 and 3 at pan −22°, 9 ft, −14°.
+
+**A cast.** Characters carry a `castName` that draws under them (upright
+whatever their facing) and is what the AI brief calls them. Naming somebody
+saves them, so Add Character offers them by name and drops them in already
+coloured and cast.
+
 **Flying the camera.** The lens panel carries Height, Tilt and Pan sliders that
 drive the real camera, so the overhead follows as you drag and a camera with a
 move keeps whatever you land on. Swivelling works three ways — the handle,

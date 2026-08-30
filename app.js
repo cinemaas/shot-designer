@@ -334,6 +334,7 @@ function slicePositions() {
 
     const here = leg === 0 ? start : legs[leg - 1].to;
     const arrived = f >= 1;
+    const dest = legs[leg].to;
 
     // Everything the walker is standing in for steps aside. Once they've
     // arrived it's the position itself that shows, so the number under it is
@@ -342,7 +343,20 @@ function slicePositions() {
     S.hidden.add(idOf(start));
     const walker = arrived ? legs[leg].to : here;
     S.hidden.delete(idOf(walker));
-    if (!arrived) moves.set(idOf(walker), alongPath(legs[leg].route(here), f));
+    if (!arrived) {
+      // A camera doesn't just travel between positions, it swings, rises and
+      // tilts between them — so the whole pose crosses, not only the point.
+      const pose = { ...alongPath(legs[leg].route(here), f) };
+      if (R.hasRotator(here) && R.hasRotator(dest)) {
+        pose.a = lerpAngle(R.angleOf(here), R.angleOf(dest), f);
+      }
+      if (here.tag === "Camera" && dest.tag === "Camera") {
+        const h0 = lensFtOf(here), h1 = lensFtOf(dest);
+        pose.h = h0 + (h1 - h0) * f;
+        pose.tilt = lerpAngle(V3.tiltOf(here), V3.tiltOf(dest), f);
+      }
+      moves.set(idOf(walker), pose);
+    }
   }
   return moves;
 }
@@ -718,7 +732,7 @@ function renderLensView() {
     const note = document.createElement("div");
     note.className = "cap warn";
     note.textContent = near
-      ? `Nobody in frame — nearest is ${H.get(near.o, "colorName")} at ` +
+      ? `Nobody in frame — nearest is ${nameOf(near.o)} at ` +
         `${feet(near.d)}. On a ${mm || 32}mm that's inside the minimum.`
       : "Nobody in frame";
     box.append(note);
@@ -739,15 +753,17 @@ function renderLensView() {
     out.className = "v"; out.textContent = fmt(value);
     const i = document.createElement("input");
     i.type = "range"; i.min = min; i.max = max; i.step = step; i.value = value;
+    let queued = null;
     i.oninput = () => {
       const v = parseFloat(i.value);
       out.textContent = fmt(v);
       apply(v);
-      // Keep a marked camera's current position in step as you fly it.
-      if (marksOf(cam).length >= 2) setMark(cam, S.slice + 1);
-      draw();
+      // One redraw a frame, however fast the slider moves — a whole scene
+      // redrawn per input event is what made dragging these feel like glue.
+      if (queued == null) queued = requestAnimationFrame(() => { queued = null; draw(); });
     };
     i.onpointerdown = () => mark("camera");
+    i.onchange = () => { draw(); syncChrome(); };
     line.append(name, i, out);
     flyer.append(line);
   };
@@ -861,7 +877,7 @@ function shotBrief(cam, view, mm, fmt, lensFt) {
       const side = Math.abs(off) < 0.08 ? "centre frame"
         : off < 0 ? "frame left" : "frame right";
       const posture = V3.postureOf(o).label.toLowerCase();
-      return `${H.get(o, "colorName") || "someone"} — ${posture}, ${side}, ` +
+      return `${nameOf(o)} — ${posture}, ${side}, ` +
              `${feet(dist)} from lens, ${facing}`;
     })
     .filter(Boolean);
@@ -2060,7 +2076,7 @@ function cancelTool() {
 
 // Walls come in runs, so that tool stays armed. Everything else is one shot:
 // you asked for a walk arrow, you got a walk arrow, you are back to normal.
-const ONE_SHOT = new Set(["walk", "axis", "track"]);
+const ONE_SHOT = new Set(["walk", "axis", "track", "move"]);
 
 /** Commit what's being drawn. Disarms unless the tool is meant to repeat. */
 function finishTool() {
@@ -3476,7 +3492,7 @@ function mainMenu(x, y) {
 function addMenu(x, y, at) {
   showPopover(x, y, [
     { head: "Add New" },
-    { label: "Add Character…", run: () => addCharacter(at) },
+    { label: "Add Character…", run: () => castMenu(x, y, at) },
     { label: "Add Camera…", run: () => addCamera(at) },
     { label: "Add Prop…", run: () => palette("Prop", PROPS, "GenericProp", at, x, y) },
     { label: "Add Furniture…", run: () =>
@@ -3555,6 +3571,125 @@ function thumbFor(key, tag = "GenericProp") {
   svg.append(f);
   document.body.append(svg);
 })();
+
+// ---------------------------------------------------------------- the cast
+
+/**
+ * People you work with again and again. A character carries a `castName`, and
+ * the names you've used are kept so you can drop that exact person into any
+ * scene already coloured and cast. Colours run out long before names do, which
+ * is the whole reason for this — and the brief reads far better for it.
+ */
+const CAST_KEY = "cast";
+let CAST = [];
+
+async function loadCast() {
+  try { CAST = (await api("/api/data?key=" + CAST_KEY)).value || []; }
+  catch { CAST = []; }
+}
+
+async function saveCast() {
+  try {
+    await api("/api/data", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: CAST_KEY, value: CAST }),
+    });
+  } catch { /* the names still live on the objects */ }
+}
+
+/** Remember this person, or update them if the name is already on the list. */
+function rememberCast(entry) {
+  const i = CAST.findIndex((c) => c.name.toLowerCase() === entry.name.toLowerCase());
+  if (i >= 0) CAST[i] = entry; else CAST.push(entry);
+  saveCast();
+}
+
+const castOfObj = (o) => ({
+  name: (H.get(o, "castName") || "").trim(),
+  color: H.getNum(o, "color", 0xfc837b),
+  colorName: H.get(o, "colorName") || "",
+  colorIndex: H.getNum(o, "colorIndex", 0),
+  female: H.getBool(o, "female"),
+});
+
+/** What to call somebody: their name if they have one, else their colour. */
+const nameOf = (o) => (H.get(o, "castName") || "").trim() ||
+  H.get(o, "colorName") || "someone";
+
+function nameCharacter(obj) {
+  sheet({
+    title: "Name",
+    sub: "Used on the plan and in the AI brief.",
+    fields: [{ name: "n", label: "Character name", type: "text",
+               value: H.get(obj, "castName") || "" }],
+    onOK: ({ n }) => {
+      mark("name");
+      H.set(obj, "castName", n.trim());
+      if (n.trim()) rememberCast(castOfObj(obj));
+      draw(); syncChrome();
+    },
+  });
+}
+
+/** Drop somebody from the cast, already coloured and cast. */
+function addFromCast(entry, at) {
+  mark("add " + entry.name);
+  const c = H.makeCharacter(round(at.x), round(at.y), {
+    color: entry.color, colorName: entry.colorName,
+    colorIndex: entry.colorIndex, female: entry.female,
+  });
+  H.set(c, "castName", entry.name);
+  canvas().children.push(c);
+  reindex(); S.sel = new Set([idOf(c)]);
+  draw(); syncChrome();
+}
+
+function castMenu(x, y, at) {
+  const items = [{ head: "Cast" }];
+  for (const e of CAST) {
+    items.push({
+      label: e.name,
+      swatch: "#" + (e.color >>> 0).toString(16).padStart(6, "0"),
+      run: () => addFromCast(e, at),
+    });
+  }
+  if (!CAST.length) {
+    items.push({ label: "No one saved yet", disabled: true });
+  }
+  items.push("-", { label: "Someone New…", run: () => addCharacter(at) });
+  if (CAST.length) {
+    items.push({ label: "Edit Cast…", run: () => editCast() });
+  }
+  showPopover(x, y, items);
+}
+
+function editCast() {
+  if (!CAST.length) return toast("Nobody saved yet");
+  sheet({
+    title: "Cast",
+    sub: "One per line: name, colour. Delete a line to drop them.",
+    fields: [{ name: "list", label: "", type: "textarea", cls: "brief",
+               value: CAST.map((c) => `${c.name}, ${c.colorName}${c.female ? ", f" : ""}`).join("\n") }],
+    onOK: ({ list }) => {
+      const kept = [];
+      for (const line of list.split("\n")) {
+        const [name, colour, gender] = line.split(",").map((t) => t.trim());
+        if (!name) continue;
+        const was = CAST.find((c) => c.name.toLowerCase() === name.toLowerCase());
+        const found = CHARACTER_COLORS.findIndex(([n]) =>
+          n.toLowerCase() === (colour || "").toLowerCase());
+        const i = found >= 0 ? found : (was ? was.colorIndex : kept.length % CHARACTER_COLORS.length);
+        kept.push({
+          name, colorIndex: i,
+          colorName: CHARACTER_COLORS[i][0], color: CHARACTER_COLORS[i][1],
+          female: gender ? /^f/i.test(gender) : !!(was && was.female),
+        });
+      }
+      CAST = kept; saveCast();
+      toast(`${CAST.length} in the cast`);
+    },
+  });
+}
 
 function addCharacter(at) {
   const used = objects().filter((o) => o.tag === "Character").length;
@@ -3814,6 +3949,9 @@ function objectMenu(obj, x, y) {
   if (tag === "Character") {
     return showPopover(x, y, [
       { head: "Edit Character" },
+      { label: (H.get(obj, "castName") || "").trim()
+          ? `Rename “${H.get(obj, "castName")}”…` : "Name…",
+        run: () => nameCharacter(obj) },
       { label: "Walk To…", run: () => startFromHere("walk", obj) },
       ...moveItems(obj),
       { label: "Axis Line To…", run: () => startFromHere("axis", obj) },
@@ -3846,7 +3984,8 @@ function objectMenu(obj, x, y) {
     return showPopover(x, y, [
       { head: "Edit Camera" },
       { label: shot ? "Edit Shot Description…" : "Shot Description…", run: () => shotDescription(obj) },
-      ...moveItems(obj),
+      { label: "Move To…", run: () => startFromHere("move", obj) },
+      ...(marksOf(obj).length >= 2 ? [{ label: "Clear Move", run: () => dropMove(obj) }] : []),
       { label: "Add Label…", run: () => attachLabel(obj) },
       "-",
       { label: "Height & Tilt…", run: () => cameraRig3D(obj) },
@@ -4124,9 +4263,11 @@ function startFromHere(tool, obj) {
   S.tool = tool;
   S.chain = { source: idOf(obj), last: idOf(obj), placed: 0 };
   stage.classList.add("drawing");
-  toast(tool === "track"
-    ? "Click where the camera goes next — keep clicking, ⏎ when done"
-    : "Click where they walk to — keep clicking, ⏎ when done");
+  toast(tool === "move"
+    ? "Click where the camera goes next — drop as many as you like, ⏎ when done"
+    : tool === "track"
+      ? "Click where the camera goes next — keep clicking, ⏎ when done"
+      : "Click where they walk to — keep clicking, ⏎ when done");
   draw(); syncChrome();
 }
 
@@ -4141,9 +4282,12 @@ function placeChainPoint(pt) {
   H.set(copy, "x", round(pt.x));
   H.set(copy, "y", round(pt.y));
 
-  // Face the way they were travelling, which is nearly always right.
-  const a = Math.atan2(pt.y - H.getNum(last, "y"), pt.x - H.getNum(last, "x"));
-  if (R.hasRotator(copy)) R.setAngle(copy, a);
+  // People turn to face the way they're going. A camera doesn't: it arrives
+  // pointing where you left it pointing, and you swing it from there — which
+  // is the whole point of being able to change your mind at each position.
+  if (R.hasRotator(copy) && S.tool !== "move") {
+    R.setAngle(copy, Math.atan2(pt.y - H.getNum(last, "y"), pt.x - H.getNum(last, "x")));
+  }
 
   // Number the positions as the original does, so the chain reads 1, 2, 3.
   const slices = timeSlices();
@@ -4156,7 +4300,7 @@ function placeChainPoint(pt) {
   }
   canvas().children.push(copy);
 
-  const tag = S.tool === "track" ? "Track" : "WalkArrow";
+  const tag = S.tool === "track" ? "Track" : "WalkArrow";   // a move path is an arrow too
   const arrow = H.makePath(tag, [
     { x: H.getNum(last, "x"), y: H.getNum(last, "y") },
     { x: round(pt.x), y: round(pt.y) },
@@ -5814,4 +5958,5 @@ async function openShared(shareId) {
 }
 
 // Exposed for quick console poking while iterating.
+loadCast();
 window.SD = { S, H, R, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };
