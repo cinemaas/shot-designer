@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=36f83227";
-import * as R from "./render.js?v=36f83227";
-import { UNITS_PER_FOOT } from "./catalog.js?v=36f83227";
-import { fieldOfView } from "./optics.js?v=36f83227";
+import * as H from "./hcw.js?v=04ff3e0f";
+import * as R from "./render.js?v=04ff3e0f";
+import { UNITS_PER_FOOT } from "./catalog.js?v=04ff3e0f";
+import { fieldOfView } from "./optics.js?v=04ff3e0f";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -39,6 +39,22 @@ const PROP_HEIGHT = {
   TRIPOD: 4.5, HIHAT: 0.8, DOLLY: 1.5, DOLLYJIB: 1.5, SLIDER: 3.5,
   JIB: 4, STEADICAM: 4.5,
 };
+
+/**
+ * How somebody is carrying themselves. Heights are the real ones: a seated
+ * head tops out around 4'4" off an 18" chair, and a person on the floor is
+ * about six feet of floor and a foot tall — which is the bit that matters,
+ * because it's floor space the plan has to show and the lens has to clear.
+ */
+export const POSTURES = {
+  stand: { label: "Standing", eye: ft(4.9), top: ft(5.75), lying: false },
+  sit:   { label: "Sitting",  eye: ft(3.6), top: ft(4.35), lying: false },
+  lie:   { label: "Lying Down", eye: ft(0.75), top: ft(1.15), lying: true,
+           length: ft(6), width: ft(1.7) },
+};
+
+export const postureOf = (obj) =>
+  POSTURES[H.get(obj, "posture") || "stand"] || POSTURES.stand;
 
 const heightOf = (obj) => {
   const key = H.get(obj, "objectKey");
@@ -124,7 +140,7 @@ export function build(cam, objects, scene, opts = {}) {
       const p = opts.posOf ? opts.posOf(o) : { x: H.getNum(o, "x"), y: H.getNum(o, "y") };
       const colour = "#" + (H.getNum(o, "color", 0xbbbbbb) >>> 0 & 0xffffff)
         .toString(16).padStart(6, "0");
-      figure(out, cam, p, colour, H.getBool(o, "female"));
+      figure(out, cam, p, colour, H.getBool(o, "female"), postureOf(o), R.angleOf(o) || 0);
       continue;
     }
 
@@ -152,8 +168,10 @@ export function build(cam, objects, scene, opts = {}) {
   return out.sort((a, b) => b.depth - a.depth);
 }
 
-/** A person: a body slab facing the camera, with a head on top. */
-function figure(out, cam, p, colour, female) {
+/** A person: a body slab facing the camera, with a head on top — or, if
+ *  they're on the floor, a low box lying the way they're pointed. */
+function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0) {
+  if (posture.lying) return lying(out, cam, p, colour, posture, facing);
   const halfW = ft(0.85);
   // Face the slab at the camera so it always reads as a person.
   const toCam = Math.atan2(cam.y - p.y, cam.x - p.x) + Math.PI / 2;
@@ -161,7 +179,7 @@ function figure(out, cam, p, colour, female) {
   const b = { x: p.x - Math.cos(toCam) * halfW, y: p.y - Math.sin(toCam) * halfW };
 
   const body = [project(cam, a.x, a.y, 0), project(cam, b.x, b.y, 0),
-                project(cam, b.x, b.y, HEIGHTS.head), project(cam, a.x, a.y, HEIGHTS.head)];
+                project(cam, b.x, b.y, posture.eye), project(cam, a.x, a.y, posture.eye)];
   if (body.some((q) => !q)) return;
   out.push({ pts: body, fill: colour, stroke: "#1a1f24",
              depth: (body[0].depth + body[1].depth) / 2 });
@@ -169,11 +187,45 @@ function figure(out, cam, p, colour, female) {
   const hr = ft(0.42);
   const ha = { x: p.x + Math.cos(toCam) * hr, y: p.y + Math.sin(toCam) * hr };
   const hb = { x: p.x - Math.cos(toCam) * hr, y: p.y - Math.sin(toCam) * hr };
-  const head = [project(cam, ha.x, ha.y, HEIGHTS.head),
-                project(cam, hb.x, hb.y, HEIGHTS.head),
-                project(cam, hb.x, hb.y, HEIGHTS.person),
-                project(cam, ha.x, ha.y, HEIGHTS.person)];
+  const head = [project(cam, ha.x, ha.y, posture.eye),
+                project(cam, hb.x, hb.y, posture.eye),
+                project(cam, hb.x, hb.y, posture.top),
+                project(cam, ha.x, ha.y, posture.top)];
   if (head.some((q) => !q)) return;
   out.push({ pts: head, fill: colour, stroke: "#1a1f24", round: true,
              depth: (head[0].depth + head[1].depth) / 2 - 0.02 });
+}
+
+/** Somebody on the floor: a six-foot box along their facing, head at the front. */
+function lying(out, cam, p, colour, posture, facing) {
+  const L = posture.length / 2, W = posture.width / 2;
+  const cs = Math.cos(facing), sn = Math.sin(facing);
+  const at = (lx, ly) => ({ x: p.x + lx * cs - ly * sn, y: p.y + lx * sn + ly * cs });
+  const corners = [at(-L, -W), at(L, -W), at(L, W), at(-L, W)];
+
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i], b = corners[(i + 1) % 4];
+    const q = [project(cam, a.x, a.y, 0), project(cam, b.x, b.y, 0),
+               project(cam, b.x, b.y, posture.eye), project(cam, a.x, a.y, posture.eye)];
+    if (q.some((v) => !v)) continue;
+    out.push({ pts: q, fill: colour, stroke: "#1a1f24",
+               depth: (q[0].depth + q[1].depth) / 2 });
+  }
+  const top = corners.map((c) => project(cam, c.x, c.y, posture.eye));
+  if (!top.some((v) => !v)) {
+    out.push({ pts: top, fill: colour, stroke: "#1a1f24",
+               depth: Math.min(...top.map((v) => v.depth)) - 0.01 });
+  }
+
+  // The head, so you can tell which end is which down the lens.
+  const h = at(L - ft(0.45), 0);
+  const hw = ft(0.42);
+  const hq = [project(cam, h.x - hw, h.y - hw, posture.eye),
+              project(cam, h.x + hw, h.y - hw, posture.eye),
+              project(cam, h.x + hw, h.y + hw, posture.top),
+              project(cam, h.x - hw, h.y + hw, posture.top)];
+  if (!hq.some((v) => !v)) {
+    out.push({ pts: hq, fill: colour, stroke: "#1a1f24", round: true,
+               depth: Math.min(...hq.map((v) => v.depth)) - 0.02 });
+  }
 }

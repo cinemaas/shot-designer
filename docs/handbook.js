@@ -76,6 +76,16 @@ marks rather than jumping. People work the same way.</p>
 <p>Dragging the end of a walk arrow <b>walks the person on it</b> rather than
 leaving the arrow pointing at nobody — either end, coming or going. The arrow
 keeps its clearance from them as they go.</p>
+<h4>Standing, sitting, on the floor</h4>
+<p>Right-click a person for <b>Posture</b>. It isn't decoration — it sets the
+height the lens sees them at (a seated head tops out around 4'4", a standing one
+at 5'9") and it changes the floor they take up. Somebody lying down is drawn at
+their real six feet, pointed the way they're facing, because on a plan the floor
+space is the whole argument. Select several people first and the choice applies
+to all of them.</p>
+<p>A seated figure gets a chair bracket behind them in furniture grey. Look
+through the lens with <kbd>V</kbd> and the three read at their proper
+heights — which is usually how you find out the camera needs to come down.</p>
 <p>A selected prop gets a box in its own rotated frame with three handles: one
 edge for <b>width</b>, one for <b>depth</b>, and the corner for <b>both</b>.
 Hold <kbd>⇧</kbd> on the corner to keep its shape. So a table can be made long

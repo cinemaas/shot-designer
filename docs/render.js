@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=36f83227";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=36f83227";
-import { EXTRA_SVG } from "./props.js?v=36f83227";
-import { GAUGE } from "./track.js?v=36f83227";
-import * as H from "./hcw.js?v=36f83227";
+import { FXG } from "./assets.js?v=04ff3e0f";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=04ff3e0f";
+import { EXTRA_SVG } from "./props.js?v=04ff3e0f";
+import { GAUGE } from "./track.js?v=04ff3e0f";
+import * as H from "./hcw.js?v=04ff3e0f";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -233,9 +233,57 @@ function drawPlanFigure(obj, color, female) {
 function drawCharacter(obj) {
   const color = hexOf(H.getNum(obj, "color", 0xfc837b));
   const female = H.getBool(obj, "female");
-  if (figureStyle === "disc") return drawDisc(obj, color, female);
-  if (figureStyle === "figure") return drawFigure(obj, color, female);
-  return drawPlanFigure(obj, color, female);
+  const posture = H.get(obj, "posture") || "stand";
+  // Somebody on the floor takes six feet of it, and that's the whole reason
+  // the plan exists — so the plan draws them lying down, not as a dot.
+  if (posture === "lie") return drawLying(obj, color, female);
+  const g = figureStyle === "disc" ? drawDisc(obj, color, female)
+    : figureStyle === "figure" ? drawFigure(obj, color, female)
+    : drawPlanFigure(obj, color, female);
+  if (posture === "sit") g.prepend(seatBack(color));
+  return g;
+}
+
+/**
+ * The seat under somebody sitting: a bracket open towards their face, drawn in
+ * furniture grey rather than their own colour so it reads as a chair and not
+ * as a second body.
+ */
+function seatBack(color) {
+  const r = PLAN_SHOULDER + 5;
+  return el("path", {
+    d: `M4,${-r} L-21,${-r} L-21,${r} L4,${r}`,
+    fill: "none", stroke: INK, "stroke-width": 4,
+    "stroke-linecap": "round", "stroke-linejoin": "round", opacity: 0.75,
+  });
+}
+
+/**
+ * A person on the floor, at their real length along their facing: six feet
+ * from heel to crown, with the head proud at the front so you can tell which
+ * way they're pointed. It's the floor space that matters on a plan.
+ */
+function drawLying(obj, color, female) {
+  const g = el("g");
+  const HALF = 20 * 3;                       // six feet, at 20 units to the foot
+  const W = 20 * 0.8;                        // shoulders, lying down
+  const neck = HALF - PLAN_HEAD * 2 - 2;     // where the body stops
+
+  g.append(el("rect", {
+    x: -HALF, y: -W, width: HALF + neck, height: W * 2, rx: W,
+    fill: shade(color, 0.74), stroke: INK, "stroke-width": 2.6,
+  }));
+  if (female) {
+    g.append(el("ellipse", {
+      cx: HALF - PLAN_HEAD - 3.5, cy: 0, rx: PLAN_HEAD + 1, ry: PLAN_HEAD + 5,
+      fill: shade(color, 0.5), stroke: INK, "stroke-width": 2.4,
+    }));
+  }
+  g.append(el("circle", {
+    cx: HALF - PLAN_HEAD, cy: 0, r: PLAN_HEAD,
+    fill: color, stroke: INK, "stroke-width": 2.6,
+  }));
+  return g;
 }
 
 // Body, pinch, then the field-of-view flare — traced from an exported diagram.
@@ -621,6 +669,7 @@ export function artBounds(key) {
 export function radiusOf(obj) {
   const s = Math.max(H.getNum(obj, "objectScaleX", 1), H.getNum(obj, "objectScaleY", 1));
   if (obj.tag === "Character") {
+    if (H.get(obj, "posture") === "lie") return 20 * 3;    // six feet of them
     if (figureStyle === "disc") return CHAR_R + STROKE / 2;
     if (figureStyle === "figure") return SHOULDER_ACROSS + STROKE / 2;
     return PLAN_SHOULDER + 3;
