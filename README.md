@@ -160,6 +160,21 @@ Rows reorder, duplicate one step tighter (`MCU` → `CU` → `ECU`), and rename 
 place. **Export CSV** gives the AD something they can open. Lens chips are in
 the order you actually use them — 50, 85, 32, 24, 135.
 
+**Seeing what the lens sees.** **Lens coverage** draws each camera's wedge at
+the real angle for its focal length on the body in your package. **Through the
+lens** (`V`) gives a rough view from the selected camera — walls at nine feet,
+people at five foot nine, furniture at furniture heights, updating as you drag.
+Grey boxes, deliberately: it answers "is she behind the sofa", not "what does
+the film look like". It only tells the truth on a plan drawn to distance, and
+says so when it isn't.
+
+**Getting a plan to scale.** **Set Scale…** on a background image: draw a line
+along something whose length you know and say what it is. The image resizes so
+the grid is true and everything measured off it becomes real.
+
+**Storyboards.** Frames pinned to a plan draw in their black surround with their
+caption — 73 of them in this library were previously invisible.
+
 **Pages.** A scene can hold several plans of the same set — blocking on one,
 lighting on another. The original stores this per object and 365 objects in this
 library use it, so scenes that were already paged now open paged instead of

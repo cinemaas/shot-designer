@@ -387,3 +387,17 @@ body.view-only #stage { cursor: grab; }
 }
 #trackPanel .pieces button:hover { background: var(--hover); }
 #trackPanel .pieces button.drop { margin-left: 6px; color: var(--dim); }
+
+/* --- through the lens ----------------------------------------------------- */
+
+#lensview {
+  position: absolute; right: 12px; bottom: calc(var(--bar-h) + 12px); z-index: 6;
+  background: var(--sheet); border: 1px solid var(--hair); border-radius: 8px;
+  padding: 7px 7px 5px; box-shadow: 0 4px 18px #00000030;
+}
+#lensview svg { display: block; border-radius: 3px; }
+#lensview .cap {
+  font-size: 11px; color: var(--dim); padding: 5px 2px 1px;
+  font-variant-numeric: tabular-nums;
+}
+#lensview .cap.warn { color: #b4601f; max-width: 320px; line-height: 1.35; }

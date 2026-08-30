@@ -57,7 +57,7 @@ export const hasScaler = (obj) =>
 
 export const POINT_TAGS = new Set(["Wall", "Track", "AxisLine", "WalkArrow", "SpeedRail"]);
 export const GENERIC_TAGS = new Set(["GenericSet", "GenericLight", "GenericProp"]);
-export const PICTURE_TAGS = new Set(["Background", "ImageProp"]);
+export const PICTURE_TAGS = new Set(["Background", "ImageProp", "Storyboard"]);
 export const LABEL_TAGS = new Set(["Caption", "ShotVersion"]);
 
 export const pointsOf = (obj) =>
@@ -87,6 +87,7 @@ export function layerOf(objOrTag) {
 
 function layerForTag(tag) {
   if (tag === "ImageProp") return "prop";
+  if (tag === "Storyboard") return "storyboard";
   if (tag === "Camera") return "camera";
   if (tag === "Character") return "character";
   if (tag === "Track" || tag === "SpeedRail") return "track";
@@ -438,6 +439,39 @@ function drawBackground(obj, pictures) {
   return g;
 }
 
+/** A storyboard frame pinned to the plan, in its black surround. */
+function drawStoryboard(obj, pictures) {
+  const g = el("g");
+  const data = pictures[H.get(obj, "pictureUniqueID")];
+  const W = 320, HGT = 180;
+  if (H.getBool(obj, "blackFrame", true)) {
+    g.append(el("rect", {
+      x: -W / 2 - 7, y: -HGT / 2 - 7, width: W + 14, height: HGT + 14,
+      fill: "#16181a", rx: 3,
+    }));
+  }
+  if (data) {
+    g.append(el("image", {
+      href: data.startsWith("data:") ? data : `data:${mimeOf(data)};base64,` + data,
+      x: -W / 2, y: -HGT / 2, width: W, height: HGT,
+      preserveAspectRatio: "xMidYMid slice",
+    }));
+  } else {
+    g.append(el("rect", { x: -W / 2, y: -HGT / 2, width: W, height: HGT,
+      fill: "#40474e" }));
+  }
+  const cap = H.get(obj, "captionText");
+  if (cap) {
+    const t = el("text", {
+      x: 0, y: HGT / 2 + 26, "text-anchor": "middle", fill: LABEL_NAVY,
+      "font-size": 15, "font-family": "Helvetica, Arial, sans-serif",
+    });
+    t.textContent = cap;
+    g.append(t);
+  }
+  return g;
+}
+
 /** Captions and shot labels: a navy header chip over navy body text. */
 function drawLabel(obj, scene, opts = {}) {
   const g = el("g");
@@ -525,6 +559,7 @@ export function drawObject(obj, scene, opts = {}) {
   else if (tag === "Camera") art = drawCamera(obj);
   else if (GENERIC_TAGS.has(tag)) art = drawGeneric(obj);
   else if (POINT_TAGS.has(tag)) art = drawPathObject(obj);
+  else if (tag === "Storyboard") art = drawStoryboard(obj, scene.pictures);
   else if (PICTURE_TAGS.has(tag)) art = drawBackground(obj, scene.pictures);
   else if (LABEL_TAGS.has(tag)) art = drawLabel(obj, scene, opts);
   else art = el("g");
@@ -595,5 +630,6 @@ export function radiusOf(obj) {
     return Math.max(10, Math.hypot(b.width, b.height) / 2 * s);
   }
   if (obj.tag === "ImageProp") return 60 * s;
+  if (obj.tag === "Storyboard") return 180 * s;
   return 34 * s;
 }

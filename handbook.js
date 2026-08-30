@@ -196,6 +196,34 @@ which is usually what the second shot is. Double-click a row to rename it.
 <b>Export CSV</b> gives the AD something they can open.</p>`,
   },
   {
+    id: "lens",
+    title: "Seeing what the lens sees",
+    body: `
+<p>Two things that turn a plan into something you can argue about with a
+director. Both are under <b>Layers</b> (<kbd>L</kbd>), and both are off until
+you want them.</p>
+<h4>Lens coverage</h4>
+<p>Draws the wedge each camera actually covers, at the real angle for that focal
+length on the body in your package — a 50 on Super35 is about 27°. Watching the
+wedge land on somebody or miss them settles it faster than talking about it.
+A camera only draws a wedge once it has a lens.</p>
+<h4>Through the lens</h4>
+<p><kbd>V</kbd>, then pick a camera. A rough view from where it stands: walls at
+nine feet, people at five foot nine, furniture at the heights furniture has.
+Grey boxes and simple figures, updating as you drag. It's for answering "is she
+behind the sofa" in ten seconds, not for looking like the film.</p>
+<p>It only tells the truth if the plan is drawn to distance. A schematic where
+the camera sits a foot from the actor will show an empty frame — and it says so,
+with how far away the nearest person actually is, rather than leaving you
+guessing.</p>
+<h4>Getting a plan to scale</h4>
+<p>Which is what <b>Set Scale…</b> on a background image is for. Drop in a
+blueprint or a map, draw a line along something you know — a doorway, a scale
+bar, the length of a car — and say what it really is. The image resizes so the
+grid is true, and from then on everything measured off it is real: track
+lengths, lens choices, whether the dolly fits.</p>`,
+  },
+  {
     id: "blocking",
     title: "Blocking",
     body: `
@@ -227,7 +255,9 @@ a page you're handing to someone who just needs to see where the cameras are.</d
 on screen; this writes those nudges into the scene so they survive an export.</dd>
 </dl>
 <p><b>Layers</b> (<kbd>L</kbd>) turns whole categories down — lighting, grip,
-walk arrows — when you want the diagram to say one thing.</p>
+walk arrows, storyboard frames — when you want the diagram to say one thing.
+Storyboard frames you've pinned to a plan draw in their black surround with
+their caption underneath.</p>
 <h4>Locking what you've already built</h4>
 <p>Clicking a layer cycles it through three states: <b>shown</b>, <b>shown but
 locked</b>, and <b>hidden</b>. Locked is the one you'll live in — the set stays

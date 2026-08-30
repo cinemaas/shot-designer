@@ -8,6 +8,8 @@ import * as B from "./blocking.js";
 import { byCategory, EXTRA_LABEL } from "./props.js";
 import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js";
 import { HANDBOOK } from "./handbook.js";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js";
+import * as V3 from "./view3d.js";
 import * as TR from "./track.js";
 import * as RIG from "./rigs.js";
 import { Cloud, sceneId, connectLive } from "./storage.js";
@@ -39,6 +41,8 @@ const S = {
   blocking: false,       // step through the staging one beat at a time
   beat: 1,
   page: 1,               // scenes can hold several pages of the same set
+  coverage: false,       // draw what each lens actually sees
+  lensView: false,       // the rough view through the selected camera
   info: null,            // derived beat structure
   ghosts: true,
   compactLabels: false,
@@ -179,7 +183,8 @@ function visibleAt(obj, slice) {
 
 const LAYER_G = Object.fromEntries(
   ["grid", "background", "set", "track", "prop", "lighting", "lines", "walk",
-   "rig", "character", "camera", "caption", "overlay"].map((k) => [k, $("#l-" + k)])
+   "rig", "character", "camera", "caption", "storyboard", "overlay"]
+    .map((k) => [k, $("#l-" + k)])
 );
 
 function draw() {
@@ -239,6 +244,8 @@ function draw() {
     g.append(node);
   }
   drawRigArms();
+  drawCoverage();
+  renderLensView();
   if (!S.blocking) drawPositionBadges();
   declutterLabels();
   drawSelection();
@@ -251,6 +258,128 @@ function draw() {
  * the scene itself is untouched — and stretch each leader line to follow.
  */
 /** The physical link: a jib arm, or the post a camera sits on. */
+/**
+ * What the lens actually sees, on the plan. The angle is the real one for that
+ * focal length on the format in your package — a 50 on Super35 is about 27°,
+ * and seeing that wedge land on or miss somebody settles an argument faster
+ * than talking about it.
+ */
+/**
+ * What the selected camera roughly sees. Grey boxes and simple figures at the
+ * right heights — enough to answer "is she behind the sofa" in the moment,
+ * which is the whole point of standing next to a director with a plan.
+ */
+function renderLensView() {
+  const box = $("#lensview");
+  if (!box) return;
+  const sel = S.sel.size === 1 ? byID([...S.sel][0]) : null;
+  const cam = sel && sel.tag === "Camera" ? sel
+    : sel && sel.tag === "ShotVersion" ? byID(H.get(sel, "attachObjectID")) : null;
+
+  if (!S.lensView || !cam || cam.tag !== "Camera") { box.hidden = true; return; }
+  box.hidden = false;
+  box.replaceChildren();
+
+  const fmt = packageFormat();
+  const shot = objects().find((o) => o.tag === "ShotVersion" &&
+    H.get(o, "attachObjectID") === idOf(cam));
+  const mm = shot ? parseFloat(H.get(shot, "versionLens")) || 0 : 0;
+  const view = V3.cameraAt(cam, fmt, mm, drawnPos(cam));
+
+  const W = 320, HGT = Math.round(W * (fmt.h / fmt.w));
+  const svg = R.el("svg", { viewBox: `0 0 ${W} ${HGT}`, width: W, height: HGT });
+  const toPx = (q) => [(q.u * 0.5 + 0.5) * W, (q.v * 0.5 + 0.5) * HGT];
+
+  // Sky and floor, split at the horizon.
+  const far = V3.project(view, view.x + Math.cos(view.yaw) * 100000,
+    view.y + Math.sin(view.yaw) * 100000, view.z);
+  const hz = far ? (far.v * 0.5 + 0.5) * HGT : HGT / 2;
+  svg.append(R.el("rect", { x: 0, y: 0, width: W, height: HGT, fill: "#eff3f6" }));
+  svg.append(R.el("rect", { x: 0, y: Math.max(0, Math.min(HGT, hz)),
+    width: W, height: HGT, fill: "#dfe5ea" }));
+
+  for (const shape of V3.build(view, objects(), S.scene, {
+    skip: (o) => o === cam || !onPage(o, S.page) || !layerOn(o) ||
+                 (S.blocking && !presentAt(o, S.slice)),
+    posOf: (o) => drawnPos(o),
+  })) {
+    const d = "M" + shape.pts.map((q) => toPx(q).join(",")).join(" L") + " Z";
+    svg.append(R.el("path", {
+      d, fill: shape.fill, stroke: shape.stroke, "stroke-width": 1,
+      "stroke-linejoin": "round",
+    }));
+  }
+
+  // The frame itself, plus what it is.
+  svg.append(R.el("rect", { x: .5, y: .5, width: W - 1, height: HGT - 1,
+    fill: "none", stroke: "#16181a", "stroke-width": 1 }));
+  box.append(svg);
+
+  const cap = document.createElement("div");
+  cap.className = "cap";
+  const name = shot ? H.get(shot, "headerText") : "Camera";
+  cap.textContent = `${name}${mm ? ` · ${mm}mm` : " · no lens set"} · ` +
+    `${formatKey(fmt).replace(/^\S+ /, "")}`;
+  box.append(cap);
+
+  // An empty frame usually means the plan isn't drawn to distance rather than
+  // that the shot is empty, so say which and how far rather than nothing.
+  const inFrame = objects().some((o) => o.tag === "Character" && (() => {
+    const p = drawnPos(o);
+    const q = V3.project(view, p.x, p.y, V3.HEIGHTS.head);
+    return q && Math.abs(q.u) <= 1;
+  })());
+  if (!inFrame) {
+    const near = objects().filter((o) => o.tag === "Character")
+      .map((o) => {
+        const p = drawnPos(o);
+        return { o, d: Math.hypot(p.x - view.x, p.y - view.y) };
+      })
+      .sort((a, b) => a.d - b.d)[0];
+    const note = document.createElement("div");
+    note.className = "cap warn";
+    note.textContent = near
+      ? `Nobody in frame — nearest is ${H.get(near.o, "colorName")} at ` +
+        `${feet(near.d)}. On a ${mm || 32}mm that's inside the minimum.`
+      : "Nobody in frame";
+    box.append(note);
+  }
+}
+
+function drawCoverage() {
+  if (!S.coverage) return;
+  const fmt = packageFormat();
+  const g = LAYER_G.overlay;
+
+  for (const cam of objects()) {
+    if (cam.tag !== "Camera" || !onPage(cam, S.page)) continue;
+    const shot = objects().find((o) => o.tag === "ShotVersion" &&
+      H.get(o, "attachObjectID") === idOf(cam));
+    const mm = shot ? parseFloat(H.get(shot, "versionLens")) : 0;
+    if (!(mm > 0)) continue;
+
+    const half = fieldOfView(mm, fmt).h / 2;
+    const p = drawnPos(cam);
+    const a = R.angleOf(cam);
+    const reach = UNITS_PER_FOOT * 34;
+    const l = { x: p.x + Math.cos(a - half) * reach, y: p.y + Math.sin(a - half) * reach };
+    const r = { x: p.x + Math.cos(a + half) * reach, y: p.y + Math.sin(a + half) * reach };
+    const tone = R.cameraColour(cam);
+
+    g.append(R.el("path", {
+      d: `M${p.x},${p.y} L${l.x},${l.y} A${reach},${reach} 0 0 1 ${r.x},${r.y} Z`,
+      fill: tone, opacity: .1, stroke: "none",
+    }));
+    for (const edge of [l, r]) {
+      g.append(R.el("line", {
+        x1: p.x, y1: p.y, x2: edge.x, y2: edge.y,
+        stroke: tone, "stroke-width": 1 / S.view.k, opacity: .5,
+        "stroke-dasharray": `${6 / S.view.k} ${5 / S.view.k}`,
+      }));
+    }
+  }
+}
+
 function drawRigArms() {
   const g = LAYER_G.rig;
   for (const rig of objects()) {
@@ -376,7 +505,8 @@ const layerKeyFor = (layer) => ({
   camera: "cameraLayer", track: "trackLayer", lighting: "lightingLayer",
   character: "characterLayer", lines: "linesLayer", walk: "walkLayer",
   caption: "captionLayer", set: "setLayer", prop: "propLayer",
-  rig: "rigLayer", background: "backgroundLayer", overlay: null,
+  rig: "rigLayer", background: "backgroundLayer",
+  storyboard: "storyboardLayer", overlay: null,
 }[layer]);
 
 // A layer can be shown, shown but locked, or hidden. Locked is the useful one:
@@ -1180,7 +1310,8 @@ const round = (v) => Math.round(v * 20) / 20;
 // cursor until you commit it.
 
 const TOOL_TAG = { wall: "Wall", track: "Track", walk: "WalkArrow", axis: "AxisLine" };
-const TOOL_NAME = { wall: "Wall", track: "Camera track", walk: "Walk arrow", axis: "Axis line" };
+const TOOL_NAME = { wall: "Wall", track: "Camera track", walk: "Walk arrow",
+                    axis: "Axis line", calibrate: "Set scale" };
 
 function startTool(name, owner = null) {
   if (S.tool === name && !owner) return cancelTool();
@@ -1271,6 +1402,14 @@ function finishTool() {
 }
 
 function toolClick(pt, ev) {
+  if (S.tool === "calibrate") {
+    S.calibrate.pts.push({ x: pt.x, y: pt.y });
+    if (S.calibrate.pts.length === 2) {
+      const [a, b] = S.calibrate.pts;
+      return finishCalibration(a, b);
+    }
+    return draw();
+  }
   const snap = snapPoint(pt, ev);
 
   if (!S.draft) {
@@ -1419,6 +1558,52 @@ function layTrackFrom(rig) {
 }
 
 /** Start a run of track. Pieces get added from the panel that appears. */
+/**
+ * A traced blueprint or a map is only worth tracing if it's the right size.
+ * Draw a line along something you know the length of — a doorway, a車 length,
+ * a scale bar — say what it really is, and the image is resized so the grid
+ * and everything measured off it are true.
+ */
+function calibrateBackground(bg) {
+  S.tool = "calibrate";
+  S.calibrate = { bg: idOf(bg), pts: [] };
+  stage.classList.add("drawing");
+  toast("Click each end of something you know the length of");
+  draw(); syncChrome();
+}
+
+function finishCalibration(a, b) {
+  const bg = byID(S.calibrate.bg);
+  const drawn = Math.hypot(b.x - a.x, b.y - a.y);
+  S.tool = null; S.calibrate = null;
+  stage.classList.remove("drawing");
+  if (!bg || drawn < 4) { draw(); syncChrome(); return; }
+
+  sheet({
+    title: "Set the scale",
+    sub: `That line is ${feet(drawn)} at the moment. What is it really?`,
+    fields: [{ name: "real", label: "Real length (feet, or 12'6\")", type: "text", value: "" }],
+    onOK: ({ real }) => {
+      const want = parseFeet(real);
+      if (!(want > 0)) return;
+      mark("set scale");
+      const k = (want * UNITS_PER_FOOT) / drawn;
+      H.set(bg, "objectScaleX", H.getNum(bg, "objectScaleX", 1) * k);
+      H.set(bg, "objectScaleY", H.getNum(bg, "objectScaleY", 1) * k);
+      draw(); syncChrome();
+      toast(`Scaled ${k > 1 ? "up" : "down"} ${Math.abs(k).toFixed(2)}× — the plan is to size now`);
+    },
+  });
+}
+
+/** "12", "12.5", "12'6\"" — all mean the same thing on a set. */
+function parseFeet(text) {
+  const t = String(text).trim();
+  const m = t.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft|feet)?\s*(?:(\d+(?:\.\d+)?)\s*(?:"|in|inches)?)?$/);
+  if (!m) return 0;
+  return parseFloat(m[1]) + (m[2] ? parseFloat(m[2]) / 12 : 0);
+}
+
 function layTrack(at) {
   mark("lay track");
   const recipe = ["S8"];
@@ -2023,6 +2208,7 @@ window.addEventListener("keydown", (ev) => {
   if (k === "t") return startTool("track");
   if (k === "p") return (S.playing ? stopPlay() : startPlay());
   if (k === "b") return toggleBlocking();
+  if (k === "v" && !cmd) return toggleLensView();
   if (k === "l" && !cmd) {
     const r = $("[data-act=layers]").getBoundingClientRect();
     return layersMenu(r.left, r.top);
@@ -2223,6 +2409,13 @@ function toggleBlocking() {
     }
   }
   draw(); syncChrome();
+}
+
+function toggleLensView() {
+  S.lensView = !S.lensView;
+  try { localStorage.setItem("sd.lensview", S.lensView ? "1" : ""); } catch { /* ok */ }
+  draw(); syncChrome();
+  if (S.lensView && !S.sel.size) toast("Pick a camera to look through it");
 }
 
 const stepBeat = (d) => {
@@ -2667,6 +2860,15 @@ function layersMenu(x, y) {
       run: () => { cycleLayer(key); layersMenu(x, y); },
     })),
     "-",
+    { label: (S.lensView ? "◉  " : "○  ") + "Through the lens  (V)",
+      run: () => { toggleLensView(); layersMenu(x, y); } },
+    { label: (S.coverage ? "◉  " : "○  ") + "Lens coverage",
+      run: () => {
+        S.coverage = !S.coverage;
+        try { localStorage.setItem("sd.coverage", S.coverage ? "1" : ""); } catch { /* ok */ }
+        draw(); layersMenu(x, y);
+      } },
+    "-",
     { label: sceneryLocked ? "Unlock Set, Props & Backgrounds"
                            : "Lock Set, Props & Backgrounds",
       run: () => {
@@ -2889,6 +3091,21 @@ function objectMenu(obj, x, y) {
         const a = pts[pts.length - 2], b = pts[pts.length - 1];
         pts.splice(pts.length - 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
         R.setPoints(obj, pts); draw();
+      } },
+      ...common,
+    ]);
+  }
+
+  if (tag === "Background") {
+    return showPopover(x, y, [
+      { head: "Background Image" },
+      { label: "Set Scale…", run: () => calibrateBackground(obj) },
+      { label: "Reset Size", run: () => {
+        mark("size");
+        H.set(obj, "objectScaleX", 1); H.set(obj, "objectScaleY", 1); draw();
+      } },
+      { label: "Send To Every Page", run: () => {
+        mark("page"); H.set(obj, "onPagesComma", ""); draw(); syncChrome();
       } },
       ...common,
     ]);
@@ -4197,7 +4414,11 @@ const PACKAGE_KEY = "sd.package";
 const DEFAULT_PACKAGE = {
   active: "Default",
   sets: {
-    Default: { lenses: [...LENSES].slice(0, 6), support: Object.keys(RIG.RIGS) },
+    Default: {
+      lenses: [...LENSES].slice(0, 6),
+      support: Object.keys(RIG.RIGS),
+      format: "Film Super35",
+    },
   },
 };
 
@@ -4224,6 +4445,8 @@ const packageLenses = () => {
   const l = activeSet().lenses;
   return l && l.length ? l : LENSES;
 };
+
+const packageFormat = () => findFormat(activeSet().format);
 
 const packageSupport = () => {
   const sup = activeSet().support;
@@ -4258,6 +4481,16 @@ function packageDialog() {
   const lensBox = document.createElement("input");
   lensBox.type = "text";
 
+  const fmtLabel = document.createElement("label");
+  fmtLabel.textContent = "Camera body";
+  const fmtPick = document.createElement("select");
+  for (const f of FORMATS) {
+    const o = document.createElement("option");
+    o.value = formatKey(f);
+    o.textContent = `${formatKey(f)}  ·  ${f.w}×${f.h}mm`;
+    fmtPick.append(o);
+  }
+
   const supLabel = document.createElement("label");
   supLabel.textContent = "Support on the truck";
   const supWrap = document.createElement("div");
@@ -4278,6 +4511,7 @@ function packageDialog() {
     const set = pkg.sets[name] || { lenses: [], support: [] };
     nameBox.value = name;
     lensBox.value = (set.lenses || []).join(", ");
+    fmtPick.value = formatKey(findFormat(set.format));
     for (const [key, cb] of Object.entries(boxes)) {
       cb.checked = !set.support || !set.support.length || set.support.includes(key);
     }
@@ -4287,13 +4521,15 @@ function packageDialog() {
     if (picker.value === "\u0000new") {
       nameBox.value = "New package";
       lensBox.value = "";
+      fmtPick.value = formatKey(findFormat(null));
       for (const cb of Object.values(boxes)) cb.checked = true;
       return;
     }
     load(picker.value);
   };
 
-  body.append(setLabel, picker, nameLabel, nameBox, lensLabel, lensBox, supLabel, supWrap);
+  body.append(setLabel, picker, nameLabel, nameBox, lensLabel, lensBox,
+              fmtLabel, fmtPick, supLabel, supWrap);
 
   sheet({
     title: "Camera Package",
@@ -4307,11 +4543,11 @@ function packageDialog() {
       const next = readPackage();
       // Renaming replaces rather than leaving an orphan behind.
       if (picker.value !== "\u0000new" && picker.value !== name) delete next.sets[picker.value];
-      next.sets[name] = { lenses, support };
+      next.sets[name] = { lenses, support, format: fmtPick.value };
       next.active = name;
       writePackage(next);
       draw(); syncChrome();
-      toast(`${name} — ${lenses.length} lenses, ${support.length} rigs`);
+      toast(`${name} — ${lenses.length} lenses on ${fmtPick.value}`);
     },
   });
 }
@@ -4377,6 +4613,10 @@ window.addEventListener("resize", () => draw());
 (async function boot() {
   applyTheme(currentTheme());
   R.setFigureStyle(currentFigureStyle());
+  try {
+    S.coverage = !!localStorage.getItem("sd.coverage");
+    S.lensView = !!localStorage.getItem("sd.lensview");
+  } catch { /* ok */ }
   // Following the system means following it as it changes, too.
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (currentTheme() === "system") { draw(); syncChrome(); }
