@@ -191,6 +191,19 @@ export const makeImageProp = (x, y, pictureID, scale = 1) =>
     rotator("RotatorObject", 0),
   ]);
 
+export const makeStoryboard = (x, y, pictureID, caption = "") =>
+  wrap("Storyboard", {
+    ...baseFields(x, y),
+    objectScaleX: 1, objectScaleY: 1,
+    pictureUniqueID: pictureID,
+    captionText: caption,
+    blackFrame: true,
+    animatable: false,
+  }, [
+    node("Scaler", { uniqueID: newID() }),
+    rotator("RotatorObject", 0),
+  ]);
+
 export const makeCaption = (x, y, text) =>
   wrap("Caption", {
     ...baseFields(x, y),

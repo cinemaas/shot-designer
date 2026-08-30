@@ -258,6 +258,7 @@ html, body {
   background: var(--field); color: var(--text);
 }
 #modal textarea { min-height: 72px; resize: vertical; }
+#modal textarea.brief { min-height: 260px; font: 12px/1.5 ui-monospace, Menlo, monospace; }
 #modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 #modal button {
   padding: 7px 15px; border-radius: 6px; border: 1px solid var(--field-line);
@@ -411,3 +412,10 @@ body.view-only #stage { cursor: grab; }
   font-variant-numeric: tabular-nums;
 }
 #lensview .cap.warn { color: #b4601f; max-width: 320px; line-height: 1.35; }
+#lensview .lensbar { display: flex; gap: 6px; margin-top: 7px; }
+#lensview .lensbar button {
+  flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--bg); color: var(--ink); cursor: pointer;
+}
+#lensview .lensbar button:hover { background: var(--sel); color: #fff; border-color: var(--sel); }

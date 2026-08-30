@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=c199371c";
-import * as R from "./render.js?v=c199371c";
-import { FXG } from "./assets.js?v=c199371c";
-import * as B from "./blocking.js?v=c199371c";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=c199371c";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=c199371c";
-import { HANDBOOK } from "./handbook.js?v=c199371c";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=c199371c";
-import * as V3 from "./view3d.js?v=c199371c";
-import * as TR from "./track.js?v=c199371c";
-import * as RIG from "./rigs.js?v=c199371c";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=c199371c";
-import { Library } from "./library.js?v=c199371c";
+import * as H from "./hcw.js?v=2579423c";
+import * as R from "./render.js?v=2579423c";
+import { FXG } from "./assets.js?v=2579423c";
+import * as B from "./blocking.js?v=2579423c";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=2579423c";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=2579423c";
+import { HANDBOOK } from "./handbook.js?v=2579423c";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=2579423c";
+import * as V3 from "./view3d.js?v=2579423c";
+import * as TR from "./track.js?v=2579423c";
+import * as RIG from "./rigs.js?v=2579423c";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=2579423c";
+import { Library } from "./library.js?v=2579423c";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=c199371c";
+} from "./catalog.js?v=2579423c";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -112,6 +112,9 @@ function reindex() {
  * points as the way through. At the first beat everyone is exactly where the
  * scene says they are.
  */
+/** The lens height a camera is actually working at, in feet. */
+const lensFtOf = (cam) => RIG.lensHeightOn(cam, byID(RIG.rigParentID(cam)) || null);
+
 /**
  * Positions an object has been pinned to, as `posMarks`: "1:120,-40,0;2:300,-40,1.57"
  * — slice, then x, y and facing. This is how the original moves a camera: one
@@ -123,8 +126,14 @@ function marksOf(o) {
   if (!raw) return [];
   return raw.split(";").map((seg) => {
     const [slice, rest] = seg.split(":");
-    const [x, y, a] = (rest || "").split(",").map(Number);
-    return { slice: parseInt(slice, 10), x, y, a: Number.isFinite(a) ? a : 0 };
+    // Older marks carry three numbers; height and tilt came later.
+    const [x, y, a, h, tilt] = (rest || "").split(",").map(Number);
+    return {
+      slice: parseInt(slice, 10), x, y,
+      a: Number.isFinite(a) ? a : 0,
+      h: Number.isFinite(h) ? h : null,
+      tilt: Number.isFinite(tilt) ? tilt : null,
+    };
   }).filter((m) => Number.isFinite(m.slice) && Number.isFinite(m.x) && Number.isFinite(m.y))
     .sort((p, q) => p.slice - q.slice);
 }
@@ -175,7 +184,9 @@ function movePoints(marks, bends) {
 function writeMarks(o, list) {
   const clean = [...list].sort((p, q) => p.slice - q.slice);
   H.set(o, "posMarks", clean.length < 2 ? "" :
-    clean.map((m) => `${m.slice}:${round(m.x)},${round(m.y)},${(m.a || 0).toFixed(4)}`).join(";"));
+    clean.map((m) => `${m.slice}:${round(m.x)},${round(m.y)},${(m.a || 0).toFixed(4)}` +
+      (m.h != null || m.tilt != null
+        ? `,${(m.h ?? 0).toFixed(2)},${(m.tilt ?? 0).toFixed(4)}` : "")).join(";"));
 }
 
 /** Pin this object where it currently stands, at the slice given. */
@@ -185,14 +196,25 @@ function setMark(o, slice) {
     slice,
     x: H.getNum(o, "x"), y: H.getNum(o, "y"),
     a: R.hasRotator(o) ? R.angleOf(o) : 0,
+    // A camera move is a move in three dimensions: it rises and it tilts, and
+    // on a jib those are the whole point of the move.
+    h: o.tag === "Camera" ? lensFtOf(o) : null,
+    tilt: o.tag === "Camera" ? V3.tiltOf(o) : null,
   });
   // A move needs somewhere to have come from: the first mark you set on an
   // object anchors slice 1 wherever it already is.
   if (list.length === 1 && slice !== 1) {
     const home = markHome.get(idOf(o));
-    list.push({ slice: 1, x: home ? home.x : H.getNum(o, "x"),
-                y: home ? home.y : H.getNum(o, "y"),
-                a: home ? home.a : (R.hasRotator(o) ? R.angleOf(o) : 0) });
+    list.push({
+      slice: 1,
+      x: home ? home.x : H.getNum(o, "x"),
+      y: home ? home.y : H.getNum(o, "y"),
+      a: home ? home.a : (R.hasRotator(o) ? R.angleOf(o) : 0),
+      // Position 1 has to carry the height and the tilt too, or a jib move
+      // has nothing to rise from and the whole move plays flat.
+      h: home ? home.h : (o.tag === "Camera" ? lensFtOf(o) : null),
+      tilt: home ? home.tilt : (o.tag === "Camera" ? V3.tiltOf(o) : null),
+    });
   }
   writeMarks(o, list);
   return list;
@@ -227,9 +249,45 @@ function poseAt(marks, t, bends = new Map()) {
     const at = run.length > 2
       ? alongPath(R.samplePath(run, { hard: false }), f)
       : { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-    return { x: at.x, y: at.y, a: lerpAngle(a.a, b.a, f) };
+    const mix = (u, v) => (u == null || v == null ? (u ?? v) : u + (v - u) * f);
+    return {
+      x: at.x, y: at.y, a: lerpAngle(a.a, b.a, f),
+      h: mix(a.h, b.h), tilt: mix(a.tilt, b.tilt),
+    };
   }
   return last;
+}
+
+/**
+ * Put anything with a move where the current beat says it stands — for real,
+ * not just for drawing. Everything that edits an object works on its own x, y
+ * and angle, so if those stay at position 1 while it draws at position 2 then
+ * panning, tilting and dragging all fight you: the handles are in one place
+ * and the pivot is in another. Parking it makes every tool behave normally.
+ */
+function parkMarked(slice) {
+  for (const o of objects()) {
+    const marks = marksOf(o);
+    if (marks.length < 2) continue;
+    const pose = poseAt(marks, slice, bendsOf(o));
+    H.set(o, "x", round(pose.x));
+    H.set(o, "y", round(pose.y));
+    if (R.hasRotator(o)) R.setAngle(o, pose.a);
+    if (o.tag === "Camera") {
+      if (pose.h != null) H.set(o, "lensHeight", +pose.h.toFixed(3));
+      if (pose.tilt != null) H.set(o, "tiltAngle", +(pose.tilt * 180 / Math.PI).toFixed(2));
+    }
+  }
+}
+
+/** The last beat anything in the scene actually uses. */
+function lastBeat() {
+  let n = 1;
+  for (const o of objects()) {
+    for (const m of marksOf(o)) n = Math.max(n, m.slice);
+    for (const k of stopsOf(o)) n = Math.max(n, k);
+  }
+  return n;
 }
 
 function slicePositions() {
@@ -243,8 +301,12 @@ function slicePositions() {
     const marks = marksOf(o);
     if (marks.length < 2) continue;
     if (!markHome.has(idOf(o)))
-      markHome.set(idOf(o), { x: H.getNum(o, "x"), y: H.getNum(o, "y"),
-                              a: R.hasRotator(o) ? R.angleOf(o) : 0 });
+      markHome.set(idOf(o), {
+        x: H.getNum(o, "x"), y: H.getNum(o, "y"),
+        a: R.hasRotator(o) ? R.angleOf(o) : 0,
+        h: o.tag === "Camera" ? lensFtOf(o) : null,
+        tilt: o.tag === "Camera" ? V3.tiltOf(o) : null,
+      });
     moves.set(idOf(o), poseAt(marks, t, bendsOf(o)));
   }
 
@@ -393,6 +455,9 @@ function draw() {
   // A rig's position is derived from the track it rides, so it's recomputed
   // rather than remembered — move the track and the dolly goes with it.
   reflowRigs();
+  // Off playback, a marked object really sits at the beat you're parked on, so
+  // every tool that edits it edits the right position.
+  if (!S.playing) parkMarked(S.slice);
   drawGrid();
 
   const ls = layerStates();
@@ -536,6 +601,27 @@ function drawMoves() {
       });
       t.textContent = m.slice;
       g.append(t);
+
+      // If the move rises or tilts, say so under the number — that's the half
+      // of a jib move an overhead can't otherwise show.
+      const varies = (k) => marks.some((q) => q[k] != null) &&
+        new Set(marks.map((q) => q[k] == null ? "" : q[k].toFixed(2))).size > 1;
+      const bits = [];
+      if (m.h != null && varies("h")) bits.push(feet(m.h * UNITS_PER_FOOT));
+      if (m.tilt != null && varies("tilt")) {
+        const deg = Math.round(m.tilt * 180 / Math.PI);
+        if (deg) bits.push(`${deg > 0 ? "▲" : "▼"}${Math.abs(deg)}°`);
+      }
+      if (bits.length) {
+        const n = R.el("text", {
+          x: bx, y: by + 20, "text-anchor": "middle", fill: col,
+          "font-size": 10, "font-weight": "600",
+          "font-family": "Helvetica, Arial, sans-serif",
+          opacity: lit ? 1 : 0.75,
+        });
+        n.textContent = bits.join("  ");
+        g.append(n);
+      }
     }
   }
 }
@@ -569,8 +655,13 @@ function renderLensView() {
   const mm = shot ? parseFloat(H.get(shot, "versionLens")) || 0 : 0;
   const rigID = RIG.rigParentID(cam);
   const rig = rigID ? byID(rigID) : null;
-  const lensFt = RIG.lensHeightOn(cam, rig);
-  const view = V3.cameraAt(cam, fmt, mm, drawnPos(cam), lensFt * UNITS_PER_FOOT);
+  // On a marked move the height and the tilt travel with it, so what you see
+  // at this point on the timeline is where the jib actually is.
+  const moved = S.moves?.get(idOf(cam));
+  const lensFt = moved?.h != null ? moved.h : RIG.lensHeightOn(cam, rig);
+  const pitch = moved?.tilt != null ? moved.tilt : V3.tiltOf(cam);
+  const view = V3.cameraAt(cam, fmt, mm, drawnPos(cam),
+                           lensFt * UNITS_PER_FOOT, pitch);
 
   const W = 320, HGT = Math.round(W * (fmt.h / fmt.w));
   const svg = R.el("svg", { viewBox: `0 0 ${W} ${HGT}`, width: W, height: HGT });
@@ -630,7 +721,171 @@ function renderLensView() {
       : "Nobody in frame";
     box.append(note);
   }
+
+  const row = document.createElement("div");
+  row.className = "lensbar";
+  const btn = (label, title, run) => {
+    const b = document.createElement("button");
+    b.textContent = label; b.title = title; b.onclick = run;
+    row.append(b);
+    return b;
+  };
+  btn("Storyboard", "Drop this frame on the plan as a storyboard",
+      () => frameToStoryboard(cam, svg, W, HGT, mm, fmt));
+  btn("Save PNG", "Save the frame as a picture",
+      () => frameToFile(cam, svg, W, HGT, mm, fmt));
+  btn("AI Brief", "Copy a written brief of this exact shot, to go with the frame",
+      () => copyBrief(cam, view, mm, fmt, lensFt));
+  box.append(row);
 }
+
+/** The through-the-lens view as a PNG, at whatever size you ask for. */
+function lensPNG(svg, W, HGT, scale = 3) {
+  return new Promise((resolve, reject) => {
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", W); clone.setAttribute("height", HGT);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = W * scale; c.height = HGT * scale;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c);
+    };
+    img.onerror = () => reject(new Error("could not rasterise the frame"));
+    img.src = "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  });
+}
+
+const shotName = (cam) => {
+  const shot = objects().find((o) => o.tag === "ShotVersion" &&
+    H.get(o, "attachObjectID") === idOf(cam));
+  return shot ? (H.get(shot, "headerText") || H.get(shot, "userText") || "") : "";
+};
+
+/** Drop the frame onto the plan beside its camera, as a real storyboard. */
+async function frameToStoryboard(cam, svg, W, HGT, mm, fmt) {
+  try {
+    const c = await lensPNG(svg, W, HGT, 2);
+    mark("storyboard");
+    const pic = H.makePicture(c.toDataURL("image/png"));
+    H.child(S.doc, "Pictures").children.push(pic);
+    const p = drawnPos(cam);
+    const board = H.makeStoryboard(round(p.x), round(p.y) - 230,
+      H.get(pic, "uniqueID"),
+      [shotName(cam), mm ? mm + "mm" : ""].filter(Boolean).join(" · "));
+    canvas().children.push(board);
+    S.scene.pictures[H.get(pic, "uniqueID")] = H.get(pic, "base64Data");
+    reindex(); S.sel = new Set([idOf(board)]); draw(); syncChrome();
+    toast("Storyboard added — drag it where you want it");
+  } catch (e) { toast("Storyboard failed: " + e.message); }
+}
+
+/**
+ * A written brief for the shot the lens view is showing, so the frame can go
+ * to an image model with the facts attached rather than a guess. Everything in
+ * it is read off the scene: the lens and format from the package, the height
+ * off whatever the camera is rigged on, and who is where measured from the
+ * camera rather than described by eye.
+ */
+function shotBrief(cam, view, mm, fmt, lensFt) {
+  const p = drawnPos(cam);
+  const a = R.angleOf(cam);
+  const fov = fieldOfView(mm > 0 ? mm : 32, fmt);
+
+  // Who's in it, by where they actually stand.
+  const people = objects()
+    .filter((o) => o.tag === "Character")
+    .map((o) => {
+      const q = drawnPos(o);
+      const dx = q.x - p.x, dy = q.y - p.y;
+      const dist = Math.hypot(dx, dy);
+      let off = Math.atan2(dy, dx) - a;
+      while (off > Math.PI) off -= Math.PI * 2;
+      while (off < -Math.PI) off += Math.PI * 2;
+      if (Math.abs(off) > fov.h / 2 + 0.12) return null;
+      // Which way they face relative to the lens: the useful bit for staging.
+      let rel = R.angleOf(o) - a;
+      while (rel > Math.PI) rel -= Math.PI * 2;
+      while (rel < -Math.PI) rel += Math.PI * 2;
+      const facing = Math.abs(rel) > 2.4 ? "facing camera"
+        : Math.abs(rel) < 0.7 ? "back to camera"
+        : rel > 0 ? "profile, turned frame left" : "profile, turned frame right";
+      const side = Math.abs(off) < 0.08 ? "centre frame"
+        : off < 0 ? "frame left" : "frame right";
+      const posture = V3.postureOf(o).label.toLowerCase();
+      return `${H.get(o, "colorName") || "someone"} — ${posture}, ${side}, ` +
+             `${feet(dist)} from lens, ${facing}`;
+    })
+    .filter(Boolean);
+
+  // The space, from the walls that are actually drawn.
+  const walls = objects().filter((o) => o.tag === "Wall");
+  let room = "";
+  if (walls.length) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const w of walls) for (const q of R.pointsOf(w)) {
+      minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x);
+      minY = Math.min(minY, q.y); maxY = Math.max(maxY, q.y);
+    }
+    room = `Interior roughly ${feet(maxX - minX)} by ${feet(maxY - minY)}, ` +
+           `walls ${feet(V3.HEIGHTS.wall)} high.`;
+  }
+
+  const kit = objects()
+    .filter((o) => R.GENERIC_TAGS.has(o.tag) && R.layerOf(o) === "prop")
+    .map((o) => H.get(o, "objectKey"))
+    .filter(Boolean);
+  const seen = [...new Set(kit)].slice(0, 12);
+
+  const rigID = RIG.rigParentID(cam);
+  const rig = rigID ? byID(rigID) : null;
+  const support = rig ? RIG.rigSpec(rig)?.label : "sticks";
+
+  return [
+    `Photoreal film still. ${shotName(cam) || "Shot"}.`,
+    ``,
+    `Camera: ${mm > 0 ? mm + "mm" : "32mm"} on ${formatKey(fmt)}, ` +
+      `lens ${lensFt.toFixed(1)} ft off the floor, on ${support}. ` +
+      `Horizontal field of view ${Math.round(fov.h * 180 / Math.PI)} degrees.`,
+    room,
+    people.length ? `In frame:` : `No one in frame.`,
+    ...people.map((t) => `  - ${t}`),
+    seen.length ? `Dressing in the room: ${seen.join(", ").toLowerCase()}.` : "",
+    ``,
+    `Match the attached overhead frame exactly for camera position, lens height,`,
+    `and where everybody stands. Keep the geometry; make the room real.`,
+  ].filter((l) => l !== undefined).join("\n");
+}
+
+async function copyBrief(cam, view, mm, fmt, lensFt) {
+  const text = shotBrief(cam, view, mm, fmt, lensFt);
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Brief copied — paste it with the frame");
+  } catch {
+    // Clipboard is blocked in some contexts; show it so it can still be taken.
+    sheet({
+      title: "AI Brief",
+      fields: [{ name: "brief", label: "", type: "textarea", cls: "brief", value: text }],
+      okLabel: "Done", onOK: () => {},
+    });
+  }
+}
+
+async function frameToFile(cam, svg, W, HGT, mm, fmt) {
+  try {
+    const c = await lensPNG(svg, W, HGT, 4);
+    const name = [baseName(), shotName(cam) || "shot", mm ? mm + "mm" : ""]
+      .filter(Boolean).join(" ").replace(/[/\\:]/g, "-");
+    c.toBlob((b) => download(name + ".png", b), "image/png");
+  } catch (e) { toast("Save failed: " + e.message); }
+}
+
+
 
 function drawCoverage() {
   if (!S.coverage) return;
@@ -1634,17 +1889,11 @@ stage.addEventListener("pointerup", (ev) => {
   // Once something has a move on it, dragging it while you're parked on a
   // slice re-pins that position — which is how you set position 2 after the
   // fact instead of having to plan the move before you place the camera.
-  if (drag?.mode === "move" && drag.moved) {
-    for (const o of drag.origins) {
-      if (marksOf(o.obj).length < 2) continue;
-      setMark(o.obj, S.slice + 1);
-      // The object's own x/y stays at position 1, so a scene opened in the
-      // original app shows everybody where they start rather than where the
-      // playhead happened to be parked.
-      const first = marksOf(o.obj)[0];
-      H.set(o.obj, "x", round(first.x));
-      H.set(o.obj, "y", round(first.y));
-      if (R.hasRotator(o.obj)) R.setAngle(o.obj, first.a);
+  if (drag && drag.moved !== false) {
+    const touched = drag.origins ? drag.origins.map((o) => o.obj)
+      : drag.obj ? [drag.obj] : [];
+    for (const o of touched) {
+      if (marksOf(o).length >= 2) setMark(o, S.slice + 1);
     }
   }
   stage.classList.remove("panning");
@@ -2742,7 +2991,9 @@ function beatDuration(from, to) {
  * so a camera between two marks actually travels instead of teleporting.
  */
 function startPlay() {
-  const n = Math.max(1, timeSlices().length);
+  // Run to the last beat anything actually uses, not to however many slices
+  // the file happens to carry — a two-position move should take one beat.
+  const n = lastBeat();
   if (n < 2) return toast("Nothing to play — give something a second position first");
   S.playing = true;
   S.time = 0;
@@ -3542,6 +3793,7 @@ function objectMenu(obj, x, y) {
       ...moveItems(obj),
       { label: "Add Label…", run: () => attachLabel(obj) },
       "-",
+      { label: "Height & Tilt…", run: () => cameraRig3D(obj) },
       { label: "Tilt Up", run: () => setTilt(obj, "tiltUp") },
       { label: "Tilt Down", run: () => setTilt(obj, "tiltDown") },
       { head: "Colour" },
@@ -3684,7 +3936,12 @@ function setTilt(obj, which) {
     H.set(rot, which, !H.getBool(rot, which));
     H.set(rot, which === "tiltUp" ? "tiltDown" : "tiltUp", false);
   }
-  draw();
+  // Keep the real angle in step with the flags, so the two ways of saying it
+  // never disagree and a scene still round-trips to the original.
+  const up = H.getBool(rot, "tiltUp"), down = H.getBool(rot, "tiltDown");
+  H.set(obj, "tiltAngle", up ? 10 : down ? -10 : 0);
+  if (marksOf(obj).length >= 2) setMark(obj, S.slice + 1);
+  draw(); syncChrome();
 }
 
 /**
@@ -3696,7 +3953,12 @@ function addMove(obj) {
   const marks = marksOf(obj);
   mark("move");
   if (marks.length < 2) {
-    setMark(obj, 1);                       // pins it where it stands
+    markHome.set(idOf(obj), {
+      x: H.getNum(obj, "x"), y: H.getNum(obj, "y"),
+      a: R.hasRotator(obj) ? R.angleOf(obj) : 0,
+      h: obj.tag === "Camera" ? lensFtOf(obj) : null,
+      tilt: obj.tag === "Camera" ? V3.tiltOf(obj) : null,
+    });
     ensureSlice(2);
     setMark(obj, 2);                       // starts on top of position 1
     S.slice = 1;
@@ -3725,6 +3987,34 @@ function setPosture(obj, key) {
   }
   draw(); syncChrome();
   toast(V3.POSTURES[key].label);
+}
+
+/**
+ * Lens height and tilt, as numbers. The original only had tilt-up and
+ * tilt-down flags, which cannot describe a jib arriving level; these are real
+ * values, and if the camera has a move on them they are recorded at whichever
+ * position you're parked on.
+ */
+function cameraRig3D(cam) {
+  sheet({
+    title: "Height & Tilt",
+    fields: [
+      { name: "h", label: "Lens height (ft)", type: "text",
+        value: lensFtOf(cam).toFixed(2) },
+      { name: "t", label: "Tilt (° — up is positive)", type: "text",
+        value: (V3.tiltOf(cam) * 180 / Math.PI).toFixed(1) },
+    ],
+    onOK: ({ h, t }) => {
+      const ft = parseFloat(h), deg = parseFloat(t);
+      mark("height & tilt");
+      if (Number.isFinite(ft) && ft > 0) H.set(cam, "lensHeight", ft);
+      if (Number.isFinite(deg)) H.set(cam, "tiltAngle", deg);
+      // If it's mid-move, this is what that position looks like.
+      if (marksOf(cam).length >= 2) setMark(cam, S.slice + 1);
+      draw(); syncChrome();
+      toast(`${lensFtOf(cam).toFixed(2)} ft · ${(V3.tiltOf(cam) * 180 / Math.PI).toFixed(1)}°`);
+    },
+  });
 }
 
 /** Pin this object here, at the slice you're currently parked on. */
@@ -4537,7 +4827,10 @@ function sheet({ title, sub, fields = [], okLabel = "OK", onOK, body }) {
   for (const f of fields) {
     const l = document.createElement("label"); l.textContent = f.label; box.append(l);
     let i;
-    if (f.type === "textarea") i = document.createElement("textarea");
+    if (f.type === "textarea") {
+      i = document.createElement("textarea");
+      if (f.cls) i.className = f.cls;
+    }
     else if (f.type === "select") {
       i = document.createElement("select");
       for (const o of f.options) {
