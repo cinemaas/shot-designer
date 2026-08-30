@@ -172,7 +172,10 @@ html, body {
   padding: 9px 14px 0; font-size: 11px; color: var(--dim);
   text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
 }
-.lens-row { display: flex; gap: 5px; padding: 7px 14px 0; }
+.lens-row {
+  display: flex; gap: 4px; padding: 7px 14px 0; flex-wrap: wrap;
+}
+.lens-row button { flex: 0 0 auto; min-width: 34px; padding: 4px 6px; }
 .lens-row button.on {
   background: var(--ink); color: #fff;
 }

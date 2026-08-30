@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=6860cf17";
-import * as R from "./render.js?v=6860cf17";
-import { FXG } from "./assets.js?v=6860cf17";
-import * as B from "./blocking.js?v=6860cf17";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=6860cf17";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6860cf17";
-import { HANDBOOK } from "./handbook.js?v=6860cf17";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=6860cf17";
-import * as V3 from "./view3d.js?v=6860cf17";
-import * as TR from "./track.js?v=6860cf17";
-import * as RIG from "./rigs.js?v=6860cf17";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=6860cf17";
-import { Library } from "./library.js?v=6860cf17";
+import * as H from "./hcw.js?v=ed94e543";
+import * as R from "./render.js?v=ed94e543";
+import { FXG } from "./assets.js?v=ed94e543";
+import * as B from "./blocking.js?v=ed94e543";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=ed94e543";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ed94e543";
+import { HANDBOOK } from "./handbook.js?v=ed94e543";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=ed94e543";
+import * as V3 from "./view3d.js?v=ed94e543";
+import * as TR from "./track.js?v=ed94e543";
+import * as RIG from "./rigs.js?v=ed94e543";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=ed94e543";
+import { Library } from "./library.js?v=ed94e543";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=6860cf17";
+} from "./catalog.js?v=ed94e543";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1264,6 +1264,7 @@ stage.addEventListener("pointermove", (ev) => {
 
 stage.addEventListener("contextmenu", (ev) => {
   ev.preventDefault();
+  if (S.chain) return endChain();
   if (S.tool) {
     if (S.draft && S.draft.committed.length >= 2) finishTool();
     return cancelTool();
@@ -1337,6 +1338,7 @@ function startTool(name, owner = null) {
 }
 
 function cancelTool() {
+  if (S.chain) { S.chain = null; S.tool = null; stage.classList.remove("drawing"); }
   if (S.draft) {
     const c = canvas();
     c.children = c.children.filter((o) => o !== S.draft.obj);
@@ -1415,6 +1417,11 @@ function finishTool() {
 }
 
 function toolClick(pt, ev) {
+  if (S.chain) {
+    placeChainPoint(pt);
+    if (ev.detail >= 2) endChain();
+    return;
+  }
   if (S.tool === "calibrate") {
     S.calibrate.pts.push({ x: pt.x, y: pt.y });
     if (S.calibrate.pts.length === 2) {
@@ -2156,6 +2163,7 @@ window.addEventListener("keydown", (ev) => {
     return;
   }
   if (k === "?" || (k === "/" && ev.shiftKey)) { ev.preventDefault(); return openHandbook(); }
+  if (k === "escape" && S.chain) { ev.preventDefault(); return endChain(); }
   if (k === "escape") {
     if (S.draft || S.tool) {
       ev.preventDefault();
@@ -2168,6 +2176,7 @@ window.addEventListener("keydown", (ev) => {
     hidePopover();
     return (draw(), syncChrome());
   }
+  if (k === "enter" && S.chain) { ev.preventDefault(); return endChain(); }
   if (k === "enter" && S.draft) { ev.preventDefault(); return finishTool(); }
   // Enter on a camera opens its shot, ready to type the lot.
   if ((k === "enter" || k === "e") && !cmd && S.sel.size === 1) {
@@ -2364,14 +2373,18 @@ function syncChrome() {
     const name = document.createElement("b");
     name.textContent = TOOL_NAME[S.tool];
     const hint = document.createElement("span");
-    hint.textContent = S.draft
-      ? (S.tool === "wall"
-          ? "click to add corners · double-click or ⏎ to finish"
-          : "click where it ends")
-      : (S.tool === "wall" ? "click to start a wall" : "click to start");
+    hint.textContent = S.chain
+      ? `click to drop the next position${S.chain.placed ? ` · ${S.chain.placed} so far` : ""} · ⏎ when done`
+      : S.draft
+        ? (S.tool === "wall"
+            ? "click to add corners · double-click or ⏎ to finish"
+            : "click where it ends")
+        : (S.tool === "wall" ? "click to start a wall" : "click to start");
     const done = document.createElement("button");
-    done.textContent = S.draft && S.draft.committed.length >= 2 ? "Done" : "Cancel";
+    done.textContent = (S.chain && S.chain.placed) ||
+      (S.draft && S.draft.committed.length >= 2) ? "Done" : "Cancel";
     done.onclick = () => {
+      if (S.chain) return endChain();
       if (S.draft && S.draft.committed.length >= 2) finishTool();
       cancelTool();
     };
@@ -3155,42 +3168,72 @@ function setTilt(obj, which) {
   draw();
 }
 
-/** "Walk To…" / "Track To…": draw a path that starts on this object. */
+/**
+ * "Walk To…" and "Track To…" the way the original works them: each click drops
+ * another instance of whoever you started from and joins it to the last with an
+ * arrow. Ten clicks is ten positions in a chain, which is exactly how the
+ * scenes in this library are built. Keep clicking; Enter or Escape stops.
+ */
 function startFromHere(tool, obj) {
-  startTool(tool, idOf(obj));
-  const start = { x: H.getNum(obj, "x"), y: H.getNum(obj, "y") };
-  mark("draw " + tool);
-  const path = H.makePath(TOOL_TAG[tool], [start, start]);
-  H.set(path, "fromConstraints", idOf(obj));
-  canvas().children.push(path);
-  S.draft = { obj: path, committed: [start], owner: idOf(obj) };
-  reindex();
-  toast(`Click where ${tool === "track" ? "the camera travels" : "they walk"} to`);
+  cancelTool();
+  S.tool = tool;
+  S.chain = { source: idOf(obj), last: idOf(obj), placed: 0 };
+  stage.classList.add("drawing");
+  toast(tool === "track"
+    ? "Click where the camera goes next — keep clicking, ⏎ when done"
+    : "Click where they walk to — keep clicking, ⏎ when done");
   draw(); syncChrome();
 }
 
-/** Type an exact size. Props are drawn to no particular scale, so this works
- *  in feet using the same 20-units-to-the-foot the grid implies. */
-function sizeDialog(obj) {
-  const b = R.artBounds(H.get(obj, "objectKey"));
-  const asFeet = (units) => (units / UNITS_PER_FOOT).toFixed(2);
-  sheet({
-    title: "Size",
-    sub: `${labelForKey(H.get(obj, "objectKey"))} — across and deep, in feet.`,
-    fields: [
-      { name: "w", label: "Width", type: "text",
-        value: asFeet(b.width * H.getNum(obj, "objectScaleX", 1)) },
-      { name: "d", label: "Depth", type: "text",
-        value: asFeet(b.height * H.getNum(obj, "objectScaleY", 1)) },
-    ],
-    onOK: ({ w, d }) => {
-      const wf = parseFloat(w), df = parseFloat(d);
-      mark("size");
-      if (wf > 0 && b.width) H.set(obj, "objectScaleX", (wf * UNITS_PER_FOOT) / b.width);
-      if (df > 0 && b.height) H.set(obj, "objectScaleY", (df * UNITS_PER_FOOT) / b.height);
-      draw(); syncChrome();
-    },
-  });
+/** Drop the next position in a chain and join it to the one before. */
+function placeChainPoint(pt) {
+  const source = byID(S.chain.source);
+  const last = byID(S.chain.last);
+  if (!source || !last) return cancelTool();
+  if (!S.chain.placed) mark("walk chain");
+
+  const copy = reid(structuredClone(source));
+  H.set(copy, "x", round(pt.x));
+  H.set(copy, "y", round(pt.y));
+
+  // Face the way they were travelling, which is nearly always right.
+  const a = Math.atan2(pt.y - H.getNum(last, "y"), pt.x - H.getNum(last, "x"));
+  if (R.hasRotator(copy)) R.setAngle(copy, a);
+
+  // Number the positions as the original does, so the chain reads 1, 2, 3.
+  const slices = timeSlices();
+  if (!stopsOf(last).length) setStops(last, [1]);
+  const next = Math.max(1, ...stopsOf(last)) + 1;
+  setStops(copy, [next]);
+  if (next > slices.length) {
+    H.child(H.child(S.doc, "CurrentSnapshot"), "TimeSlices")
+      .children.push(H.makeTimeNumber(slices.length));
+  }
+  canvas().children.push(copy);
+
+  const tag = S.tool === "track" ? "Track" : "WalkArrow";
+  const arrow = H.makePath(tag, [
+    { x: H.getNum(last, "x"), y: H.getNum(last, "y") },
+    { x: round(pt.x), y: round(pt.y) },
+  ]);
+  H.set(arrow, "fromConstraints", idOf(last));
+  H.set(arrow, "toConstraints", idOf(copy));
+  canvas().children.push(arrow);
+
+  S.chain.last = idOf(copy);
+  S.chain.placed++;
+  reindex();
+  reflowConstraints();
+  S.sel = new Set([idOf(copy)]);
+  draw(); syncChrome();
+}
+
+function endChain() {
+  const placed = S.chain ? S.chain.placed : 0;
+  S.chain = null; S.tool = null; S.showGrid = false;
+  stage.classList.remove("drawing");
+  draw(); syncChrome();
+  if (placed) toast(`${placed} more position${placed > 1 ? "s" : ""}`);
 }
 
 function attachLabel(obj) {
@@ -3320,7 +3363,7 @@ function renderShotList() {
   lensRow.className = "lens-row";
   if (picked) {
     const now = parseFloat(H.get(picked, "versionLens")) || 0;
-    for (const mm of packageLenses().slice(0, 6)) {
+    for (const mm of packageLenses()) {
       const b = document.createElement("button");
       b.textContent = mm;
       if (mm === now) b.className = "on";
@@ -3333,7 +3376,7 @@ function renderShotList() {
       lensRow.append(b);
     }
   } else {
-    for (const mm of packageLenses().slice(0, 6)) {
+    for (const mm of packageLenses()) {
       const b = document.createElement("button");
       b.textContent = mm;
       b.title = `Append ${mm}mm`;
@@ -4464,10 +4507,11 @@ const PACKAGE_KEY = "sd.package";
 const DEFAULT_PACKAGE = {
   active: "Default",
   sets: {
+    // A prime set from 14 to 135 on a 16:9 body, which is where most jobs sit.
     Default: {
-      lenses: [...LENSES].slice(0, 6),
+      lenses: [14, 18, 21, 25, 32, 35, 40, 50, 65, 75, 100, 135],
       support: Object.keys(RIG.RIGS),
-      format: "Film Super35",
+      format: "ARRI Alexa",
     },
   },
 };

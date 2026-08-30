@@ -53,6 +53,14 @@ assignments that are already in the file.</p>`,
     body: `
 <p>Drag to move. Arrow keys nudge two units, <kbd>⇧</kbd> plus arrows moves
 twenty. <kbd>[</kbd> and <kbd>]</kbd> rotate fifteen degrees at a time.</p>
+<h4>Walking somebody through a scene</h4>
+<p><b>Walk To…</b> on a person, then <b>click wherever they go next</b>. Each
+click drops another of them there, turned the way they travelled, joined to the
+one before by an arrow and numbered — position 1, 2, 3. Keep clicking for as
+long as the move goes on; <kbd>⏎</kbd> stops. <b>Track To…</b> on a camera does
+the same with camera positions.</p>
+<p>That's how the scenes in this library are built: one actor as ten positions
+in a chain, which is why the whole move reads off a single sheet.</p>
 <p>Dragging the end of a walk arrow <b>walks the person on it</b> rather than
 leaving the arrow pointing at nobody — either end, coming or going. The arrow
 keeps its clearance from them as they go.</p>

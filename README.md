@@ -188,6 +188,11 @@ bar reads as a person however small the page gets, and takes far less room than
 a two-foot circle. **Appearance…** also offers solid head and shoulders, or the
 original circles.
 
+**Walk To… drops the next position.** Click wherever they go next and another
+of them appears there, turned the way they travelled, joined to the last by an
+arrow and numbered. Keep clicking for as long as the move goes on. That's how
+the scenes in this library are built — one actor as ten chained positions.
+
 Dragging the end of a walk arrow **walks the person on it**, either end, and the
 arrow keeps its clearance as they go.
 
