@@ -57,10 +57,22 @@ twenty. <kbd>[</kbd> and <kbd>]</kbd> rotate fifteen degrees at a time.</p>
 <p><b>Walk To…</b> on a person, then <b>click wherever they go next</b>. Each
 click drops another of them there, turned the way they travelled, joined to the
 one before by an arrow and numbered — position 1, 2, 3. Keep clicking for as
-long as the move goes on; <kbd>⏎</kbd> stops. <b>Track To…</b> on a camera does
-the same with camera positions.</p>
+long as the move goes on; <kbd>⏎</kbd> stops.</p>
 <p>That's how the scenes in this library are built: one actor as ten positions
 in a chain, which is why the whole move reads off a single sheet.</p>
+<h4>Moving a camera — position 1 and position 2</h4>
+<p>You don't have to plan a move before you place the camera. Put the camera
+where it starts, then <b>Add a Move…</b> — or <kbd>M</kbd>. That pins where it
+stands as <b>position 1</b>, adds a second slice and drops you on it. Now just
+<b>drag the camera where it ends up</b>: that becomes position 2.</p>
+<p>From then on, dragging that camera while parked on a slice re-pins <i>that</i>
+position, so you can keep adjusting either end without starting over.
+<b>Add Position 3…</b> extends the move, <kbd>M</kbd> pins the current slice, and
+<b>Clear Move</b> puts it back to a camera that just sits there.</p>
+<p>The move draws on the plan as a dashed run with a numbered dot at each
+position, in that camera's own colour, so the whole thing reads without pressing
+anything. <kbd>P</kbd> plays it, and the camera travels and turns between the
+marks rather than jumping. People work the same way.</p>
 <p>Dragging the end of a walk arrow <b>walks the person on it</b> rather than
 leaving the arrow pointing at nobody — either end, coming or going. The arrow
 keeps its clearance from them as they go.</p>
@@ -131,8 +143,11 @@ It can't leave the arm and it can't take the track itself; the faint circle is
 the sweep it can reach. A Fisher Jib 21 is 5'10", which is shorter than most
 people draw it. <b>Arm Reach…</b> sets it to something else for a 23.</dd>
 </dl>
-<p><b>Track To…</b> on a camera lays track from where it stands to wherever you
-click, and puts the camera on it.</p>
+<p>Track is for dollies. A camera on its own doesn't need any — give it
+<b>Add a Move…</b> instead. Lay track with <kbd>T</kbd> and drop a dolly near it
+and the dolly takes it.</p>
+<p>Deleting the camera off a dolly takes the dolly and its track with it, and
+deleting a dolly takes its track unless something else is riding the same run.</p>
 <h4>Moving track after you've laid it</h4>
 <p>Select a run and the arrow keys nudge the whole thing two units at a time,
 <kbd>⇧</kbd> for twenty — anything riding it comes along. <kbd>[</kbd> and
@@ -322,7 +337,8 @@ director a read-only URL that needs no app and no account.</p>`,
 <table>
 <tr><td><kbd>N</kbd></td><td>New shot</td></tr>
 <tr><td><kbd>B</kbd> then <kbd>←</kbd> <kbd>→</kbd></td><td>Blocking, step beats</td></tr>
-<tr><td><kbd>W</kbd> / <kbd>T</kbd></td><td>Wall tool, camera track</td></tr>
+<tr><td><kbd>W</kbd> / <kbd>T</kbd></td><td>Wall tool, dolly track</td></tr>
+<tr><td><kbd>M</kbd></td><td>Give it a move, or pin this position</td></tr>
 <tr><td><kbd>G</kbd></td><td>Grid snap on and off</td></tr>
 <tr><td><kbd>P</kbd></td><td>Play the timeline</td></tr>
 <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Jump to a time slice</td></tr>
