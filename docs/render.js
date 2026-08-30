@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=3c134a93";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=3c134a93";
-import { EXTRA_SVG } from "./props.js?v=3c134a93";
-import { GAUGE } from "./track.js?v=3c134a93";
-import * as H from "./hcw.js?v=3c134a93";
+import { FXG } from "./assets.js?v=1f806a80";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=1f806a80";
+import { EXTRA_SVG } from "./props.js?v=1f806a80";
+import { GAUGE } from "./track.js?v=1f806a80";
+import * as H from "./hcw.js?v=1f806a80";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -169,15 +169,70 @@ function drawDisc(obj, color, female) {
   return g;
 }
 
-export let figureStyle = "figure";        // "figure" | "disc"
-export const setFigureStyle = (s) => { figureStyle = s === "disc" ? "disc" : "figure"; };
+export let figureStyle = "plan";   // "plan" | "figure" | "disc"
+export const setFigureStyle = (s) => {
+  figureStyle = ["plan", "figure", "disc"].includes(s) ? s : "plan";
+};
+
+/**
+ * The plan-view figure architects and set designers draw: a head with a
+ * shoulder band curving round behind it, open at the front. It's a line
+ * drawing rather than a blob, so a dozen of them on a page still read as
+ * separate people and you can see the set through them.
+ */
+const SHOULDER_R = 13;
+
+function arcPath(r, fromDeg, toDeg) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const a = { x: Math.cos(rad(fromDeg)) * r, y: Math.sin(rad(fromDeg)) * r };
+  const b = { x: Math.cos(rad(toDeg)) * r, y: Math.sin(rad(toDeg)) * r };
+  const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
+  return `M${a.x.toFixed(2)},${a.y.toFixed(2)} ` +
+         `A${r},${r} 0 ${large} 1 ${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+}
+
+function drawPlanFigure(obj, color, female) {
+  const g = el("g");
+
+  // Shoulders: a band sweeping round the back, leaving the front open.
+  g.append(el("path", {
+    d: arcPath(SHOULDER_R, 62, 298),
+    fill: "none", stroke: INK, "stroke-width": 8.5, "stroke-linecap": "round",
+  }));
+  g.append(el("path", {
+    d: arcPath(SHOULDER_R, 62, 298),
+    fill: "none", stroke: color, "stroke-width": 5.5, "stroke-linecap": "round",
+  }));
+
+  if (female) {
+    // Hair: a second, longer band outside the shoulders.
+    g.append(el("path", {
+      d: arcPath(SHOULDER_R + 5.5, 96, 264),
+      fill: "none", stroke: INK, "stroke-width": 5.5, "stroke-linecap": "round",
+    }));
+    g.append(el("path", {
+      d: arcPath(SHOULDER_R + 5.5, 96, 264),
+      fill: "none", stroke: color, "stroke-width": 2.8, "stroke-linecap": "round",
+    }));
+  }
+
+  g.append(el("circle", {
+    cx: 0, cy: 0, r: 6.5, fill: color, stroke: INK, "stroke-width": 2.5,
+  }));
+  // Which way they're looking: a short mark out of the open side.
+  g.append(el("line", {
+    x1: 5, y1: 0, x2: SHOULDER_R + 3, y2: 0,
+    stroke: INK, "stroke-width": 2.5, "stroke-linecap": "round",
+  }));
+  return g;
+}
 
 function drawCharacter(obj) {
   const color = hexOf(H.getNum(obj, "color", 0xfc837b));
   const female = H.getBool(obj, "female");
-  return figureStyle === "disc"
-    ? drawDisc(obj, color, female)
-    : drawFigure(obj, color, female);
+  if (figureStyle === "disc") return drawDisc(obj, color, female);
+  if (figureStyle === "figure") return drawFigure(obj, color, female);
+  return drawPlanFigure(obj, color, female);
 }
 
 // Body, pinch, then the field-of-view flare — traced from an exported diagram.
@@ -529,7 +584,9 @@ export function artBounds(key) {
 export function radiusOf(obj) {
   const s = Math.max(H.getNum(obj, "objectScaleX", 1), H.getNum(obj, "objectScaleY", 1));
   if (obj.tag === "Character") {
-    return figureStyle === "disc" ? CHAR_R + STROKE / 2 : SHOULDER_ACROSS + STROKE / 2;
+    if (figureStyle === "disc") return CHAR_R + STROKE / 2;
+    if (figureStyle === "figure") return SHOULDER_ACROSS + STROKE / 2;
+    return SHOULDER_R + 6;
   }
   if (obj.tag === "Camera") return 22;
   if (LABEL_TAGS.has(obj.tag)) return 34;

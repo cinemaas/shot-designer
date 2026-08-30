@@ -15,15 +15,36 @@ frame really is twelve feet.</p>
 <dt>Select</dt><dd>Click. <kbd>⌘</kbd>-click or <kbd>⇧</kbd>-click adds and
 removes. Drag across empty space to sweep up everything inside.</dd>
 </dl>
-<p>People are drawn head and shoulders from above, at the proportions they
-actually have — shoulders about twenty inches across, head about seven. The
-shoulders sit in a deeper shade of the same colour and the nose points where
-they're looking, so a crowded page still reads. Women get hair. All eight
-colours work for either. If you'd rather have the original circles,
-<b>☰ ▸ Appearance…</b> switches back.</p>
+<p>People are drawn the way a plan draws them: a head with a shoulder band
+curving round behind it, open at the front, with a short mark showing which way
+they're looking. It's a line drawing rather than a blob, so a dozen of them on
+one page stay separate and you can still see the set underneath. Women get a
+second band for hair. All eight colours work for either.</p>
+<p><b>☰ ▸ Appearance…</b> has two alternatives if you'd rather: solid head and
+shoulders, or the original circles.</p>
 <p>Clicking always goes for the thing you can see. Labels never steal a click
 from whatever is underneath them, so the numbers you write on a position don't
 get in the way of grabbing the person.</p>`,
+  },
+  {
+    id: "pages",
+    title: "Pages",
+    body: `
+<p>A scene can hold several plans of the same set — blocking on one page,
+lighting on another, a camera plan on a third. It's how a busy location stays
+readable without splitting into separate files, and it's the original's own
+feature: objects carry the pages they belong on.</p>
+<p>The <b>page button</b> at the bottom right shows where you are — <code>1/5</code>
+— and opens the list. Pages can be named. <b>All pages at once</b> shows
+everything stacked, which is occasionally what you want and usually isn't.</p>
+<dl>
+<dt>Put something on a page</dt><dd>Select it, then <b>Put Selection On Page N</b>
+from the page menu.</dd>
+<dt>Something that belongs everywhere</dt><dd><b>Put Selection On Every Page</b> —
+the set, the walls, the furniture. That's the default for anything new.</dd>
+</dl>
+<p>Scenes you already made come in with their pages intact; the app reads the
+assignments that are already in the file.</p>`,
   },
   {
     id: "moving",

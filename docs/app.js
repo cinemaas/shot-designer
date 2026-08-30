@@ -1,23 +1,23 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=3c134a93";
-import * as R from "./render.js?v=3c134a93";
-import { FXG } from "./assets.js?v=3c134a93";
-import * as B from "./blocking.js?v=3c134a93";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=3c134a93";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=3c134a93";
-import { HANDBOOK } from "./handbook.js?v=3c134a93";
-import * as TR from "./track.js?v=3c134a93";
-import * as RIG from "./rigs.js?v=3c134a93";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=3c134a93";
-import { Library } from "./library.js?v=3c134a93";
+import * as H from "./hcw.js?v=1f806a80";
+import * as R from "./render.js?v=1f806a80";
+import { FXG } from "./assets.js?v=1f806a80";
+import * as B from "./blocking.js?v=1f806a80";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=1f806a80";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1f806a80";
+import { HANDBOOK } from "./handbook.js?v=1f806a80";
+import * as TR from "./track.js?v=1f806a80";
+import * as RIG from "./rigs.js?v=1f806a80";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=1f806a80";
+import { Library } from "./library.js?v=1f806a80";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=3c134a93";
+} from "./catalog.js?v=1f806a80";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -38,6 +38,7 @@ const S = {
   showGrid: false,
   blocking: false,       // step through the staging one beat at a time
   beat: 1,
+  page: 1,               // scenes can hold several pages of the same set
   info: null,            // derived beat structure
   ghosts: true,
   compactLabels: false,
@@ -199,6 +200,7 @@ function draw() {
     : null;
 
   for (const obj of objects()) {
+    if (!onPage(obj, S.page)) continue;
     const layer = R.layerOf(obj);
     const g = LAYER_G[layer] || LAYER_G.prop;
     const flag = layerKeyFor(layer);
@@ -611,6 +613,7 @@ function fitToContent(pad = 90) {
   }
   const pts = [];
   for (const o of objects()) {
+    if (!onPage(o, S.page)) continue;
     if (R.POINT_TAGS.has(o.tag)) pts.push(...R.pointsOf(o));
     else pts.push({ x: H.getNum(o, "x"), y: H.getNum(o, "y") });
   }
@@ -680,6 +683,49 @@ function offsetFrom(at, towards, gap) {
  * each tagged with its slice — which is the same thing people already do by
  * hand when they number a character's positions on the page.
  */
+/**
+ * Which pages an object appears on. The original writes `onPagesComma` — "1",
+ * "2", "1,2" — and an empty one means every page. It's how a scene keeps the
+ * lighting plan and the blocking plan in one file without them piling up.
+ */
+function pagesOf(o) {
+  const raw = (H.get(o, "onPagesComma") || "").trim();
+  if (!raw) return null;
+  const list = raw.split(",").map((n) => parseInt(n, 10)).filter(Number.isFinite);
+  return list.length ? list : null;
+}
+
+const onPage = (o, page) => {
+  if (!page) return true;                      // 0 means show the lot
+  const p = pagesOf(o);
+  return !p || p.includes(page);
+};
+
+/** The names people give pages, kept in SceneSettings as a pipe-separated list. */
+function pageNames() {
+  if (!S.doc) return [];
+  const raw = H.get(settings(), "pageNames") || "";
+  return raw.split("|");
+}
+
+function setPageName(i, name) {
+  const names = pageNames();
+  while (names.length < i) names.push("Untitled");
+  names[i - 1] = name;
+  H.set(settings(), "pageNames", names.join("|"));
+}
+
+/** How many pages this scene actually uses. */
+function pageCount() {
+  if (!S.doc) return 1;
+  let n = 1;
+  for (const o of objects()) {
+    const p = pagesOf(o);
+    if (p) n = Math.max(n, ...p);
+  }
+  return n;
+}
+
 function stopsOf(o) {
   return (H.get(o, "stopMarks") || "")
     .split(",").map((n) => parseInt(n, 10)).filter(Number.isFinite);
@@ -725,7 +771,7 @@ function noteLocked(name) {
 }
 
 /** Can you pick this up? Hidden layers can't, locked layers won't. */
-const grabbable = (o) => layerOn(o) && !layerLocked(o);
+const grabbable = (o) => layerOn(o) && !layerLocked(o) && onPage(o, S.page);
 
 /**
  * What did you actually click on?
@@ -2044,6 +2090,7 @@ function toolbar(act, ev) {
   if (act === "undo") return undo();
   if (act === "redo") return redo();
   if (act === "wall") return startTool("wall");
+  if (act === "pages") return pagesMenu(...at);
   if (act === "blocking") return toggleBlocking();
   if (act === "templates") return templatesMenu(...at);
   if (act === "play") return S.playing ? stopPlay() : startPlay();
@@ -2057,11 +2104,24 @@ const centreOfView = () => {
 };
 
 function syncChrome() {
+  if (!S.doc) return;
   $("[data-act=undo]").disabled = !S.undo.length;
   $("[data-act=redo]").disabled = !S.redo.length;
   $("[data-act=wall]").classList.toggle("on", S.tool === "wall");
   $("[data-act=play]").classList.toggle("on", S.playing);
   $("[data-act=blocking]").classList.toggle("on", S.blocking);
+
+  const pageBtn = $("[data-act=pages]");
+  if (pageBtn && S.doc) {
+    const n = pageCount();
+    pageBtn.textContent = S.page === 0 ? "All" : `${S.page}/${n}`;
+    pageBtn.hidden = n <= 1 && S.page !== 0;
+    const name = (pageNames()[S.page - 1] || "").trim();
+    pageBtn.title = S.page === 0 ? "Showing every page"
+      : `Page ${S.page}${name && name !== "Untitled" ? " — " + name : ""}`;
+  } else if (pageBtn) {
+    pageBtn.hidden = true;
+  }
 
   const slices = $("#slices");
   if (S.blocking && S.info) {
@@ -2550,6 +2610,50 @@ function cycleLayer(key) {
   else if (state === "locked") { locked.delete(key); setLocked(locked); H.set(ls, key, false); }
   else { H.set(ls, key, true); }
   draw(); syncChrome();
+}
+
+/** Pages hold different plans of the same set — blocking, lighting, and so on. */
+function pagesMenu(x, y) {
+  const n = pageCount();
+  const names = pageNames();
+  const used = new Set();
+  for (const o of objects()) for (const p of pagesOf(o) || []) used.add(p);
+
+  showPopover(x, y, [
+    { head: `Pages — ${n} in this scene` },
+    { label: (S.page === 0 ? "◉  " : "○  ") + "All pages at once",
+      run: () => { S.page = 0; draw(); syncChrome(); } },
+    "-",
+    ...Array.from({ length: Math.max(n, 1) }, (_, i) => i + 1).map((p) => ({
+      label: (S.page === p ? "◉  " : "○  ") +
+        `${p}. ${(names[p - 1] || "Untitled").trim() || "Untitled"}` +
+        (used.has(p) ? "" : "  (empty)"),
+      run: () => { S.page = p; draw(); syncChrome(); },
+    })),
+    "-",
+    { label: "Rename This Page…", disabled: !S.page, run: () => sheet({
+      title: "Page name",
+      fields: [{ name: "name", label: `Page ${S.page}`, type: "text",
+                 value: (names[S.page - 1] || "").trim() }],
+      onOK: ({ name }) => {
+        mark("page name");
+        setPageName(S.page, name.trim() || "Untitled");
+        syncChrome();
+      },
+    }) },
+    { label: `Put Selection On Page ${S.page || 1}`, disabled: !S.sel.size,
+      run: () => {
+        mark("page");
+        for (const id of S.sel) H.set(byID(id), "onPagesComma", String(S.page || 1));
+        draw(); syncChrome();
+      } },
+    { label: "Put Selection On Every Page", disabled: !S.sel.size,
+      run: () => {
+        mark("page");
+        for (const id of S.sel) H.set(byID(id), "onPagesComma", "");
+        draw(); syncChrome();
+      } },
+  ]);
 }
 
 function layersMenu(x, y) {
@@ -4239,8 +4343,8 @@ function applyFigureStyle(style) {
 }
 
 const currentFigureStyle = () => {
-  try { return localStorage.getItem(FIGURE_KEY) || "figure"; }
-  catch { return "figure"; }
+  try { return localStorage.getItem(FIGURE_KEY) || "plan"; }
+  catch { return "plan"; }
 };
 
 function themeMenu(x, y) {
@@ -4255,7 +4359,7 @@ function themeMenu(x, y) {
       })),
     "-",
     { head: "Characters" },
-    ...[["figure", "Head and shoulders"], ["disc", "Circles"]]
+    ...[["plan", "Plan figure"], ["figure", "Head and shoulders"], ["disc", "Circles"]]
       .map(([style, label]) => ({
         label: (fig === style ? "◉  " : "○  ") + label,
         run: () => applyFigureStyle(style),

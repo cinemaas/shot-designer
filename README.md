@@ -160,14 +160,18 @@ Rows reorder, duplicate one step tighter (`MCU` → `CU` → `ECU`), and rename 
 place. **Export CSV** gives the AD something they can open. Lens chips are in
 the order you actually use them — 50, 85, 32, 24, 135.
 
-**People you can read.** Characters are drawn head and shoulders from above at
-real proportions — shoulders about twenty inches across, head about seven —
-with the shoulders in a deeper shade of the same colour and a nose pointing
-where they're looking. A circle tells you where somebody is; this tells you
-which way they're turned, which is what a crowded blocking page needs. It also
-takes up far less room front-to-back, so figures stop merging into each other.
-All eight colours work for either sex, and **Appearance…** switches back to the
-original circles.
+**Pages.** A scene can hold several plans of the same set — blocking on one,
+lighting on another. The original stores this per object and 365 objects in this
+library use it, so scenes that were already paged now open paged instead of
+stacked on top of each other. The page button shows `1/5`, pages can be named,
+and there's an all-at-once view when you want it.
+
+**People you can read.** Characters are drawn the way a plan draws them: a head
+with a shoulder band curving round behind, open at the front, and a mark showing
+which way they're looking. A line drawing rather than a blob, so a dozen on a
+page stay separate and the set shows through them. Women get a second band for
+hair; all eight colours work for either. **Appearance…** also offers solid head
+and shoulders, or the original circles.
 
 **Clicking what you meant to click.** Hit testing runs against the pixels that
 were actually drawn, so a big prop only responds where its shape is rather than
