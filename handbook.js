@@ -151,6 +151,17 @@ INS, POV, Profile, Push, Clean, Hi, Low, Jib, Slider, Drone — comes from what'
 already written across this library.</p>
 <p>Hitting <kbd>⏎</kbd> places the camera, points it, lenses it, gives it the
 next letter and its own colour, and adds the row.</p>
+<h4>Straight onto a camera</h4>
+<p>Select a camera and press <kbd>⏎</kbd> (or <kbd>E</kbd>). Its shot opens with
+everything in one place — camera letter, the shot itself, lens, notes — and if
+that camera didn't have a shot yet, it gets one. Retype the shot line in
+shorthand and it re-reads it.</p>
+<h4>Your package</h4>
+<p><b>☰ ▸ Camera Package…</b> is what you're actually carrying: the lenses in
+the case, in the order you reach for them, and the support that's on the truck.
+The lens chips and the rig menu follow it, so the app stops offering you a 135
+you don't own. Packages are named, so a show with primes and a show with zooms
+can each have their own. It's remembered in the browser you set it in.</p>
 <h4>Coverage without typing</h4>
 <p>The <b>Cover</b> button lays out a two-hander in one go: the master, both
 over-the-shoulders and both singles, with lenses at 32 / 50 / 50 / 85 / 85.

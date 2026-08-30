@@ -1500,7 +1500,7 @@ function addRigPosition(rider) {
 function rigMenu(x, y, at) {
   showPopover(x, y, [
     { head: "Rigged Camera" },
-    ...Object.entries(RIG.RIGS).map(([kind, spec]) => ({
+    ...packageSupport().map((kind) => [kind, RIG.RIGS[kind]]).map(([kind, spec]) => ({
       label: spec.label,
       run: () => {
         mark("add rig");
@@ -1925,6 +1925,14 @@ window.addEventListener("keydown", (ev) => {
     return (draw(), syncChrome());
   }
   if (k === "enter" && S.draft) { ev.preventDefault(); return finishTool(); }
+  // Enter on a camera opens its shot, ready to type the lot.
+  if ((k === "enter" || k === "e") && !cmd && S.sel.size === 1) {
+    const one = byID([...S.sel][0]);
+    if (one && (one.tag === "Camera" || one.tag === "ShotVersion")) {
+      ev.preventDefault();
+      return editCameraShot(one);
+    }
+  }
   if ((k === "backspace" || k === "delete") && S.draft) {
     ev.preventDefault(); return undoLastPoint();
   }
@@ -2360,6 +2368,7 @@ function mainMenu(x, y) {
     "-",
     "-",
     { label: Cloud.connected ? "Cloud…" : "Connect to Cloud…", run: () => cloudMenu(x, y) },
+    { label: "Camera Package…", run: packageDialog },
     { label: "Appearance…", run: () => themeMenu(x, y) },
     { label: "Handbook", key: "?", run: openHandbook },
     { label: "Keyboard Shortcuts", run: shortcutsSheet },
@@ -2972,7 +2981,7 @@ function renderShotList() {
 
   const lensRow = document.createElement("div");
   lensRow.className = "lens-row";
-  for (const mm of LENSES.slice(0, 5)) {
+  for (const mm of packageLenses().slice(0, 6)) {
     const b = document.createElement("button");
     b.textContent = mm;
     b.title = `Append ${mm}mm`;
@@ -3165,6 +3174,42 @@ function addCoverage(cast) {
   toast("Coverage laid out — drag any camera to taste");
 }
 
+/** Whatever you've got hold of, open its shot — making one if there isn't. */
+function editCameraShot(obj) {
+  const cam = obj.tag === "Camera" ? obj : byID(H.get(obj, "attachObjectID"));
+  let v = obj.tag === "ShotVersion" ? obj
+    : objects().find((o) => o.tag === "ShotVersion" &&
+        H.get(o, "attachObjectID") === idOf(obj));
+  if (!v && cam) {
+    mark("add shot");
+    const at = { x: H.getNum(cam, "x"), y: H.getNum(cam, "y") };
+    const angle = R.angleOf(cam);
+    const back = 52;
+    const built = H.makeCaption(round(at.x - Math.cos(angle) * back),
+                                round(at.y - Math.sin(angle) * back), "");
+    built.tag = "ShotVersion";
+    H.set(built, "shotID", H.newID());
+    H.set(built, "versionNickname", "");
+    H.set(built, "versionDescription", "");
+    H.set(built, "versionNumber", 0);
+    H.set(built, "versionShotType", "");
+    H.set(built, "versionLens", 0);
+    H.set(built, "headerText", nextCamLetter());
+    H.set(built, "attachObjectID", idOf(cam));
+    H.set(built, "attachDeltaX", round(-Math.cos(angle) * back));
+    H.set(built, "attachDeltaY", round(-Math.sin(angle) * back));
+    canvas().children.push(built);
+    shotItems().children.push(H.node("ShotListCamera", {
+      uniqueID: H.get(built, "shotID"),
+      sequence: H.kids(shotItems(), "ShotListCamera").length,
+      shotCameraNumber: 0, shotCrew: "", shotProps: "", shotEquipment: "",
+    }));
+    reindex();
+    v = built;
+  }
+  if (v) editShot(v);
+}
+
 function editShot(v) {
   const cast = castOf(objects());
   sheet({
@@ -3173,7 +3218,8 @@ function editShot(v) {
     fields: [
       { name: "header", label: "Camera", type: "text", value: H.get(v, "headerText") },
       { name: "nick", label: "Shot", type: "text", value: H.get(v, "versionNickname") },
-      { name: "lens", label: "Lens (mm)", type: "text", value: H.get(v, "versionLens") || "" },
+      { name: "lens", label: `Lens (mm) — you carry ${packageLenses().join(", ")}`,
+        type: "text", value: H.get(v, "versionLens") || "" },
       { name: "desc", label: "Notes", type: "textarea", value: H.get(v, "versionDescription") },
     ],
     onOK: ({ header, nick, lens, desc }) => {
@@ -4035,6 +4081,135 @@ function openHandbook(section) {
   side.append(head, nav);
   box.append(side, main);
   show(section || HANDBOOK[0].id);
+}
+
+// ---------------------------------------------------------------- the package
+//
+// What you're actually carrying: the lenses in the case and the support on the
+// truck. Set it once and the app stops offering you a 135 you don't own.
+
+const PACKAGE_KEY = "sd.package";
+
+const DEFAULT_PACKAGE = {
+  active: "Default",
+  sets: {
+    Default: { lenses: [...LENSES].slice(0, 6), support: Object.keys(RIG.RIGS) },
+  },
+};
+
+function readPackage() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PACKAGE_KEY) || "null");
+    if (raw && raw.sets && Object.keys(raw.sets).length) return raw;
+  } catch { /* fall through to the default */ }
+  return structuredClone(DEFAULT_PACKAGE);
+}
+
+function writePackage(pkg) {
+  try { localStorage.setItem(PACKAGE_KEY, JSON.stringify(pkg)); }
+  catch { /* private window */ }
+}
+
+/** The set in play, always something usable. */
+function activeSet() {
+  const pkg = readPackage();
+  return pkg.sets[pkg.active] || Object.values(pkg.sets)[0] || DEFAULT_PACKAGE.sets.Default;
+}
+
+const packageLenses = () => {
+  const l = activeSet().lenses;
+  return l && l.length ? l : LENSES;
+};
+
+const packageSupport = () => {
+  const sup = activeSet().support;
+  const all = Object.keys(RIG.RIGS);
+  return sup && sup.length ? all.filter((k) => sup.includes(k)) : all;
+};
+
+function packageDialog() {
+  const pkg = readPackage();
+  const body = document.createElement("div");
+
+  const setLabel = document.createElement("label");
+  setLabel.textContent = "Package";
+  const picker = document.createElement("select");
+  for (const name of Object.keys(pkg.sets)) {
+    const o = document.createElement("option");
+    o.value = name; o.textContent = name;
+    picker.append(o);
+  }
+  const addOpt = document.createElement("option");
+  addOpt.value = "\u0000new"; addOpt.textContent = "New package…";
+  picker.append(addOpt);
+  picker.value = pkg.active;
+
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = "Called";
+  const nameBox = document.createElement("input");
+  nameBox.type = "text"; nameBox.value = pkg.active;
+
+  const lensLabel = document.createElement("label");
+  lensLabel.textContent = "Lenses (mm, in the order you reach for them)";
+  const lensBox = document.createElement("input");
+  lensBox.type = "text";
+
+  const supLabel = document.createElement("label");
+  supLabel.textContent = "Support on the truck";
+  const supWrap = document.createElement("div");
+  supWrap.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin-top:4px";
+  const boxes = {};
+  for (const [key, spec] of Object.entries(RIG.RIGS)) {
+    const l = document.createElement("label");
+    l.style.cssText = "display:flex;gap:6px;align-items:center;font-size:13px;margin:0";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.style.width = "auto";
+    boxes[key] = cb;
+    l.append(cb, document.createTextNode(spec.label));
+    supWrap.append(l);
+  }
+
+  const load = (name) => {
+    const set = pkg.sets[name] || { lenses: [], support: [] };
+    nameBox.value = name;
+    lensBox.value = (set.lenses || []).join(", ");
+    for (const [key, cb] of Object.entries(boxes)) {
+      cb.checked = !set.support || !set.support.length || set.support.includes(key);
+    }
+  };
+  load(pkg.active);
+  picker.onchange = () => {
+    if (picker.value === "\u0000new") {
+      nameBox.value = "New package";
+      lensBox.value = "";
+      for (const cb of Object.values(boxes)) cb.checked = true;
+      return;
+    }
+    load(picker.value);
+  };
+
+  body.append(setLabel, picker, nameLabel, nameBox, lensLabel, lensBox, supLabel, supWrap);
+
+  sheet({
+    title: "Camera Package",
+    sub: "The lens chips and the rig menu follow whatever's set here.",
+    body, okLabel: "Save",
+    onOK: () => {
+      const name = nameBox.value.trim() || "Default";
+      const lenses = lensBox.value.split(/[,\s]+/)
+        .map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n) && n > 0);
+      const support = Object.entries(boxes).filter(([, cb]) => cb.checked).map(([k]) => k);
+      const next = readPackage();
+      // Renaming replaces rather than leaving an orphan behind.
+      if (picker.value !== "\u0000new" && picker.value !== name) delete next.sets[picker.value];
+      next.sets[name] = { lenses, support };
+      next.active = name;
+      writePackage(next);
+      draw(); syncChrome();
+      toast(`${name} — ${lenses.length} lenses, ${support.length} rigs`);
+    },
+  });
 }
 
 // ---------------------------------------------------------------- theme
