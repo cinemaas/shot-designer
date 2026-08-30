@@ -1,6 +1,7 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
+import { BRAND } from "./brand.js";
 import * as H from "./hcw.js";
 import * as R from "./render.js";
 import { FXG } from "./assets.js";
@@ -3322,7 +3323,7 @@ function syncChrome() {
       : "Reconnecting…";
     badge.append(t);
   }
-  document.title = `${name}${S.dirty ? " •" : ""} — Shot Designer`;
+  document.title = `${name}${S.dirty ? " •" : ""} — ${BRAND.short}`;
   if (!$("#shotList").hidden) renderShotList();
   if (!$("#beatPanel").hidden) renderBeatPanel();
 }
