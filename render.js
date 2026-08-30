@@ -188,7 +188,7 @@ export const setFigureStyle = (s) => {
 // forward of the arc is the direction, and that's all a plan needs.
 const SHOULDER_M = 14;       // half of 18" across, at 20 units to the foot
 const SHOULDER_F = 11;       // half of 14"
-const PLAN_HEAD = 6.8;
+const PLAN_HEAD = 8.2;
 const ARM = 7.5;             // how thick the shoulder line draws
 const PLAN_SHOULDER = SHOULDER_M;   // what the hit radius is sized from
 
@@ -212,6 +212,16 @@ function drawPlanFigure(obj, color, female) {
   g.append(el("circle", {
     ...head, fill: color, stroke: INK, "stroke-width": 2.6,
   }));
+  // The original app's own mark: one line across the face for a man, two for
+  // a woman. It reads at any size and it's what his existing scenes use.
+  for (const d of female ? [PLAN_HEAD * 0.17, PLAN_HEAD * 0.63]
+                         : [PLAN_HEAD * 0.42]) {
+    const h = Math.sqrt(Math.max(0, PLAN_HEAD * PLAN_HEAD - d * d));
+    g.append(el("line", {
+      x1: head.cx + d, y1: -h, x2: head.cx + d, y2: h,
+      stroke: INK, "stroke-width": 2.2, "stroke-linecap": "butt",
+    }));
+  }
   return g;
 }
 

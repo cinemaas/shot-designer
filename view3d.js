@@ -56,6 +56,31 @@ export const POSTURES = {
 export const postureOf = (obj) =>
   POSTURES[H.get(obj, "posture") || "stand"] || POSTURES.stand;
 
+/**
+ * Openings you have to be able to see through. A window drawn as a solid box
+ * hides exactly the thing you put a window there to see, so these render as
+ * glass: a faint tint, an outline, and no lid. Doors that stand open are the
+ * same — the hole is the point.
+ */
+export const SEE_THROUGH = new Set([
+  "SMALLWINDOW", "LARGEWINDOW", "WINDOW", "BAYWINDOW", "PICTUREWINDOW",
+  "MEDIUMOPENING", "SMALLOPENING", "LARGEOPENING", "ARCHWAY", "CASEDOPENING",
+  "DOOROPEN", "DOUBLEDOOROPEN", "PRISONBARS", "MIRROR",
+]);
+
+/** Sill and head for a see-through opening, in feet off the floor. */
+const APERTURE = {
+  SMALLWINDOW:    [2.4, 6.4],  LARGEWINDOW:  [1.6, 7.0],
+  WINDOW:         [2.4, 6.4],  BAYWINDOW:    [1.6, 7.0],
+  PICTUREWINDOW:  [1.6, 7.4],
+  MEDIUMOPENING:  [0, 6.9],    SMALLOPENING: [0, 6.9],
+  LARGEOPENING:   [0, 7.6],    ARCHWAY:      [0, 7.6],
+  CASEDOPENING:   [0, 6.9],
+  DOOROPEN:       [0, 6.8],    DOUBLEDOOROPEN: [0, 6.8],
+  PRISONBARS:     [0, 7.0],    MIRROR:       [2.5, 6.5],
+};
+export const apertureOf = (key) => APERTURE[key] || null;
+
 const heightOf = (obj) => {
   const key = H.get(obj, "objectKey");
   const f = PROP_HEIGHT[key];
@@ -65,8 +90,13 @@ const heightOf = (obj) => {
 // --- the camera --------------------------------------------------------------
 
 /** A camera you can project through: where it is, where it looks, how wide. */
-export function cameraAt(cam, fmt, lensMM, pos) {
+export function cameraAt(cam, fmt, lensMM, pos, height) {
   const p = pos || { x: H.getNum(cam, "x"), y: H.getNum(cam, "y") };
+  // Lens height: the camera's own if it has been set, else whatever it is
+  // sitting on, else a normal tripod. A hi-hat and a jib do not see the same
+  // room, so this cannot stay a constant.
+  const own = H.getNum(cam, "lensHeight", 0);
+  const z = height != null ? height : (own > 0 ? ft(own) : HEIGHTS.lens);
   const fov = fieldOfView(lensMM > 0 ? lensMM : 32, fmt);
   const rot = H.child(cam, "SubObjects")?.children
     .find((s) => s.tag === "RotatorCamera");
@@ -74,7 +104,7 @@ export function cameraAt(cam, fmt, lensMM, pos) {
     ? (H.getBool(rot, "tiltUp") ? 0.18 : 0) - (H.getBool(rot, "tiltDown") ? 0.18 : 0)
     : 0;
   return {
-    x: p.x, y: p.y, z: HEIGHTS.lens,
+    x: p.x, y: p.y, z,
     yaw: R.angleOf(cam), pitch: tilt,
     tanH: Math.tan(fov.h / 2), tanV: Math.tan(fov.v / 2),
   };
@@ -115,24 +145,35 @@ export function build(cam, objects, scene, opts = {}) {
   const out = [];
   const seen = (x, y, z) => project(cam, x, y, z);
 
-  const quad = (a, b, hgt, fill, stroke) => {
-    const p = [seen(a.x, a.y, 0), seen(b.x, b.y, 0),
+  const quad = (a, b, hgt, fill, stroke, base = 0) => {
+    const p = [seen(a.x, a.y, base), seen(b.x, b.y, base),
                seen(b.x, b.y, hgt), seen(a.x, a.y, hgt)];
     if (p.some((q) => !q)) return;                    // clipping is out of scope
     out.push({ pts: p, fill, stroke, depth: (p[0].depth + p[1].depth) / 2 });
   };
+
+  // Where the wall has to stop, so you can see out of it.
+  const holes = [];
+  for (const o of objects) {
+    if (opts.skip && opts.skip(o)) continue;
+    if (!R.GENERIC_TAGS.has(o.tag)) continue;
+    const key = H.get(o, "objectKey");
+    const ap = apertureOf(key);
+    if (!ap || !SEE_THROUGH.has(key)) continue;
+    const b = R.artBounds(key);
+    const w = b.width * H.getNum(o, "objectScaleX", 1);
+    holes.push({ x: H.getNum(o, "x"), y: H.getNum(o, "y"), half: w / 2,
+                 z0: ft(ap[0]), z1: ft(ap[1]) });
+  }
 
   for (const o of objects) {
     if (opts.skip && opts.skip(o)) continue;
 
     if (o.tag === "Wall") {
       const pts = R.pointsOf(o);
-      for (let i = 1; i < pts.length; i++) {
-        quad(pts[i - 1], pts[i], HEIGHTS.wall, "#d9dee3", "#aeb6bd");
-      }
-      if (H.getBool(o, "closedLoop") && pts.length > 2) {
-        quad(pts[pts.length - 1], pts[0], HEIGHTS.wall, "#d9dee3", "#aeb6bd");
-      }
+      const seg = (a, b) => wallWithHoles(quad, a, b, holes);
+      for (let i = 1; i < pts.length; i++) seg(pts[i - 1], pts[i]);
+      if (H.getBool(o, "closedLoop") && pts.length > 2) seg(pts[pts.length - 1], pts[0]);
       continue;
     }
 
@@ -154,6 +195,25 @@ export function build(cam, objects, scene, opts = {}) {
         x: p.x + lx * Math.cos(a) - ly * Math.sin(a),
         y: p.y + lx * Math.sin(a) + ly * Math.cos(a),
       }));
+      const key = H.get(o, "objectKey");
+      if (SEE_THROUGH.has(key)) {
+        // Glass, not a box: the pane only, tinted, with nothing on top of it.
+        const ap = apertureOf(key) || [0, 6.8];
+        const [z0, z1] = [ft(ap[0]), ft(ap[1])];
+        const a = corners[0], b = corners[1], c2 = corners[2], d2 = corners[3];
+        const face = (p1, p2) => {
+          const q = [seen(p1.x, p1.y, z0), seen(p2.x, p2.y, z0),
+                     seen(p2.x, p2.y, z1), seen(p1.x, p1.y, z1)];
+          if (q.some((v) => !v)) return;
+          out.push({ pts: q, fill: "rgba(150,200,225,0.16)", stroke: "#8fb6cc",
+                     depth: (q[0].depth + q[1].depth) / 2 });
+        };
+        // longest pair of sides = the plane the opening sits in
+        const len = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+        if (len(a, b) >= len(b, c2)) { face(a, b); face(d2, c2); }
+        else { face(b, c2); face(a, d2); }
+        continue;
+      }
       const hgt = heightOf(o);
       for (let i = 0; i < 4; i++) {
         quad(corners[i], corners[(i + 1) % 4], hgt, "#e5eaee", "#9aa3ab");
@@ -166,6 +226,47 @@ export function build(cam, objects, scene, opts = {}) {
     }
   }
   return out.sort((a, b) => b.depth - a.depth);
+}
+
+/**
+ * A wall run, minus its openings. Anything sitting on this segment gets cut
+ * out of it: full-height either side of the hole, plus the spandrel above and
+ * the sill below. Without this a window is a picture of a wall.
+ */
+function wallWithHoles(quad, a, b, holes) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const L = Math.hypot(dx, dy);
+  if (L < 1) return;
+  const ux = dx / L, uy = dy / L;
+  const at = (t) => ({ x: a.x + ux * t, y: a.y + uy * t });
+  const W = "#d9dee3", S2 = "#aeb6bd";
+
+  const cuts = [];
+  for (const h of holes) {
+    const t = (h.x - a.x) * ux + (h.y - a.y) * uy;         // along the wall
+    const off = Math.abs(-(h.x - a.x) * uy + (h.y - a.y) * ux);  // perpendicular
+    if (off > UNITS_PER_FOOT * 1.2) continue;              // not on this wall
+    const t0 = Math.max(0, t - h.half), t1 = Math.min(L, t + h.half);
+    if (t1 > t0) cuts.push({ t0, t1, z0: h.z0, z1: h.z1 });
+  }
+  if (!cuts.length) { quad(a, b, HEIGHTS.wall, W, S2); return; }
+  cuts.sort((p, q) => p.t0 - q.t0);
+
+  let cursor = 0;
+  for (const c of cuts) {
+    if (c.t0 > cursor) quad(at(cursor), at(c.t0), HEIGHTS.wall, W, S2);
+    // above the opening
+    if (c.z1 < HEIGHTS.wall) band(quad, at(c.t0), at(c.t1), c.z1, HEIGHTS.wall, W, S2);
+    // below it
+    if (c.z0 > 0) band(quad, at(c.t0), at(c.t1), 0, c.z0, W, S2);
+    cursor = Math.max(cursor, c.t1);
+  }
+  if (cursor < L) quad(at(cursor), b, HEIGHTS.wall, W, S2);
+}
+
+/** A slab of wall between two heights — the bit over a door, the bit under a sill. */
+function band(quad, a, b, z0, z1, fill, stroke) {
+  quad.band ? quad.band(a, b, z0, z1, fill, stroke) : quad(a, b, z1, fill, stroke, z0);
 }
 
 /** A person: a body slab facing the camera, with a head on top — or, if

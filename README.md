@@ -88,9 +88,9 @@ scenes still open in the original, just without the move.
 
 **Plan figures.** People are drawn the way space planners draw them: a head
 circle with the shoulders and upper arms curving away behind it, at the real
-dimensions — 18 inches across the shoulders for a man, 14 for a woman, which is
-what tells the two apart. No faces. The head sitting forward of the arc is the
-direction, and that is all a plan needs.
+dimensions — 18 inches across the shoulders for a man, 14 for a woman. Gender
+is also marked the way the original marks it: one line across the face for a
+man, two for a woman. The head sitting forward of the arc is the direction.
 
 **Posture.** People stand, sit or lie down. It sets the height the lens sees
 them at and the floor they occupy: someone lying down is drawn at their real six

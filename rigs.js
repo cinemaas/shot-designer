@@ -117,3 +117,20 @@ export function makeRig(kind, x, y, angle = -Math.PI / 2) {
   H.set(cam, "y", seat.y);
   return { rig, cam };
 }
+
+/**
+ * How high the lens ends up on a given bit of support. A hi-hat and a jib do
+ * not see the same room, and this is the number that decides it. Feet.
+ */
+export const RIG_LENS_HEIGHT = {
+  HIHAT: 0.9, TRIPOD: 4.5, DOLLY: 3.4, DOLLYJIB: 5.2, JIB: 6.5,
+  SLIDER: 3.6, STEADICAM: 4.4, CRANE: 9.0, HANDHELD: 5.2,
+};
+
+/** Lens height in feet for a camera: its own override, else its rig, else tripod. */
+export function lensHeightOn(cam, rig) {
+  const own = H.getNum(cam, "lensHeight", 0);
+  if (own > 0) return own;
+  const key = rig ? H.get(rig, "objectKey") : "";
+  return RIG_LENS_HEIGHT[key] ?? RIG_LENS_HEIGHT.TRIPOD;
+}
