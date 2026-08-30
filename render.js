@@ -369,6 +369,33 @@ export function pathData(pts, { hard = true, closed = false } = {}) {
   return d + (closed ? " Z" : "");
 }
 
+/**
+ * The curve a path actually draws, as a run of straight points. Walk arrows
+ * bend, so anything travelling one has to follow the bend rather than cut the
+ * corners — the figure should go where the line goes. Measured off a real SVG
+ * path so it can't drift from what's on screen, and cached, because this runs
+ * on every frame of playback.
+ */
+const sampled = new Map();
+export function samplePath(pts, { hard = false, steps = 96 } = {}) {
+  if (pts.length < 2) return pts.slice();
+  if (hard || pts.length === 2) return pts.slice();
+  const d = pathData(pts, { hard: false });
+  const hit = sampled.get(d);
+  if (hit) return hit;
+  const el = document.createElementNS(SVGNS, "path");
+  el.setAttribute("d", d);
+  const len = el.getTotalLength();
+  const out = [];
+  for (let i = 0; i <= steps; i++) {
+    const q = el.getPointAtLength((len * i) / steps);
+    out.push({ x: q.x, y: q.y });
+  }
+  if (sampled.size > 400) sampled.clear();
+  sampled.set(d, out);
+  return out;
+}
+
 function drawPathObject(obj) {
   const tag = obj.tag;
   const pts = pointsOf(obj);

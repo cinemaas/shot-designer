@@ -92,6 +92,13 @@ dimensions — 18 inches across the shoulders for a man, 14 for a woman. Gender
 is also marked the way the original marks it: one line across the face for a
 man, two for a woman. The head sitting forward of the arc is the direction.
 
+**Bendable moves.** Walk arrows, track and marked camera moves all take
+control points: a hollow handle sits in the middle of each run, and dragging it
+makes a real point. Paths render as a smooth curve, and the travel is sampled
+off the drawn curve rather than the straight chord, so what moves goes where
+the line goes. `⌥`-click a point to remove it. Bends on a marked move live in
+`posBends`, keyed by leg.
+
 **Posture.** People stand, sit or lie down. It sets the height the lens sees
 them at and the floor they occupy: someone lying down is drawn at their real six
 feet, pointed the way they're facing, and a seated figure gets a chair bracket.

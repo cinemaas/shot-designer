@@ -129,6 +129,49 @@ function marksOf(o) {
     .sort((p, q) => p.slice - q.slice);
 }
 
+/**
+ * Bends on a marked move, as `posBends`: "1:x,y,x,y;2:x,y" — the key is the
+ * leg, so 1 is the run from position 1 to position 2. Same idea as the points
+ * on a walk arrow: the move goes where the line goes.
+ */
+function bendsOf(o) {
+  const raw = (H.get(o, "posBends") || "").trim();
+  const out = new Map();
+  if (!raw) return out;
+  for (const seg of raw.split(";")) {
+    const [leg, rest] = seg.split(":");
+    const n = parseInt(leg, 10);
+    const nums = (rest || "").split(",").map(Number).filter(Number.isFinite);
+    const pts = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: nums[i], y: nums[i + 1] });
+    if (Number.isFinite(n) && pts.length) out.set(n, pts);
+  }
+  return out;
+}
+
+function writeBends(o, map) {
+  const parts = [...map.entries()]
+    .filter(([, pts]) => pts.length)
+    .sort((a, b) => a[0] - b[0])
+    .map(([leg, pts]) => `${leg}:${pts.map((p) => `${round(p.x)},${round(p.y)}`).join(",")}`);
+  H.set(o, "posBends", parts.join(";"));
+}
+
+/** The run between one position and the next, bends and all. */
+function legPoints(marks, bends, i) {
+  const a = marks[i], b = marks[i + 1];
+  return [a, ...(bends.get(a.slice) || []), b];
+}
+
+/** The whole move as one run, for drawing it in a single stroke. */
+function movePoints(marks, bends) {
+  const out = [marks[0]];
+  for (let i = 0; i + 1 < marks.length; i++) {
+    out.push(...(bends.get(marks[i].slice) || []), marks[i + 1]);
+  }
+  return out;
+}
+
 function writeMarks(o, list) {
   const clean = [...list].sort((p, q) => p.slice - q.slice);
   H.set(o, "posMarks", clean.length < 2 ? "" :
@@ -170,7 +213,7 @@ function lerpAngle(a, b, f) {
 }
 
 /** An object's pose at a point on the timeline, from its marks. */
-function poseAt(marks, t) {
+function poseAt(marks, t, bends = new Map()) {
   const slice = t + 1;                       // marks are 1-based, like the file
   if (slice <= marks[0].slice) return marks[0];
   const last = marks[marks.length - 1];
@@ -180,11 +223,11 @@ function poseAt(marks, t) {
     if (slice > b.slice) continue;
     const span = b.slice - a.slice;
     const f = span ? (slice - a.slice) / span : 1;
-    return {
-      x: a.x + (b.x - a.x) * f,
-      y: a.y + (b.y - a.y) * f,
-      a: lerpAngle(a.a, b.a, f),
-    };
+    const run = legPoints(marks, bends, i - 1);
+    const at = run.length > 2
+      ? alongPath(R.samplePath(run, { hard: false }), f)
+      : { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    return { x: at.x, y: at.y, a: lerpAngle(a.a, b.a, f) };
   }
   return last;
 }
@@ -202,7 +245,7 @@ function slicePositions() {
     if (!markHome.has(idOf(o)))
       markHome.set(idOf(o), { x: H.getNum(o, "x"), y: H.getNum(o, "y"),
                               a: R.hasRotator(o) ? R.angleOf(o) : 0 });
-    moves.set(idOf(o), poseAt(marks, t));
+    moves.set(idOf(o), poseAt(marks, t, bendsOf(o)));
   }
 
   // Walk chains. On the page every position shows at once, numbered — that's
@@ -271,11 +314,13 @@ function chainFrom(start) {
     // the walk runs person to person, using the arrow's middle as the way through.
     const route = (from) => {
       const pts = R.pointsOf(arrow);
-      return [
+      const through = [
         { x: H.getNum(from, "x"), y: H.getNum(from, "y") },
         ...pts.slice(1, -1),
         { x: H.getNum(to, "x"), y: H.getNum(to, "y") },
       ];
+      // Follow the bend the arrow actually draws rather than cutting corners.
+      return R.samplePath(through, { hard: H.getBool(arrow, "hardLine", false) });
     };
     legs.push({ arrow, to, route });
     at = to;
@@ -438,12 +483,41 @@ function drawMoves() {
         ? "#" + H.getNum(o, "color", 0x888888).toString(16).padStart(6, "0")
         : "var(--line)";
 
-    g.append(R.el("polyline", {
-      points: marks.map((m) => `${m.x},${m.y}`).join(" "),
+    const bends = bendsOf(o);
+    const run = movePoints(marks, bends);
+    g.append(R.el("path", {
+      d: R.pathData(run, { hard: run.length < 3 }),
       fill: "none", stroke: col, "stroke-width": lit ? 3 : 2,
       "stroke-dasharray": "9 7", opacity: lit ? 0.95 : 0.5,
       "stroke-linecap": "round", "stroke-linejoin": "round",
     }));
+
+    // Selected, the move gets the same handles a walk arrow has: a hollow one
+    // in the middle of each run to bend it, solid ones on the bends to move
+    // or ⌥-click away.
+    if (lit) {
+      for (let i = 0; i + 1 < marks.length; i++) {
+        const leg = marks[i].slice;
+        const pts = bends.get(leg) || [];
+        const line = legPoints(marks, bends, i);
+        for (let j = 1; j < line.length; j++) {
+          const a = line[j - 1], b = line[j];
+          g.append(R.el("circle", {
+            cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, r: 4.5 / S.view.k,
+            fill: "var(--bg)", stroke: "var(--sel)", "stroke-width": 1.6 / S.view.k,
+            opacity: 0.75, class: "handle", "data-id": idOf(o),
+            "data-movebendadd": `${leg}:${j - 1}`,
+          }));
+        }
+        for (const [j, p] of pts.entries()) {
+          g.append(R.el("circle", {
+            cx: p.x, cy: p.y, r: 5 / S.view.k, fill: "#fff",
+            stroke: "var(--sel)", "stroke-width": 2 / S.view.k,
+            class: "handle", "data-id": idOf(o), "data-movebend": `${leg}:${j}`,
+          }));
+        }
+      }
+    }
 
     // Sit the number beside each position, not on top of it — the figure is
     // standing there and the whole point is to be able to see them.
@@ -741,6 +815,25 @@ function layerState(key) {
   return lockedSet().has(key) ? "locked" : "on";
 }
 
+/** The middle of one run of a path, measured on the curve it actually draws. */
+function midOfRun(obj, i) {
+  const pts = R.pointsOf(obj);
+  const hard = H.getBool(obj, "hardLine", obj.tag === "Wall");
+  if (hard || pts.length === 2) {
+    return { x: (pts[i - 1].x + pts[i].x) / 2, y: (pts[i - 1].y + pts[i].y) / 2 };
+  }
+  const line = R.samplePath(pts, { hard: false });
+  // The sample runs the whole path, so take the point that lands nearest the
+  // halfway mark of this run.
+  const want = { x: (pts[i - 1].x + pts[i].x) / 2, y: (pts[i - 1].y + pts[i].y) / 2 };
+  let best = line[0], bd = Infinity;
+  for (const q of line) {
+    const d = Math.hypot(q.x - want.x, q.y - want.y);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best;
+}
+
 function drawSelection() {
   const g = LAYER_G.overlay;
 
@@ -803,7 +896,20 @@ function drawSelection() {
       continue;
     }
     if (R.POINT_TAGS.has(obj.tag)) {
-      for (const [i, p] of R.pointsOf(obj).entries()) {
+      const pts = R.pointsOf(obj);
+      // A hollow handle in the middle of each run: drag it and it becomes a
+      // real point, so a straight walk bends into whatever shape you want
+      // without having to plan it. ⌥-click a solid one to take it out again.
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        const m = midOfRun(obj, i);
+        g.append(R.el("circle", {
+          cx: m.x, cy: m.y, r: 4.5 / S.view.k, fill: "var(--bg)",
+          stroke: "var(--sel)", "stroke-width": 1.6 / S.view.k, opacity: 0.75,
+          class: "handle", "data-id": id, "data-addpoint": i,
+        }));
+      }
+      for (const [i, p] of pts.entries()) {
         const h = R.el("circle", {
           cx: p.x, cy: p.y, r: 5 / S.view.k, fill: "#fff",
           stroke: "var(--sel)", "stroke-width": 2 / S.view.k,
@@ -1213,6 +1319,61 @@ stage.addEventListener("pointerdown", (ev) => {
   }
   if (handle) {
     const obj = byID(handle.dataset.id);
+    if (handle.dataset.movebendadd) {
+      const [leg, at] = handle.dataset.movebendadd.split(":").map(Number);
+      mark("bend");
+      const bends = bendsOf(obj);
+      const pts = [...(bends.get(leg) || [])];
+      pts.splice(at, 0, { x: round(pt.x), y: round(pt.y) });
+      bends.set(leg, pts);
+      writeBends(obj, bends);
+      drag = { mode: "movebend", obj, leg, index: at };
+      stage.setPointerCapture(ev.pointerId);
+      draw(); syncChrome();
+      return;
+    }
+    if (handle.dataset.movebend) {
+      const [leg, i] = handle.dataset.movebend.split(":").map(Number);
+      if (ev.altKey) {
+        mark("straighten");
+        const bends = bendsOf(obj);
+        const pts = [...(bends.get(leg) || [])];
+        pts.splice(i, 1);
+        bends.set(leg, pts);
+        writeBends(obj, bends);
+        draw(); syncChrome();
+        return toast(pts.length ? "Bend removed" : "Straight again");
+      }
+      mark("bend");
+      drag = { mode: "movebend", obj, leg, index: i };
+      stage.setPointerCapture(ev.pointerId);
+      return;
+    }
+    if (handle.dataset.addpoint) {
+      const i = +handle.dataset.addpoint;
+      mark("bend");
+      const pts = R.pointsOf(obj);
+      pts.splice(i, 0, { x: round(pt.x), y: round(pt.y) });
+      R.setPoints(obj, pts);
+      drag = { mode: "point", obj, index: i };
+      stage.setPointerCapture(ev.pointerId);
+      draw(); syncChrome();
+      return;
+    }
+    if (handle.dataset.point !== undefined && ev.altKey) {
+      const i = +handle.dataset.point;
+      const pts = R.pointsOf(obj);
+      // The two ends are the move itself; only the bends in between come out.
+      if (i > 0 && i < pts.length - 1) {
+        mark("straighten");
+        pts.splice(i, 1);
+        R.setPoints(obj, pts);
+        reflowConstraints();
+        draw(); syncChrome();
+        toast(pts.length > 2 ? "Bend removed" : "Straight again");
+      }
+      return;
+    }
     if (handle.dataset.turntrack) {
       const c = centroidOf(R.pointsOf(obj));
       mark("turn track");
@@ -1365,6 +1526,16 @@ stage.addEventListener("pointermove", (ev) => {
   if (drag.mode === "rotate") {
     const a = Math.atan2(pt.y - H.getNum(drag.obj, "y"), pt.x - H.getNum(drag.obj, "x"));
     R.setAngle(drag.obj, ev.shiftKey ? Math.round(a / (Math.PI / 12)) * (Math.PI / 12) : a);
+    return draw();
+  }
+  if (drag.mode === "movebend") {
+    const bends = bendsOf(drag.obj);
+    const pts = [...(bends.get(drag.leg) || [])];
+    if (pts[drag.index]) {
+      pts[drag.index] = { x: round(pt.x), y: round(pt.y) };
+      bends.set(drag.leg, pts);
+      writeBends(drag.obj, bends);
+    }
     return draw();
   }
   if (drag.mode === "grouprotate") {
