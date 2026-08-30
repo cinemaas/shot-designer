@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=30972e19";
-import * as R from "./render.js?v=30972e19";
-import { FXG } from "./assets.js?v=30972e19";
-import * as B from "./blocking.js?v=30972e19";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=30972e19";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=30972e19";
-import { HANDBOOK } from "./handbook.js?v=30972e19";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=30972e19";
-import * as V3 from "./view3d.js?v=30972e19";
-import * as TR from "./track.js?v=30972e19";
-import * as RIG from "./rigs.js?v=30972e19";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=30972e19";
-import { Library } from "./library.js?v=30972e19";
+import * as H from "./hcw.js?v=6860cf17";
+import * as R from "./render.js?v=6860cf17";
+import { FXG } from "./assets.js?v=6860cf17";
+import * as B from "./blocking.js?v=6860cf17";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=6860cf17";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6860cf17";
+import { HANDBOOK } from "./handbook.js?v=6860cf17";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=6860cf17";
+import * as V3 from "./view3d.js?v=6860cf17";
+import * as TR from "./track.js?v=6860cf17";
+import * as RIG from "./rigs.js?v=6860cf17";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=6860cf17";
+import { Library } from "./library.js?v=6860cf17";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=30972e19";
+} from "./catalog.js?v=6860cf17";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -3313,19 +3313,45 @@ function renderShotList() {
   adder.append(box, preview);
   p.append(adder);
 
+  // With a camera selected the chips change its lens; otherwise they help you
+  // type a new shot. Same buttons, whichever you happen to be doing.
+  const picked = selectedShot();
   const lensRow = document.createElement("div");
   lensRow.className = "lens-row";
-  for (const mm of packageLenses().slice(0, 6)) {
-    const b = document.createElement("button");
-    b.textContent = mm;
-    b.title = `Append ${mm}mm`;
-    b.onclick = () => {
-      box.value = box.value.replace(/\s*\d{2,3}$/, "") + " " + mm;
-      box.focus(); refresh();
-    };
-    lensRow.append(b);
+  if (picked) {
+    const now = parseFloat(H.get(picked, "versionLens")) || 0;
+    for (const mm of packageLenses().slice(0, 6)) {
+      const b = document.createElement("button");
+      b.textContent = mm;
+      if (mm === now) b.className = "on";
+      b.title = `Put ${H.get(picked, "headerText") || "this camera"} on a ${mm}`;
+      b.onclick = () => {
+        mark("lens");
+        H.set(picked, "versionLens", mm);
+        draw(); syncChrome();
+      };
+      lensRow.append(b);
+    }
+  } else {
+    for (const mm of packageLenses().slice(0, 6)) {
+      const b = document.createElement("button");
+      b.textContent = mm;
+      b.title = `Append ${mm}mm`;
+      b.onclick = () => {
+        box.value = box.value.replace(/\s*\d{2,3}$/, "") + " " + mm;
+        box.focus(); refresh();
+      };
+      lensRow.append(b);
+    }
   }
   p.append(lensRow);
+
+  if (picked) {
+    const hint = document.createElement("div");
+    hint.className = "lens-hint";
+    hint.textContent = `Lens for ${H.get(picked, "headerText") || "this shot"}`;
+    p.insertBefore(hint, lensRow);
+  }
 
   const quick = document.createElement("div");
   quick.className = "shot-actions";
@@ -3410,6 +3436,17 @@ function renderShotList() {
 }
 
 const shotVersions = () => objects().filter((o) => o.tag === "ShotVersion");
+
+/** The shot belonging to whatever's selected, if anything is. */
+function selectedShot() {
+  if (S.sel.size !== 1) return null;
+  const one = byID([...S.sel][0]);
+  if (!one) return null;
+  if (one.tag === "ShotVersion") return one;
+  const host = one.tag === "Camera" ? one : byID(RIG.rigParentID(one)) && one;
+  if (!host || host.tag !== "Camera") return null;
+  return shotVersions().find((v) => H.get(v, "attachObjectID") === idOf(host)) || null;
+}
 
 /** The next free camera letter, so the list reads Cam A, Cam B, Cam C. */
 function nextCamLetter() {

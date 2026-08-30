@@ -168,7 +168,14 @@ html, body {
   margin-top: 5px; font-size: 12px; color: var(--ink); font-weight: 600;
   padding-left: 2px;
 }
+.lens-hint {
+  padding: 9px 14px 0; font-size: 11px; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
+}
 .lens-row { display: flex; gap: 5px; padding: 7px 14px 0; }
+.lens-row button.on {
+  background: var(--ink); color: #fff;
+}
 .lens-row button {
   flex: 1; padding: 4px 0; font: 11px/1 inherit; color: var(--text);
   background: var(--panel-line); border: 0; border-radius: 5px; cursor: pointer;

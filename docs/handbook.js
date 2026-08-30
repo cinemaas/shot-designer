@@ -182,6 +182,12 @@ everything in one place — camera letter, the shot itself, lens, notes — and 
 that camera didn't have a shot yet, it gets one. Retype the shot line in
 shorthand and it re-reads it.</p>
 <h4>Your package</h4>
+<h4>Changing a lens</h4>
+<p>Select a camera and the lens chips in the shot list become that camera's
+lens — one click and it's on a 50, with the one it's on marked. With nothing
+selected the same chips help you type a new shot instead.</p>
+<p>The other two ways: press <kbd>⏎</kbd> on a camera and type it in the Lens
+field, or put the number on the end of the shot line — <code>ots d to m 50</code>.</p>
 <p><b>☰ ▸ Camera Package…</b> is what you're actually carrying: the lenses in
 the case, in the order you reach for them, and the support that's on the truck.
 The lens chips and the rig menu follow it, so the app stops offering you a 135

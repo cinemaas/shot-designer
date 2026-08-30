@@ -3313,19 +3313,45 @@ function renderShotList() {
   adder.append(box, preview);
   p.append(adder);
 
+  // With a camera selected the chips change its lens; otherwise they help you
+  // type a new shot. Same buttons, whichever you happen to be doing.
+  const picked = selectedShot();
   const lensRow = document.createElement("div");
   lensRow.className = "lens-row";
-  for (const mm of packageLenses().slice(0, 6)) {
-    const b = document.createElement("button");
-    b.textContent = mm;
-    b.title = `Append ${mm}mm`;
-    b.onclick = () => {
-      box.value = box.value.replace(/\s*\d{2,3}$/, "") + " " + mm;
-      box.focus(); refresh();
-    };
-    lensRow.append(b);
+  if (picked) {
+    const now = parseFloat(H.get(picked, "versionLens")) || 0;
+    for (const mm of packageLenses().slice(0, 6)) {
+      const b = document.createElement("button");
+      b.textContent = mm;
+      if (mm === now) b.className = "on";
+      b.title = `Put ${H.get(picked, "headerText") || "this camera"} on a ${mm}`;
+      b.onclick = () => {
+        mark("lens");
+        H.set(picked, "versionLens", mm);
+        draw(); syncChrome();
+      };
+      lensRow.append(b);
+    }
+  } else {
+    for (const mm of packageLenses().slice(0, 6)) {
+      const b = document.createElement("button");
+      b.textContent = mm;
+      b.title = `Append ${mm}mm`;
+      b.onclick = () => {
+        box.value = box.value.replace(/\s*\d{2,3}$/, "") + " " + mm;
+        box.focus(); refresh();
+      };
+      lensRow.append(b);
+    }
   }
   p.append(lensRow);
+
+  if (picked) {
+    const hint = document.createElement("div");
+    hint.className = "lens-hint";
+    hint.textContent = `Lens for ${H.get(picked, "headerText") || "this shot"}`;
+    p.insertBefore(hint, lensRow);
+  }
 
   const quick = document.createElement("div");
   quick.className = "shot-actions";
@@ -3410,6 +3436,17 @@ function renderShotList() {
 }
 
 const shotVersions = () => objects().filter((o) => o.tag === "ShotVersion");
+
+/** The shot belonging to whatever's selected, if anything is. */
+function selectedShot() {
+  if (S.sel.size !== 1) return null;
+  const one = byID([...S.sel][0]);
+  if (!one) return null;
+  if (one.tag === "ShotVersion") return one;
+  const host = one.tag === "Camera" ? one : byID(RIG.rigParentID(one)) && one;
+  if (!host || host.tag !== "Camera") return null;
+  return shotVersions().find((v) => H.get(v, "attachObjectID") === idOf(host)) || null;
+}
 
 /** The next free camera letter, so the list reads Cam A, Cam B, Cam C. */
 function nextCamLetter() {
