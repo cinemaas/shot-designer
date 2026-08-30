@@ -5,9 +5,9 @@
 // MCU, M, W, MW, TWO, MASTER, INS. Subjects are either a name or its initial,
 // and an OTS is always "A To B". So the fast path is to type it.
 
-import * as H from "./hcw.js?v=87e89636";
-import * as R from "./render.js?v=87e89636";
-import { UNITS_PER_FOOT } from "./catalog.js?v=87e89636";
+import * as H from "./hcw.js?v=2dcad2c5";
+import * as R from "./render.js?v=2dcad2c5";
+import { UNITS_PER_FOOT } from "./catalog.js?v=2dcad2c5";
 
 /** Canonical form on the left, everything seen in the library on the right. */
 const SIZES = [

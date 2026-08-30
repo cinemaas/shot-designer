@@ -68,7 +68,17 @@ the first beat it becomes <b>one person walking</b>: the figure travels the
 route and the positions it is standing in for ghost back, so you see a move
 rather than a crowd. Land on a whole beat and it's that position itself
 showing, with its own number.</p>
-<h4>Moving a camera — position 1 and position 2</h4>
+<h4>Moving a camera</h4>
+<p><b>Move To…</b> on a camera, then <b>click where it goes next</b> — exactly
+the way Walk To works for people. Position 1 stays where it is; each click
+drops another camera there, numbered, joined by a dashed line in that camera's
+colour. Keep clicking for as many positions as the move has; <kbd>⏎</kbd>
+stops.</p>
+<p>Every one of them is a real camera. Grab it, drag it, swing it, change its
+height and tilt — change your mind as often as you like. Playing the move runs
+between them and carries <b>everything</b>: it travels, swings, rises and tilts
+from one position to the next.</p>
+<h4>The other way — positions on one camera</h4>
 <p>You don't have to plan a move before you place the camera. Put the camera
 where it starts, then <b>Add a Move…</b> — or <kbd>M</kbd>. That pins where it
 stands as <b>position 1</b>, adds a second slice and drops you on it. Now just
@@ -137,6 +147,13 @@ they are standing, sitting or on the floor.</p>
 as a picture and the facts as words, which is a great deal closer to your shot
 than describing it from memory. Nothing in the brief is invented — it is all
 measured off the scene.</p>
+<h4>Your cast</h4>
+<p><b>Name…</b> on a person gives them a name, which draws under them on the
+plan — always the right way up, whichever way they face — and is what the AI
+brief calls them. Naming somebody also saves them, so <b>Add Character</b>
+offers them by name from then on and drops them in already coloured and cast.
+Colours run out; names don't. <b>Edit Cast…</b> is a plain list you can
+rewrite.</p>
 <p>Right-click a person for <b>Posture</b>. It isn't decoration — it sets the
 height the lens sees them at (a seated head tops out around 4'4", a standing one
 at 5'9") and it changes the floor they take up. Somebody lying down is drawn at

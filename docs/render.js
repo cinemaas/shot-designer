@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=87e89636";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=87e89636";
-import { EXTRA_SVG } from "./props.js?v=87e89636";
-import { GAUGE } from "./track.js?v=87e89636";
-import * as H from "./hcw.js?v=87e89636";
+import { FXG } from "./assets.js?v=2dcad2c5";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=2dcad2c5";
+import { EXTRA_SVG } from "./props.js?v=2dcad2c5";
+import { GAUGE } from "./track.js?v=2dcad2c5";
+import * as H from "./hcw.js?v=2dcad2c5";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -229,14 +229,41 @@ function drawCharacter(obj) {
   const color = hexOf(H.getNum(obj, "color", 0xfc837b));
   const female = H.getBool(obj, "female");
   const posture = H.get(obj, "posture") || "stand";
+  const named = (H.get(obj, "castName") || "").trim();
   // Somebody on the floor takes six feet of it, and that's the whole reason
   // the plan exists — so the plan draws them lying down, not as a dot.
-  if (posture === "lie") return drawLying(obj, color, female);
+  if (posture === "lie") {
+    const g = drawLying(obj, color, female);
+    if (named) g.append(nameTag(named, posture, angleOf(obj) || 0));
+    return g;
+  }
   const g = figureStyle === "disc" ? drawDisc(obj, color, female)
     : figureStyle === "figure" ? drawFigure(obj, color, female)
     : drawPlanFigure(obj, color, female);
   if (posture === "sit") g.prepend(seatBack(color));
+  if (named) g.append(nameTag(named, posture, angleOf(obj) || 0));
   return g;
+}
+
+/**
+ * The character's name under them. Names beat colours on a busy page — and
+ * they're what a shot list and a brief actually talk about.
+ */
+function nameTag(text, posture, angle) {
+  // Always below them on the page and always the right way up, whichever way
+  // they happen to be facing — a name you have to tilt your head to read is
+  // worse than no name.
+  const d = posture === "lie" ? 20 * 1.5 : PLAN_SHOULDER + 18;
+  const x = d * Math.sin(angle), y = d * Math.cos(angle);
+  const deg = (-angle * 180) / Math.PI;
+  const t = el("text", {
+    x, y: y + 4, "text-anchor": "middle", fill: LABEL_NAVY,
+    "font-size": 13, "font-weight": "600",
+    "font-family": "Helvetica, Arial, sans-serif",
+    transform: `rotate(${deg.toFixed(2)} ${x} ${y})`,
+  });
+  t.textContent = text;
+  return t;
 }
 
 /**
@@ -396,7 +423,7 @@ export function samplePath(pts, { hard = false, steps = 96 } = {}) {
   return out;
 }
 
-function drawPathObject(obj) {
+function drawPathObject(obj, scene) {
   const tag = obj.tag;
   const pts = pointsOf(obj);
   const closed = H.getBool(obj, "closedLoop");
@@ -413,6 +440,17 @@ function drawPathObject(obj) {
     AxisLine: { stroke: INK, width: 1.6, dash: "9 7" },
     WalkArrow: { stroke: INK, width: 2.2, dash: null },
   }[tag] || { stroke: INK, width: STROKE, dash: null };
+
+  // An arrow between two cameras is a camera move, not somebody walking, so it
+  // draws in that camera's colour and lighter — it's a note about the rig.
+  if (tag === "WalkArrow" && scene?.byID) {
+    const from = scene.byID.get(H.get(obj, "fromConstraints"));
+    if (from && from.tag === "Camera") {
+      style.stroke = cameraColour(from);
+      style.width = 2.6;
+      style.dash = "11 7";
+    }
+  }
 
   const line = el("path", {
     d, fill: "none", stroke: style.stroke,
@@ -624,7 +662,7 @@ export function drawObject(obj, scene, opts = {}) {
   if (tag === "Character") art = drawCharacter(obj);
   else if (tag === "Camera") art = drawCamera(obj);
   else if (GENERIC_TAGS.has(tag)) art = drawGeneric(obj);
-  else if (POINT_TAGS.has(tag)) art = drawPathObject(obj);
+  else if (POINT_TAGS.has(tag)) art = drawPathObject(obj, scene);
   else if (tag === "Storyboard") art = drawStoryboard(obj, scene.pictures);
   else if (PICTURE_TAGS.has(tag)) art = drawBackground(obj, scene.pictures);
   else if (LABEL_TAGS.has(tag)) art = drawLabel(obj, scene, opts);
