@@ -170,6 +170,23 @@ def fill_sheet(ws, scene, shots, tmp, with_scene=False):
 
 
 
+# The app saves itself while you work, so without a cap this folder would grow
+# without bound. Keep a decent run of versions per scene and drop the rest.
+KEEP_BACKUPS = 40
+
+
+def prune_backups(flat):
+    try:
+        mine = sorted(f for f in os.listdir(BACKUPS) if f.endswith("_" + flat))
+    except OSError:
+        return
+    for f in mine[:-KEEP_BACKUPS]:
+        try:
+            os.remove(os.path.join(BACKUPS, f))
+        except OSError:
+            pass
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=APP_DIR, **kw)
@@ -232,6 +249,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     stamp = time.strftime("%Y%m%d-%H%M%S")
                     flat = data["path"].replace("/", "_")
                     shutil.copy2(full, os.path.join(BACKUPS, f"{stamp}_{flat}"))
+                    prune_backups(flat)
                 with open(full, "w", encoding="utf-8") as f:
                     f.write(data["xml"])
                 return self.send_json({"ok": True, "path": data["path"]})
