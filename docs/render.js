@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=ed94e543";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=ed94e543";
-import { EXTRA_SVG } from "./props.js?v=ed94e543";
-import { GAUGE } from "./track.js?v=ed94e543";
-import * as H from "./hcw.js?v=ed94e543";
+import { FXG } from "./assets.js?v=36f83227";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=36f83227";
+import { EXTRA_SVG } from "./props.js?v=36f83227";
+import { GAUGE } from "./track.js?v=36f83227";
+import * as H from "./hcw.js?v=36f83227";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -181,52 +181,52 @@ export const setFigureStyle = (s) => {
  * drawing rather than a blob, so a dozen of them on a page still read as
  * separate people and you can see the set through them.
  */
-const PLAN_SHOULDER = 17;    // half the shoulder width — 34 units, about 1'8"
+const PLAN_SHOULDER = 18;    // half the shoulder width — 34 units, about 1'8"
 const PLAN_DEPTH = 5.5;      // 11 units thick, about 6 inches
-const PLAN_HEAD = 9;
+const PLAN_HEAD = 8;
 
 /**
- * The original's head — a disc carrying the facing chords, one line for a man
- * and two for a woman — sized like a head, with the shoulders behind it as a
- * bar. A ball in front of a wider bar reads as a person from above at any size,
- * and it keeps the marks people already read without thinking.
+ * A person from above, drawn the way a restroom sign works: it's all
+ * silhouette. Shoulders as a bar, a head sitting just forward of it with a
+ * nose on the front, and — for a woman — hair showing past the head at the
+ * sides and back. No internal lines to squint at; the outline does the work,
+ * which is what survives being printed small.
  */
 function drawPlanFigure(obj, color, female) {
   const g = el("g");
-  const back = -4;
+  const SH_X = -5;                 // shoulders sit behind
+  const HEAD_X = 2.5;              // head just forward of them — not out front
+  const HAIR = PLAN_HEAD + 3.4;
 
-  // Shoulders: a capsule across the facing, sitting behind the head.
   g.append(el("line", {
-    x1: back, y1: -PLAN_SHOULDER, x2: back, y2: PLAN_SHOULDER,
+    x1: SH_X, y1: -PLAN_SHOULDER, x2: SH_X, y2: PLAN_SHOULDER,
     stroke: INK, "stroke-width": PLAN_DEPTH * 2 + 5, "stroke-linecap": "round",
   }));
   g.append(el("line", {
-    x1: back, y1: -PLAN_SHOULDER, x2: back, y2: PLAN_SHOULDER,
-    stroke: shade(color, 0.74), "stroke-width": PLAN_DEPTH * 2,
+    x1: SH_X, y1: -PLAN_SHOULDER, x2: SH_X, y2: PLAN_SHOULDER,
+    stroke: shade(color, 0.68), "stroke-width": PLAN_DEPTH * 2,
     "stroke-linecap": "round",
   }));
 
   if (female) {
-    // Hair: a collar around the back of the head.
-    g.append(el("circle", {
-      cx: 4, cy: 0, r: PLAN_HEAD + 3.2,
-      fill: shade(color, 0.88), stroke: INK, "stroke-width": 2.4,
+    // Hair: an oval set back and wider than the head, so it flares at the
+    // sides and behind and leaves the face and nose completely clear. Not a
+    // ring round the head — a bob seen from above.
+    g.append(el("ellipse", {
+      cx: HEAD_X - 3.5, cy: 0, rx: PLAN_HEAD + 1, ry: PLAN_HEAD + 5,
+      fill: shade(color, 0.5), stroke: INK, "stroke-width": 2.6,
     }));
   }
 
-  g.append(el("circle", {
-    cx: 5, cy: 0, r: PLAN_HEAD, fill: color, stroke: INK, "stroke-width": 2.6,
+  // Head, with a small nose for facing — a bump, not a beak.
+  const n = PLAN_HEAD + 3;
+  const d = PLAN_HEAD * 0.62;
+  const h = Math.sqrt(PLAN_HEAD * PLAN_HEAD - d * d);
+  g.append(el("path", {
+    d: `M${HEAD_X + d},${-h} A${PLAN_HEAD},${PLAN_HEAD} 0 1 0 ${HEAD_X + d},${h} ` +
+       `L${HEAD_X + n},0 Z`,
+    fill: color, stroke: INK, "stroke-width": 2.6, "stroke-linejoin": "round",
   }));
-
-  // The facing marks, where the original puts them on its own circle.
-  for (const f of female ? [0.30, 0.59] : [0.59]) {
-    const d = PLAN_HEAD * f;
-    const h = Math.sqrt(PLAN_HEAD * PLAN_HEAD - d * d);
-    g.append(el("line", {
-      x1: 5 + d, y1: -h, x2: 5 + d, y2: h,
-      stroke: INK, "stroke-width": 2.4, "stroke-linecap": "butt",
-    }));
-  }
   return g;
 }
 

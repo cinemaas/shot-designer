@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=ed94e543";
-import * as R from "./render.js?v=ed94e543";
-import { FXG } from "./assets.js?v=ed94e543";
-import * as B from "./blocking.js?v=ed94e543";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=ed94e543";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ed94e543";
-import { HANDBOOK } from "./handbook.js?v=ed94e543";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=ed94e543";
-import * as V3 from "./view3d.js?v=ed94e543";
-import * as TR from "./track.js?v=ed94e543";
-import * as RIG from "./rigs.js?v=ed94e543";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=ed94e543";
-import { Library } from "./library.js?v=ed94e543";
+import * as H from "./hcw.js?v=36f83227";
+import * as R from "./render.js?v=36f83227";
+import { FXG } from "./assets.js?v=36f83227";
+import * as B from "./blocking.js?v=36f83227";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=36f83227";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=36f83227";
+import { HANDBOOK } from "./handbook.js?v=36f83227";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=36f83227";
+import * as V3 from "./view3d.js?v=36f83227";
+import * as TR from "./track.js?v=36f83227";
+import * as RIG from "./rigs.js?v=36f83227";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=36f83227";
+import { Library } from "./library.js?v=36f83227";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=ed94e543";
+} from "./catalog.js?v=36f83227";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -33,6 +33,7 @@ const S = {
   view: { x: 0, y: 0, k: 1 },
   sel: new Set(),
   slice: 0,
+  time: 0,               // playhead as a float; whole numbers are the slices
   playing: false,
   tool: null,            // null | "wall" | "track" | "walk" | "axis"
   draft: null,           // the path currently being drawn, laid into the scene
@@ -111,11 +112,101 @@ function reindex() {
  * points as the way through. At the first beat everyone is exactly where the
  * scene says they are.
  */
+/**
+ * Positions an object has been pinned to, as `posMarks`: "1:120,-40,0;2:300,-40,1.57"
+ * — slice, then x, y and facing. This is how the original moves a camera: one
+ * camera, several marks, and the timeline runs between them. You set them
+ * after the fact rather than having to build the move up front.
+ */
+function marksOf(o) {
+  const raw = (H.get(o, "posMarks") || "").trim();
+  if (!raw) return [];
+  return raw.split(";").map((seg) => {
+    const [slice, rest] = seg.split(":");
+    const [x, y, a] = (rest || "").split(",").map(Number);
+    return { slice: parseInt(slice, 10), x, y, a: Number.isFinite(a) ? a : 0 };
+  }).filter((m) => Number.isFinite(m.slice) && Number.isFinite(m.x) && Number.isFinite(m.y))
+    .sort((p, q) => p.slice - q.slice);
+}
+
+function writeMarks(o, list) {
+  const clean = [...list].sort((p, q) => p.slice - q.slice);
+  H.set(o, "posMarks", clean.length < 2 ? "" :
+    clean.map((m) => `${m.slice}:${round(m.x)},${round(m.y)},${(m.a || 0).toFixed(4)}`).join(";"));
+}
+
+/** Pin this object where it currently stands, at the slice given. */
+function setMark(o, slice) {
+  const list = marksOf(o).filter((m) => m.slice !== slice);
+  list.push({
+    slice,
+    x: H.getNum(o, "x"), y: H.getNum(o, "y"),
+    a: R.hasRotator(o) ? R.angleOf(o) : 0,
+  });
+  // A move needs somewhere to have come from: the first mark you set on an
+  // object anchors slice 1 wherever it already is.
+  if (list.length === 1 && slice !== 1) {
+    const home = markHome.get(idOf(o));
+    list.push({ slice: 1, x: home ? home.x : H.getNum(o, "x"),
+                y: home ? home.y : H.getNum(o, "y"),
+                a: home ? home.a : (R.hasRotator(o) ? R.angleOf(o) : 0) });
+  }
+  writeMarks(o, list);
+  return list;
+}
+
+/** Where an object sat before the timeline started pushing it around. */
+const markHome = new Map();
+
+const clearMarks = (o) => H.set(o, "posMarks", "");
+
+/** Turn a bearing difference into the short way round, so a camera whipping
+ *  from 179° to -179° swings two degrees rather than the long way. */
+function lerpAngle(a, b, f) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * f;
+}
+
+/** An object's pose at a point on the timeline, from its marks. */
+function poseAt(marks, t) {
+  const slice = t + 1;                       // marks are 1-based, like the file
+  if (slice <= marks[0].slice) return marks[0];
+  const last = marks[marks.length - 1];
+  if (slice >= last.slice) return last;
+  for (let i = 1; i < marks.length; i++) {
+    const a = marks[i - 1], b = marks[i];
+    if (slice > b.slice) continue;
+    const span = b.slice - a.slice;
+    const f = span ? (slice - a.slice) / span : 1;
+    return {
+      x: a.x + (b.x - a.x) * f,
+      y: a.y + (b.y - a.y) * f,
+      a: lerpAngle(a.a, b.a, f),
+    };
+  }
+  return last;
+}
+
 function slicePositions() {
   const n = Math.max(1, timeSlices().length);
-  const t = n > 1 ? S.slice / (n - 1) : 0;
+  const t = S.playing ? S.time : S.slice;
   const moves = new Map();
-  if (t === 0) return moves;
+
+  // Marks first: they're an object's own move, and they win over anything an
+  // arrow would say, because they're what the user pinned by hand.
+  for (const o of objects()) {
+    const marks = marksOf(o);
+    if (marks.length < 2) continue;
+    if (!markHome.has(idOf(o)))
+      markHome.set(idOf(o), { x: H.getNum(o, "x"), y: H.getNum(o, "y"),
+                              a: R.hasRotator(o) ? R.angleOf(o) : 0 });
+    moves.set(idOf(o), poseAt(marks, t));
+  }
+
+  const walkT = n > 1 ? t / (n - 1) : 0;
+  if (walkT === 0) return moves;
 
   for (const o of objects()) {
     if (!R.POINT_TAGS.has(o.tag) || o.tag === "AxisLine") continue;
@@ -131,7 +222,7 @@ function slicePositions() {
       ...pts.slice(1, -1),
       dest ? { x: H.getNum(dest, "x"), y: H.getNum(dest, "y") } : pts[pts.length - 1],
     ];
-    moves.set(moverID, alongPath(route, t));
+    if (!moves.has(moverID)) moves.set(moverID, alongPath(route, walkT));
   }
   return moves;
 }
@@ -140,6 +231,12 @@ function slicePositions() {
 function drawnPos(o) {
   const moved = S.moves?.get(idOf(o));
   return moved || { x: H.getNum(o, "x"), y: H.getNum(o, "y") };
+}
+
+/** The facing to draw with — a marked move turns the object as it goes. */
+function drawnAngle(o) {
+  const moved = S.moves?.get(idOf(o));
+  return moved && Number.isFinite(moved.a) ? moved.a : null;
 }
 
 function alongPath(pts, t) {
@@ -215,11 +312,20 @@ function draw() {
     const moved = moves.get(idOf(obj));
     let restore = null;
     if (moved) {
-      restore = { x: H.get(obj, "x"), y: H.get(obj, "y") };
+      restore = { x: H.get(obj, "x"), y: H.get(obj, "y"), a: null };
       H.set(obj, "x", moved.x); H.set(obj, "y", moved.y);
+      // A marked move turns as it travels, so the camera arrives pointing the
+      // way you left it pointing — otherwise the move reads as a slide.
+      if (Number.isFinite(moved.a) && R.hasRotator(obj)) {
+        restore.a = R.angleOf(obj);
+        R.setAngle(obj, moved.a);
+      }
     }
     const node = R.drawObject(obj, S.scene, { compact: S.compactLabels });
-    if (restore) { H.set(obj, "x", restore.x); H.set(obj, "y", restore.y); }
+    if (restore) {
+      H.set(obj, "x", restore.x); H.set(obj, "y", restore.y);
+      if (restore.a !== null) R.setAngle(obj, restore.a);
+    }
 
     if (!shown) node.setAttribute("opacity", dim);
     if (!visibleAt(obj, S.slice)) node.setAttribute("opacity", dim * 0.6);
@@ -244,6 +350,7 @@ function draw() {
     g.append(node);
   }
   drawRigArms();
+  drawMoves();
   drawCoverage();
   renderLensView();
   if (!S.blocking) drawPositionBadges();
@@ -257,6 +364,46 @@ function draw() {
  * on top of each other. Nudge the overlapping ones apart for display only —
  * the scene itself is untouched — and stretch each leader line to follow.
  */
+/**
+ * A marked move, drawn on the plan: a dashed run through the positions with a
+ * numbered dot at each one, and a ghost of the object where it ends up. The
+ * point of an overhead is that you can see the move without playing it.
+ */
+function drawMoves() {
+  const g = LAYER_G.overlay;
+  for (const o of objects()) {
+    if (!onPage(o, S.page)) continue;
+    const marks = marksOf(o);
+    if (marks.length < 2) continue;
+    const lit = S.sel.has(idOf(o));
+    const col = o.tag === "Camera" ? R.cameraColour(o)
+      : o.tag === "Character"
+        ? "#" + H.getNum(o, "color", 0x888888).toString(16).padStart(6, "0")
+        : "var(--line)";
+
+    g.append(R.el("polyline", {
+      points: marks.map((m) => `${m.x},${m.y}`).join(" "),
+      fill: "none", stroke: col, "stroke-width": lit ? 3 : 2,
+      "stroke-dasharray": "9 7", opacity: lit ? 0.95 : 0.5,
+      "stroke-linecap": "round", "stroke-linejoin": "round",
+    }));
+
+    for (const m of marks) {
+      g.append(R.el("circle", {
+        cx: m.x, cy: m.y, r: 9, fill: "var(--bg)", stroke: col,
+        "stroke-width": 2.4, opacity: lit ? 1 : 0.65,
+      }));
+      const t = R.el("text", {
+        x: m.x, y: m.y + 4, "text-anchor": "middle",
+        "font-size": 12, "font-weight": 600, fill: col,
+        opacity: lit ? 1 : 0.65,
+      });
+      t.textContent = m.slice;
+      g.append(t);
+    }
+  }
+}
+
 /** The physical link: a jib arm, or the post a camera sits on. */
 /**
  * What the lens actually sees, on the plan. The angle is the real one for that
@@ -1246,6 +1393,14 @@ stage.addEventListener("pointerup", (ev) => {
   if (drag?.mode === "move" && !drag.moved) {
     S.dirty = S.undo.pop()?.wasDirty ?? S.dirty;           // a plain click isn't an edit
   }
+  // Once something has a move on it, dragging it while you're parked on a
+  // slice re-pins that position — which is how you set position 2 after the
+  // fact instead of having to plan the move before you place the camera.
+  if (drag?.mode === "move" && drag.moved) {
+    for (const o of drag.origins) {
+      if (marksOf(o.obj).length >= 2) setMark(o.obj, S.slice + 1);
+    }
+  }
   stage.classList.remove("panning");
   if (drag && drag.mode !== "pan" && drag.mode !== "marquee") sendLiveSnapshot();
   drag = null;
@@ -2110,6 +2265,37 @@ function deleteSelection() {
   mark("delete");
   const gone = new Set(S.sel);
   const c = canvas();
+
+  // Take the move furniture with it. A track belongs to the rig that rides
+  // it, and an arrow is only the line between two things — leaving either
+  // behind after deleting the camera just makes a mess to clean up by hand.
+  // Deleting the camera off a dolly takes the dolly with it: a dolly and a
+  // length of track with nothing on them is just litter on the plan.
+  for (const o of [...c.children]) {
+    if (!gone.has(idOf(o))) continue;
+    const parent = RIG.rigParentID(o);
+    if (parent) gone.add(parent);
+    const rigCam = RIG.rigCameraID(o);
+    if (rigCam) gone.add(rigCam);
+  }
+  for (const o of c.children) {
+    if (gone.has(idOf(o)) && RIG.isRig(o)) {
+      const track = H.get(o, "snapPath");
+      // Unless something else is riding it too.
+      const shared = c.children.some((q) => !gone.has(idOf(q)) &&
+        RIG.isRig(q) && H.get(q, "snapPath") === track);
+      if (track && !shared) gone.add(track);
+    }
+  }
+  for (const o of c.children) {
+    if ((o.tag === "WalkArrow" || o.tag === "Track" || o.tag === "AxisLine") &&
+        (gone.has(H.get(o, "fromConstraints")) || gone.has(H.get(o, "toConstraints")))) {
+      gone.add(idOf(o));
+    }
+    // A label lives on the thing it labels.
+    if (R.LABEL_TAGS.has(o.tag) && gone.has(H.get(o, "attachObjectID"))) gone.add(idOf(o));
+  }
+
   c.children = c.children.filter((o) => !gone.has(idOf(o)));
   // Drop references the deleted objects left behind.
   for (const o of c.children) {
@@ -2229,6 +2415,18 @@ window.addEventListener("keydown", (ev) => {
   if (k === "w") return startTool("wall");
   if (k === "t") return startTool("track");
   if (k === "p") return (S.playing ? stopPlay() : startPlay());
+  if (k === "m" && S.sel.size) {
+    const ready = [...S.sel].map(byID).filter((o) => o && marksOf(o).length >= 2);
+    if (ready.length) {
+      mark("set position");
+      for (const o of ready) setMark(o, S.slice + 1);
+      draw(); syncChrome();
+      toast(`Position ${S.slice + 1} set`);
+    } else if (S.sel.size === 1) {
+      addMove(byID([...S.sel][0]));
+    }
+    return;
+  }
   if (k === "b") return toggleBlocking();
   if (k === "v" && !cmd) return toggleLensView();
   if (k === "l" && !cmd) {
@@ -2252,19 +2450,35 @@ const zoomStep = (f) => {
 // ---------------------------------------------------------------- playback
 
 let playTimer = null;
+const SLICE_MS = 1400;                      // how long one position takes to reach the next
+
+/**
+ * Playback runs the playhead as a float rather than stepping slice to slice,
+ * so a camera between two marks actually travels instead of teleporting.
+ */
 function startPlay() {
+  const n = Math.max(1, timeSlices().length);
+  if (n < 2) return toast("Nothing to play — give something a second position first");
   S.playing = true;
-  const n = timeSlices().length;
-  playTimer = setInterval(() => {
-    S.slice = (S.slice + 1) % n;
+  S.time = 0;
+  let t0 = performance.now();
+  const step = (now) => {
+    if (!S.playing) return;
+    S.time = ((now - t0) / SLICE_MS) % (n - 1 + 0.6);   // a beat's rest at the end
+    S.time = Math.min(S.time, n - 1);
+    S.slice = Math.min(n - 1, Math.round(S.time));
     draw(); syncChrome();
-  }, 900);
+    playTimer = requestAnimationFrame(step);
+  };
+  playTimer = requestAnimationFrame(step);
   syncChrome();
 }
 function stopPlay() {
   S.playing = false;
-  clearInterval(playTimer); playTimer = null;
-  syncChrome();
+  if (playTimer) cancelAnimationFrame(playTimer);
+  playTimer = null;
+  S.time = S.slice;
+  draw(); syncChrome();
 }
 
 // ---------------------------------------------------------------- chrome
@@ -2677,7 +2891,7 @@ function addMenu(x, y, at) {
     "-",
     { head: "Draw" },
     { label: "Wall Tool", key: "W", run: () => startTool("wall") },
-    { label: "Camera Track", key: "T", run: () => startTool("track") },
+    { label: "Dolly Track", key: "T", run: () => startTool("track") },
     { label: "Walk Arrow", run: () => startTool("walk") },
     { label: "Axis Line", run: () => startTool("axis") },
     "-",
@@ -2996,6 +3210,7 @@ function objectMenu(obj, x, y) {
     return showPopover(x, y, [
       { head: "Edit Character" },
       { label: "Walk To…", run: () => startFromHere("walk", obj) },
+      ...moveItems(obj),
       { label: "Axis Line To…", run: () => startFromHere("axis", obj) },
       { label: "Add Label…", run: () => attachLabel(obj) },
       "-",
@@ -3020,7 +3235,7 @@ function objectMenu(obj, x, y) {
     return showPopover(x, y, [
       { head: "Edit Camera" },
       { label: shot ? "Edit Shot Description…" : "Shot Description…", run: () => shotDescription(obj) },
-      { label: "Track To…", run: () => startFromHere("track", obj) },
+      ...moveItems(obj),
       { label: "Add Label…", run: () => attachLabel(obj) },
       "-",
       { label: "Tilt Up", run: () => setTilt(obj, "tiltUp") },
@@ -3166,6 +3381,71 @@ function setTilt(obj, which) {
     H.set(rot, which === "tiltUp" ? "tiltDown" : "tiltUp", false);
   }
   draw();
+}
+
+/**
+ * Give something a move, or extend one. The original's way round: you place
+ * the camera, then decide it moves — position 1 is wherever it already is,
+ * and the next position is one you drag it to on the next slice.
+ */
+function addMove(obj) {
+  const marks = marksOf(obj);
+  mark("move");
+  if (marks.length < 2) {
+    setMark(obj, 1);                       // pins it where it stands
+    ensureSlice(2);
+    setMark(obj, 2);                       // starts on top of position 1
+    S.slice = 1;
+    toast("Position 2 — drag it where it goes. ⏎ or Play to run it.");
+  } else {
+    const next = Math.max(...marks.map((m) => m.slice)) + 1;
+    ensureSlice(next);
+    setMark(obj, next);
+    S.slice = next - 1;
+    toast(`Position ${next} — drag it where it goes`);
+  }
+  S.sel = new Set([idOf(obj)]);
+  reindex(); draw(); syncChrome();
+}
+
+/** Pin this object here, at the slice you're currently parked on. */
+function pinHere(obj) {
+  mark("set position");
+  setMark(obj, S.slice + 1);
+  draw(); syncChrome();
+  toast(`Position ${S.slice + 1} set`);
+}
+
+function dropMove(obj) {
+  mark("clear move");
+  const marks = marksOf(obj);
+  clearMarks(obj);
+  // Leave it standing where position 1 put it, not wherever the playhead was.
+  if (marks.length) {
+    H.set(obj, "x", round(marks[0].x));
+    H.set(obj, "y", round(marks[0].y));
+    if (R.hasRotator(obj)) R.setAngle(obj, marks[0].a);
+  }
+  draw(); syncChrome();
+  toast("Move cleared");
+}
+
+/** Make sure the timeline is long enough to hold slice n (1-based). */
+function ensureSlice(n) {
+  const t = H.child(H.child(S.doc, "CurrentSnapshot"), "TimeSlices");
+  while (t.children.length < n) t.children.push(H.makeTimeNumber(t.children.length));
+}
+
+/** The move entries for an object's menu. */
+function moveItems(obj) {
+  const marks = marksOf(obj);
+  if (marks.length < 2) return [{ label: "Add a Move…", run: () => addMove(obj) }];
+  const last = Math.max(...marks.map((m) => m.slice));
+  return [
+    { label: `Set Position ${S.slice + 1} Here`, run: () => pinHere(obj) },
+    { label: `Add Position ${last + 1}…`, run: () => addMove(obj) },
+    { label: "Clear Move", run: () => dropMove(obj) },
+  ];
 }
 
 /**
