@@ -412,6 +412,14 @@ body.view-only #stage { cursor: grab; }
   font-variant-numeric: tabular-nums;
 }
 #lensview .cap.warn { color: #b4601f; max-width: 320px; line-height: 1.35; }
+#lensview .lensrig { margin-top: 7px; display: grid; gap: 3px; }
+#lensview .lensrig label {
+  display: grid; grid-template-columns: 44px 1fr 52px; align-items: center;
+  gap: 7px; font-size: 11px; color: var(--ink);
+}
+#lensview .lensrig .n { opacity: .7; }
+#lensview .lensrig .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+#lensview .lensrig input[type=range] { width: 100%; accent-color: var(--sel); height: 16px; }
 #lensview .lensbar { display: flex; gap: 6px; margin-top: 7px; }
 #lensview .lensbar button {
   flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 600;

@@ -81,7 +81,24 @@ tilts through the move — the plan writes the height and the tilt under any
 position where they change, and the through-the-lens view follows them.</p>
 <p>While you are parked on a beat the camera really is at that position, so
 panning it, tilting it and dragging it all behave exactly as they do on a
-camera with no move at all — and whatever you do is recorded to that position.</p>
+camera with no move at all — and whatever you do is recorded to that position.
+There is nothing to press: adjust it at any beat and that beat keeps it.</p>
+<h4>Flying the camera from the lens view</h4>
+<p>The through-the-lens panel has three sliders: <b>Height</b>, <b>Tilt</b> and
+<b>Pan</b>. They move the real camera, so the overhead turns and the frame
+updates as you drag — find the shot by looking at it rather than guessing
+numbers on the plan. On a camera with a move, whatever you land on is kept as
+that position.</p>
+<h4>Swivelling</h4>
+<p>Three ways, so you never have to hunt: the handle on the end of the
+direction line, <kbd>⇧</kbd>-drag anywhere on the camera, or <kbd>[</kbd> and
+<kbd>]</kbd> for fifteen degrees a press — <kbd>⇧</kbd> with those for one
+degree.</p>
+<h4>It saves itself</h4>
+<p>A scene that has a name on disk writes itself a couple of seconds after you
+stop working. Undo still goes back as far as it ever did. Because it is writing
+your real scene file, don't have the same scene open in the old Shot Designer
+at the same time.</p>
 <p>From then on, dragging that camera while parked on a slice re-pins <i>that</i>
 position, so you can keep adjusting either end without starting over.
 <b>Add Position 3…</b> extends the move, <kbd>M</kbd> pins the current slice, and

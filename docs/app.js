@@ -1,25 +1,25 @@
 // Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=2579423c";
-import * as R from "./render.js?v=2579423c";
-import { FXG } from "./assets.js?v=2579423c";
-import * as B from "./blocking.js?v=2579423c";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=2579423c";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=2579423c";
-import { HANDBOOK } from "./handbook.js?v=2579423c";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=2579423c";
-import * as V3 from "./view3d.js?v=2579423c";
-import * as TR from "./track.js?v=2579423c";
-import * as RIG from "./rigs.js?v=2579423c";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=2579423c";
-import { Library } from "./library.js?v=2579423c";
+import * as H from "./hcw.js?v=87e89636";
+import * as R from "./render.js?v=87e89636";
+import { FXG } from "./assets.js?v=87e89636";
+import * as B from "./blocking.js?v=87e89636";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=87e89636";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=87e89636";
+import { HANDBOOK } from "./handbook.js?v=87e89636";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=87e89636";
+import * as V3 from "./view3d.js?v=87e89636";
+import * as TR from "./track.js?v=87e89636";
+import * as RIG from "./rigs.js?v=87e89636";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=87e89636";
+import { Library } from "./library.js?v=87e89636";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=2579423c";
+} from "./catalog.js?v=87e89636";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -76,6 +76,7 @@ function mark(label = "edit") {
   S.redo.length = 0;
   S.dirty = true;
   sendLiveSnapshot();
+  autosave();
 }
 function restore(from, to) {
   if (!from.length) return;
@@ -84,6 +85,7 @@ function restore(from, to) {
   S.doc = H.parseXML(entry.xml);
   S.sel.clear();
   S.dirty = true;
+  autosave();
   reindex(); draw(); syncChrome();
 }
 const undo = () => restore(S.undo, S.redo);
@@ -722,6 +724,44 @@ function renderLensView() {
     box.append(note);
   }
 
+  // Fly the camera from here: height, tilt and pan as sliders, so you can
+  // find the frame by looking at it instead of guessing numbers on the plan.
+  // Everything moves the real camera, so the overhead follows as you drag.
+  const flyer = document.createElement("div");
+  flyer.className = "lensrig";
+  const marked = marksOf(cam).length >= 2;
+
+  const slider = (label, min, max, step, value, fmt, apply) => {
+    const line = document.createElement("label");
+    const name = document.createElement("span");
+    name.className = "n"; name.textContent = label;
+    const out = document.createElement("span");
+    out.className = "v"; out.textContent = fmt(value);
+    const i = document.createElement("input");
+    i.type = "range"; i.min = min; i.max = max; i.step = step; i.value = value;
+    i.oninput = () => {
+      const v = parseFloat(i.value);
+      out.textContent = fmt(v);
+      apply(v);
+      // Keep a marked camera's current position in step as you fly it.
+      if (marksOf(cam).length >= 2) setMark(cam, S.slice + 1);
+      draw();
+    };
+    i.onpointerdown = () => mark("camera");
+    line.append(name, i, out);
+    flyer.append(line);
+  };
+
+  slider("Height", 0.5, 16, 0.25, lensFt, (v) => v.toFixed(2) + "'",
+         (v) => H.set(cam, "lensHeight", v));
+  slider("Tilt", -50, 50, 1, Math.round(pitch * 180 / Math.PI),
+         (v) => (v > 0 ? "+" : "") + v + "\u00b0",
+         (v) => H.set(cam, "tiltAngle", v));
+  slider("Pan", -180, 180, 1, Math.round(R.angleOf(cam) * 180 / Math.PI),
+         (v) => v + "\u00b0",
+         (v) => R.setAngle(cam, v * Math.PI / 180));
+  box.append(flyer);
+
   const row = document.createElement("div");
   row.className = "lensbar";
   const btn = (label, title, run) => {
@@ -730,6 +770,10 @@ function renderLensView() {
     row.append(b);
     return b;
   };
+  // With a move on it every adjustment records itself, so there is nothing to
+  // press; without one, this is how you start a move from the framing you like.
+  if (!marked) btn("Add a Move", "Make this the first position of a move",
+                   () => addMove(cam));
   btn("Storyboard", "Drop this frame on the plan as a storyboard",
       () => frameToStoryboard(cam, svg, W, HGT, mm, fmt));
   btn("Save PNG", "Save the frame as a picture",
@@ -1185,15 +1229,22 @@ function drawSelection() {
       }));
     }
     if (R.hasRotator(obj)) {
+      // Held well clear of the artwork and drawn big enough to hit without
+      // aiming — swivelling a camera is something you do constantly.
       const a = R.angleOf(obj);
-      const hx = x + Math.cos(a) * (r + 16 / S.view.k);
-      const hy = y + Math.sin(a) * (r + 16 / S.view.k);
+      const reach = r + 26 / S.view.k;
+      const hx = x + Math.cos(a) * reach, hy = y + Math.sin(a) * reach;
       g.append(R.el("line", {
         x1: x, y1: y, x2: hx, y2: hy, stroke: "var(--sel)",
-        "stroke-width": 1.2 / S.view.k, opacity: .6,
+        "stroke-width": 1.4 / S.view.k, opacity: .55,
       }));
       g.append(R.el("circle", {
-        cx: hx, cy: hy, r: 6 / S.view.k, fill: "var(--sel)",
+        cx: hx, cy: hy, r: 11 / S.view.k, fill: "#fff", opacity: 0.001,
+        class: "handle", "data-id": id, "data-rotate": "1",
+      }));
+      g.append(R.el("circle", {
+        cx: hx, cy: hy, r: 7 / S.view.k, fill: "var(--sel)",
+        stroke: "#fff", "stroke-width": 2 / S.view.k,
         class: "handle", "data-id": id, "data-rotate": "1",
       }));
     }
@@ -1697,8 +1748,12 @@ stage.addEventListener("pointerdown", (ev) => {
         detached = true;
         toast("Off the track — drop it near track to put it back on");
       }
-      drag = { mode: "move", start: pt, moved: false, detached,
-        origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
+      // ⇧-drag turns it, wherever you grabbed it. You should never have to go
+      // hunting for a handle to swivel a camera.
+      drag = ev.shiftKey && S.sel.size === 1 && R.hasRotator(hit)
+        ? { mode: "rotate", obj: hit, start: pt }
+        : { mode: "move", start: pt, moved: false, detached,
+            origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
     }
   } else {
     const blocked = lockedUnder(client);
@@ -2901,8 +2956,9 @@ window.addEventListener("keydown", (ev) => {
   if (k === "arrowup") { ev.preventDefault(); return moveSelection(0, -step); }
   if (k === "arrowdown") { ev.preventDefault(); return moveSelection(0, step); }
 
-  if (k === "[" || k === "]") {           // rotate the selection in 15° steps
-    const d = (k === "[" ? -1 : 1) * Math.PI / 12;
+  if (k === "[" || k === "]") {           // rotate the selection, ⇧ for 1°
+    const step = ev.shiftKey ? Math.PI / 180 : Math.PI / 12;
+    const d = (k === "[" ? -1 : 1) * step;
     if (S.sel.size === 1) {
       const one = byID([...S.sel][0]);
       if (isBuiltTrack(one)) {
@@ -5005,6 +5061,28 @@ async function loadScene(path) {
     reindex(); fitToContent(); draw(); syncChrome();
     toast("Opened " + path);
   } catch (e) { toast("Open failed: " + e.message); }
+}
+
+/**
+ * Save itself, a couple of seconds after you stop fiddling. Adjusting a camera
+ * at any beat is a real edit and there is no reason to make anyone remember to
+ * press anything — so anything with a name on disk keeps itself written.
+ * A scene that has never been saved is left alone; there is nowhere to put it.
+ */
+let autosaveTimer = null;
+function autosave() {
+  if (!S.path || !S.dirty || S.readOnly || !isLocal()) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async () => {
+    if (!S.path || !S.dirty || S.readOnly) return;
+    try {
+      await api("/api/save", {
+        method: "POST",
+        body: JSON.stringify({ path: S.path, xml: H.serialize(S.doc) }),
+      });
+      S.dirty = false; syncChrome();
+    } catch { /* the manual save is still there; don't nag mid-edit */ }
+  }, 2200);
 }
 
 async function saveScene(saveAs) {

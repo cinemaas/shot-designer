@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=2579423c";
-import * as R from "./render.js?v=2579423c";
-import { UNITS_PER_FOOT } from "./catalog.js?v=2579423c";
-import { fieldOfView } from "./optics.js?v=2579423c";
+import * as H from "./hcw.js?v=87e89636";
+import * as R from "./render.js?v=87e89636";
+import { UNITS_PER_FOOT } from "./catalog.js?v=87e89636";
+import { fieldOfView } from "./optics.js?v=87e89636";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -285,72 +285,64 @@ function band(quad, a, b, z0, z1, fill, stroke) {
 }
 
 /**
- * An upright box in the world, given its centre, size and facing. Four walls
- * and a lid — enough for a knee or a torso to read as a solid thing rather
- * than a flat card, which is what makes a posture legible down the lens and
- * to anything else looking at the frame.
+ * A shape given as a side profile and pushed out sideways — the way you would
+ * cut a person out of card and give it thickness. One solid, so the painter's
+ * sort has a single thing to place: separate boxes sort against each other and
+ * come apart, which is what made a sitting figure look shattered.
+ *
+ * The profile is [forward, up] pairs in scene units, forward being the way the
+ * figure faces.
  */
-function box(out, cam, c, { len, wide, z0, z1, facing, fill, stroke = "#1a1f24" }) {
+function prism(out, cam, c, profile, width, facing, fill, stroke = "#1a1f24") {
   const cs = Math.cos(facing), sn = Math.sin(facing);
-  const at = (lx, ly) => ({ x: c.x + lx * cs - ly * sn, y: c.y + lx * sn + ly * cs });
-  const q = [at(-len / 2, -wide / 2), at(len / 2, -wide / 2),
-             at(len / 2, wide / 2), at(-len / 2, wide / 2)];
-  for (let i = 0; i < 4; i++) {
-    const a = q[i], b = q[(i + 1) % 4];
-    const face = [project(cam, a.x, a.y, z0), project(cam, b.x, b.y, z0),
-                  project(cam, b.x, b.y, z1), project(cam, a.x, a.y, z1)];
-    if (face.some((v) => !v)) continue;
+  const half = width / 2;
+  const at = (f, side) => ({
+    x: c.x + f * cs - side * half * sn,
+    y: c.y + f * sn + side * half * cs,
+  });
+
+  // The two flat sides carry the silhouette, so they do the reading.
+  for (const side of [-1, 1]) {
+    const face = profile.map(([f, z]) => {
+      const p = at(f, side);
+      return project(cam, p.x, p.y, z);
+    });
+    if (face.some((q) => !q)) continue;
     out.push({ pts: face, fill, stroke,
-               depth: (face[0].depth + face[1].depth) / 2 });
+               depth: Math.min(...face.map((q) => q.depth)) });
   }
-  const lid = q.map((p) => project(cam, p.x, p.y, z1));
-  if (!lid.some((v) => !v)) {
-    out.push({ pts: lid, fill, stroke,
-               depth: Math.min(...lid.map((v) => v.depth)) - 0.01 });
+
+  // Then the band round the edge, so it has thickness from any angle.
+  for (let i = 0; i < profile.length; i++) {
+    const [f0, z0] = profile[i];
+    const [f1, z1] = profile[(i + 1) % profile.length];
+    const a = at(f0, -1), b = at(f1, -1), c2 = at(f1, 1), d = at(f0, 1);
+    const q = [project(cam, a.x, a.y, z0), project(cam, b.x, b.y, z1),
+               project(cam, c2.x, c2.y, z1), project(cam, d.x, d.y, z0)];
+    if (q.some((v) => !v)) continue;
+    out.push({ pts: q, fill, stroke,
+               depth: Math.min(...q.map((v) => v.depth)) + 0.001 });
   }
 }
-
-const shadeHex = (hex, k) => {
-  const n = parseInt(hex.slice(1), 16);
-  const f = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
-  return "#" + [f(n >> 16 & 255), f(n >> 8 & 255), f(n & 255)]
-    .map((v) => v.toString(16).padStart(2, "0")).join("");
-};
 
 /**
- * Somebody sitting, built as the shape a sitting person actually is: shins up
- * off the floor, thighs out in front at seat height, torso above that. A
- * shorter slab reads as a short person; this reads as someone in a chair.
+ * Somebody sitting, as one piece: back, shoulders, chest down to the seat,
+ * thighs forward, shin to the floor and back under the knee. It is the shape
+ * a person in a chair makes from the side, which is the thing that says
+ * "sitting" rather than "shorter".
  */
 function seated(out, cam, p, colour, facing) {
-  const SEAT = ft(1.5), KNEE = ft(1.35);
-  const cs = Math.cos(facing), sn = Math.sin(facing);
-  const fwd = (d) => ({ x: p.x + Math.cos(facing) * d, y: p.y + Math.sin(facing) * d });
-
-  // Shins, at the front, from the floor to the knee. Kept apart and darker so
-  // they read as two legs even when the lens is square on and everything is
-  // foreshortened into a stack.
-  for (const side of [-1, 1]) {
-    const q = fwd(ft(1.5));
-    box(out, cam, {
-      x: q.x - Math.sin(facing) * side * ft(0.42),
-      y: q.y + Math.cos(facing) * side * ft(0.42),
-    }, { len: ft(0.7), wide: ft(0.6), z0: 0, z1: KNEE,
-         facing, fill: shadeHex(colour, 0.58) });
-  }
-  // Thighs, level, running forward from the seat — wider than the torso, so
-  // the knees show past it head-on. That's the read that says "sitting".
-  box(out, cam, fwd(ft(0.8)), { len: ft(1.75), wide: ft(1.85),
-    z0: KNEE, z1: SEAT, facing, fill: shadeHex(colour, 0.76) });
-  // Torso.
-  box(out, cam, p, { len: ft(0.85), wide: ft(1.55), z0: SEAT, z1: POSTURES.sit.eye,
-    facing, fill: colour });
-  headBlock(out, cam, p, colour, POSTURES.sit.eye, POSTURES.sit.top, facing);
-}
-
-/** The head, as a small block so it sits proud of whatever is under it. */
-function headBlock(out, cam, p, colour, z0, z1, facing) {
-  box(out, cam, p, { len: ft(0.72), wide: ft(0.72), z0, z1, facing, fill: colour });
+  const P = POSTURES.sit;
+  const profile = [
+    [ft(-0.55), ft(1.15)], [ft(-0.55), P.eye], [ft(0.45), P.eye],
+    [ft(0.45), ft(1.55)], [ft(1.95), ft(1.55)], [ft(1.95), 0],
+    [ft(1.5), 0], [ft(1.5), ft(1.15)],
+  ];
+  prism(out, cam, p, profile, ft(1.5), facing, colour);
+  // Head, sat on the shoulders.
+  prism(out, cam, p, [
+    [ft(-0.32), P.eye], [ft(-0.32), P.top], [ft(0.36), P.top], [ft(0.36), P.eye],
+  ], ft(0.72), facing, colour);
 }
 
 /** A person: a body slab facing the camera, with a head on top — or, if
@@ -383,29 +375,15 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
 }
 
 /**
- * Somebody on the floor. Split into legs, torso and a raised head so the
- * silhouette reads as a body lying down rather than a crate — from the side,
- * from the end, and to anything else looking at the frame.
+ * Somebody on the floor, as one piece: legs low, chest a little higher, head
+ * higher again at the front. Stepped like that it reads as a body from the
+ * side and as a body from the end, which a flat crate never does.
  */
 function lying(out, cam, p, colour, posture, facing) {
-  const W = posture.width;
-  const fwd = (d) => ({ x: p.x + Math.cos(facing) * d, y: p.y + Math.sin(facing) * d });
-
-  // Legs: the far half, narrower and lower.
-  box(out, cam, fwd(-ft(1.55)), { len: ft(2.9), wide: W * 0.72,
-    z0: 0, z1: ft(0.62), facing, fill: shadeHex(colour, 0.72) });
-  // Torso: the near half, wider and taller — a chest off the floor.
-  box(out, cam, fwd(ft(0.55)), { len: ft(2.3), wide: W,
-    z0: 0, z1: ft(0.95), facing, fill: colour });
-  // Head, proud at the front so which end is which is never in doubt.
-  headBlock(out, cam, fwd(ft(2.1)), colour, ft(0.3), ft(1.25), facing);
-  // Arms along the sides, which is what stops it reading as a box.
-  for (const side of [-1, 1]) {
-    const a = {
-      x: p.x + Math.cos(facing) * ft(0.5) - Math.sin(facing) * side * W * 0.92,
-      y: p.y + Math.sin(facing) * ft(0.5) + Math.cos(facing) * side * W * 0.92,
-    };
-    box(out, cam, a, { len: ft(2), wide: ft(0.42), z0: 0, z1: ft(0.5),
-      facing, fill: shadeHex(colour, 0.8) });
-  }
+  const profile = [
+    [ft(-3), 0], [ft(-3), ft(0.5)], [ft(0.4), ft(0.62)],
+    [ft(0.4), ft(0.95)], [ft(1.9), ft(0.95)],
+    [ft(1.9), ft(1.3)], [ft(2.9), ft(1.25)], [ft(3), 0],
+  ];
+  prism(out, cam, p, profile, posture.width, facing, colour);
 }
