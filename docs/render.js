@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real Shot Designer exported, so shapes land on top of the original.
 
-import { FXG } from "./assets.js?v=410c2dc3";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=410c2dc3";
-import { EXTRA_SVG } from "./props.js?v=410c2dc3";
-import { GAUGE } from "./track.js?v=410c2dc3";
-import * as H from "./hcw.js?v=410c2dc3";
+import { FXG } from "./assets.js?v=c199371c";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=c199371c";
+import { EXTRA_SVG } from "./props.js?v=c199371c";
+import { GAUGE } from "./track.js?v=c199371c";
+import * as H from "./hcw.js?v=c199371c";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -367,6 +367,33 @@ export function pathData(pts, { hard = true, closed = false } = {}) {
          ` ${c.x},${c.y}`;
   }
   return d + (closed ? " Z" : "");
+}
+
+/**
+ * The curve a path actually draws, as a run of straight points. Walk arrows
+ * bend, so anything travelling one has to follow the bend rather than cut the
+ * corners — the figure should go where the line goes. Measured off a real SVG
+ * path so it can't drift from what's on screen, and cached, because this runs
+ * on every frame of playback.
+ */
+const sampled = new Map();
+export function samplePath(pts, { hard = false, steps = 96 } = {}) {
+  if (pts.length < 2) return pts.slice();
+  if (hard || pts.length === 2) return pts.slice();
+  const d = pathData(pts, { hard: false });
+  const hit = sampled.get(d);
+  if (hit) return hit;
+  const el = document.createElementNS(SVGNS, "path");
+  el.setAttribute("d", d);
+  const len = el.getTotalLength();
+  const out = [];
+  for (let i = 0; i <= steps; i++) {
+    const q = el.getPointAtLength((len * i) / steps);
+    out.push({ x: q.x, y: q.y });
+  }
+  if (sampled.size > 400) sampled.clear();
+  sampled.set(d, out);
+  return out;
 }
 
 function drawPathObject(obj) {

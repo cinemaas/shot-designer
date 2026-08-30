@@ -81,6 +81,15 @@ position, so you can keep adjusting either end without starting over.
 position, in that camera's own colour, so the whole thing reads without pressing
 anything. <kbd>P</kbd> plays it, and the camera travels and turns between the
 marks rather than jumping. People work the same way.</p>
+<h4>Bending a move</h4>
+<p>Select a walk arrow, a track, or a camera with a move on it and you get a
+<b>hollow handle in the middle of each run</b>. Drag one and it becomes a real
+control point, so a straight move bends into whatever shape you want. Every
+bend you add gives you two more handles, so you can keep going. Drag the solid
+points to reshape it, <kbd>⌥</kbd>-click one to take it out, and
+<kbd>⌥</kbd>-click the last one to go straight again.</p>
+<p>The travel follows the line you drew, not the corners — scrub the timeline
+and the figure or camera is on the curve where you can see it.</p>
 <p>Dragging the end of a walk arrow <b>walks the person on it</b> rather than
 leaving the arrow pointing at nobody — either end, coming or going. The arrow
 keeps its clearance from them as they go.</p>
