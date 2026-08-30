@@ -114,6 +114,15 @@ view, room size off the drawn walls, and every person in frame with distance,
 framing, facing and posture. All measured, none of it invented, so the frame
 and the words can go to an image model together.
 
+**Flying the camera.** The lens panel carries Height, Tilt and Pan sliders that
+drive the real camera, so the overhead follows as you drag and a camera with a
+move keeps whatever you land on. Swivelling works three ways — the handle,
+`⇧`-drag anywhere on the object, or `[` / `]` (with `⇧` for one degree).
+
+**Autosave.** A scene with a path on disk writes itself about two seconds after
+you stop editing. Undo is untouched. It writes the real `.hcw`, so don't have
+the same scene open in the original at the same time.
+
 **Posture.** People stand, sit or lie down. It sets the height the lens sees
 them at and the floor they occupy: someone lying down is drawn at their real six
 feet, pointed the way they're facing, and a seated figure gets a chair bracket.
