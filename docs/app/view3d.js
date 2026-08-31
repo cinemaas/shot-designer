@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=f082f472";
-import * as R from "./render.js?v=f082f472";
-import { UNITS_PER_FOOT } from "./catalog.js?v=f082f472";
-import { fieldOfView } from "./optics.js?v=f082f472";
+import * as H from "./hcw.js?v=b42f8da2";
+import * as R from "./render.js?v=b42f8da2";
+import { UNITS_PER_FOOT } from "./catalog.js?v=b42f8da2";
+import { fieldOfView } from "./optics.js?v=b42f8da2";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -602,55 +602,60 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
     return;
   }
 
-  // Standing. Everything is a ratio of the person's own height.
-  const ANKLE = z(0.28), KNEEZ = z(1.6), HIPZ = z(2.9);
-  const CHEST = z(4.15), SHOULDER = z(4.55), CROWN = z(5.67);
-  const NECK = CROWN - z(0.86);
+  // Standing. Everything is a ratio of the person's own height, and every run
+  // hands over to the next at the same width so the body reads as one form
+  // rather than a stack of parts.
+  const ANKLE = z(0.3), KNEEZ = z(1.55), HIPZ = z(2.85);
+  const WAISTZ = z(3.45), CHEST = z(4.15), SHOULDER = z(4.6);
+  const CROWN = z(5.67), NECK = CROWN - z(0.84);
+  const armTop = SHOULDER - z(0.12);
 
   if (female) {
+    const HEM = z(2.1);
     for (const s of [-1, 1]) {
-      put({ side: s * ft(0.17), len: ft(0.4), wide: ft(0.34),
-            len1: ft(0.34), wide1: ft(0.28), z0: 0, z1: KNEEZ, fill: limb, sides: 8 });
-      put({ side: s * ft(0.18), len: ft(0.44), wide: ft(0.38), len1: ft(0.4),
-            wide1: ft(0.32), z0: KNEEZ, z1: z(2.15), fill: limb, sides: 8 });
+      put({ side: s * ft(0.17), len: ft(0.4), wide: ft(0.33), len1: ft(0.34),
+            wide1: ft(0.27), z0: 0, z1: KNEEZ, fill: limb, sides: 8 });
+      put({ side: s * ft(0.18), len: ft(0.44), wide: ft(0.37), len1: ft(0.4),
+            wide1: ft(0.31), z0: KNEEZ, z1: HEM + z(0.15), fill: limb, sides: 8 });
     }
-    // The skirt: wide at the hem, gathered at the waist.
-    put({ len: ft(1.35), wide: ft(2.1), len1: ft(0.62), wide1: WAIST * 2,
-          z0: z(2.05), z1: z(3.35), fill: colour });
-    put({ len: ft(0.62), wide: WAIST * 2, len1: ft(0.7), wide1: SH * 2,
-          z0: z(3.3), z1: CHEST, fill: colour });
+    put({ len: ft(1.45), wide: ft(2.2), len1: ft(0.64), wide1: WAIST * 2,
+          z0: HEM, z1: WAISTZ, fill: colour });
   } else {
     for (const s of [-1, 1]) {
-      put({ side: s * ft(0.25), len: ft(0.5), wide: ft(0.44),
-            len1: ft(0.4), wide1: ft(0.32), z0: ANKLE, z1: KNEEZ,
-            fill: dark, sides: 8 });
-      put({ side: s * ft(0.26), len: ft(0.58), wide: ft(0.52), len1: ft(0.5),
-            wide1: ft(0.44), z0: KNEEZ, z1: HIPZ, fill: dark, sides: 8 });
-      // Feet, which are most of what stops a leg reading as a table leg.
-      put({ fwd: ft(0.12), side: s * ft(0.25), len: ft(0.8), wide: ft(0.36),
-            z0: 0, z1: ANKLE + z(0.02), fill: dark, sides: 8 });
+      put({ fwd: ft(0.12), side: s * ft(0.25), len: ft(0.78), wide: ft(0.35),
+            z0: 0, z1: ANKLE, fill: dark, sides: 8 });
+      put({ side: s * ft(0.25), len: ft(0.48), wide: ft(0.42), len1: ft(0.42),
+            wide1: ft(0.34), z0: ANKLE - z(0.04), z1: KNEEZ, fill: dark, sides: 8 });
+      put({ side: s * ft(0.26), len: ft(0.56), wide: ft(0.5), len1: ft(0.46),
+            wide1: ft(0.4), z0: KNEEZ, z1: HIPZ, fill: dark, sides: 8 });
     }
-    put({ len: ft(0.72), wide: HIPW * 2, len1: ft(0.66), wide1: WAIST * 2,
-          z0: HIPZ - z(0.25), z1: z(3.5), fill: colour });
-    put({ len: ft(0.66), wide: WAIST * 2, len1: ft(0.78), wide1: SH * 2,
-          z0: z(3.45), z1: CHEST, fill: colour });
+    put({ len: ft(0.72), wide: HIPW * 2, len1: ft(0.68), wide1: WAIST * 2,
+          z0: HIPZ - z(0.2), z1: WAISTZ, fill: colour });
   }
 
-  // Shoulders as a rounded cap rather than a flat top, then a short neck.
-  put({ len: ft(0.78), wide: SH * 2, len1: ft(0.6), wide1: SH * 1.5,
-        z0: CHEST - z(0.05), z1: SHOULDER, fill: colour, dome: 0.25 });
-  put({ len: ft(0.34), wide: ft(0.36), len1: ft(0.32), wide1: ft(0.32),
-        z0: SHOULDER - z(0.06), z1: NECK, fill: limb, sides: 10 });
+  // Waist to chest to shoulders, in two runs that share a width, then the
+  // shoulder cap and a short neck. No seam anywhere along it.
+  put({ len: ft(0.68), wide: WAIST * 2, len1: ft(0.76), wide1: SH * 1.86,
+        z0: WAISTZ, z1: CHEST, fill: colour });
+  put({ len: ft(0.76), wide: SH * 1.86, len1: ft(0.74), wide1: SH * 2,
+        z0: CHEST, z1: armTop, fill: colour });
+  put({ len: ft(0.74), wide: SH * 2, len1: ft(0.4), wide1: ft(0.42),
+        z0: armTop, z1: SHOULDER + z(0.1), fill: colour, dome: 0.3 });
+  put({ len: ft(0.34), wide: ft(0.36), z0: SHOULDER - z(0.02), z1: NECK,
+        fill: colour, sides: 10 });
 
-  // Arms: upper arm to a narrower forearm, angled a touch off the body.
+  // Arms. They start inside the shoulder rather than beside it, so there is
+  // no gap where one should join the other, and they taper to a wrist.
   for (const s of [-1, 1]) {
-    const off = SH + ft(0.15);
-    put({ side: s * off, len: ft(0.4), wide: ft(0.36), len1: ft(0.34),
-          wide1: ft(0.3), z0: z(3.2), z1: CHEST - z(0.05), fill: limb, sides: 8 });
-    put({ side: s * (off + ft(0.03)), len: ft(0.34), wide: ft(0.3),
-          len1: ft(0.26), wide1: ft(0.24),
-          z0: z(2.35), z1: z(3.25), fill: limb, sides: 8 });
+    const off = SH + ft(0.1);
+    put({ side: s * off, len: ft(0.42), wide: ft(0.38), len1: ft(0.36),
+          wide1: ft(0.31), z0: z(3.15), z1: armTop + z(0.06),
+          fill: colour, sides: 10 });
+    put({ side: s * (off + ft(0.02)), len: ft(0.36), wide: ft(0.31),
+          len1: ft(0.26), wide1: ft(0.23),
+          z0: z(2.3), z1: z(3.2), fill: limb, sides: 10 });
   }
 
   headOn(out, cam, p, facing, colour, { z0: NECK - z(0.04), z1: CROWN, female });
 }
+

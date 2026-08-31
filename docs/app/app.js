@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=f082f472";
-import * as H from "./hcw.js?v=f082f472";
-import * as R from "./render.js?v=f082f472";
-import { FXG } from "./assets.js?v=f082f472";
-import * as B from "./blocking.js?v=f082f472";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=f082f472";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f082f472";
-import { HANDBOOK } from "./handbook.js?v=f082f472";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=f082f472";
-import * as V3 from "./view3d.js?v=f082f472";
-import * as TR from "./track.js?v=f082f472";
-import * as RIG from "./rigs.js?v=f082f472";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=f082f472";
-import { Library } from "./library.js?v=f082f472";
+import { BRAND, SLUG } from "./brand.js?v=b42f8da2";
+import * as H from "./hcw.js?v=b42f8da2";
+import * as R from "./render.js?v=b42f8da2";
+import { FXG } from "./assets.js?v=b42f8da2";
+import * as B from "./blocking.js?v=b42f8da2";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=b42f8da2";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=b42f8da2";
+import { HANDBOOK } from "./handbook.js?v=b42f8da2";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=b42f8da2";
+import * as V3 from "./view3d.js?v=b42f8da2";
+import * as TR from "./track.js?v=b42f8da2";
+import * as RIG from "./rigs.js?v=b42f8da2";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=b42f8da2";
+import { Library } from "./library.js?v=b42f8da2";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=f082f472";
+} from "./catalog.js?v=b42f8da2";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");

@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=f082f472";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=f082f472";
-import { EXTRA_SVG } from "./props.js?v=f082f472";
-import { GAUGE } from "./track.js?v=f082f472";
-import * as H from "./hcw.js?v=f082f472";
+import { FXG } from "./assets.js?v=b42f8da2";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=b42f8da2";
+import { EXTRA_SVG } from "./props.js?v=b42f8da2";
+import { GAUGE } from "./track.js?v=b42f8da2";
+import * as H from "./hcw.js?v=b42f8da2";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -246,12 +246,13 @@ function drawPlanFigure(obj, color, female) {
   const g = el("g");
   const across = female ? 13 : 15.5;     // half the shoulders
   const deep = female ? 9 : 10;          // half of front to back
-  const headR = female ? 7.4 : 6.9;      // a woman's hair reads bigger from above
+  const headR = female ? 7.4 : 6.9;
+  const hx = 1.5;                        // where the head sits
 
   // Feet, just in front of the body.
   for (const s2 of [-1, 1]) {
     g.append(el("circle", {
-      cx: deep * 1.05, cy: s2 * across * 0.3, r: 3.8,
+      cx: deep * 1.32, cy: s2 * across * 0.28, r: 3.9,
       fill: shade(color, 0.45), stroke: "none",
     }));
   }
@@ -262,11 +263,30 @@ function drawPlanFigure(obj, color, female) {
     fill: color, stroke: INK, "stroke-width": 2.2,
   }));
 
+  // The nose, so you can see which way somebody faces without reading the
+  // arrows. It's the one thing the top of a head does tell you.
+  g.append(el("path", {
+    d: `M${hx + headR * 0.4},${-4} L${hx + headR + 8},0 ` +
+       `L${hx + headR * 0.4},${4} Z`,
+    fill: shade(color, 0.42), stroke: INK, "stroke-width": 1.6,
+    "stroke-linejoin": "round",
+  }));
+
   // The top of the head, darker so it separates from the shoulders.
   g.append(el("circle", {
-    cx: 1.5, cy: 0, r: headR,
+    cx: hx, cy: 0, r: headR,
     fill: shade(color, 0.58), stroke: INK, "stroke-width": 2,
   }));
+
+  // And the original's own mark: one line for a man, two for a woman. Every
+  // scene in the library reads that way and it costs one stroke.
+  for (const d of female ? [-headR * 0.3, headR * 0.3] : [0]) {
+    const h = Math.sqrt(Math.max(0, headR * headR - d * d)) * 0.82;
+    g.append(el("line", {
+      x1: hx + d, y1: -h, x2: hx + d, y2: h,
+      stroke: shade(color, 0.3), "stroke-width": 1.8, "stroke-linecap": "round",
+    }));
+  }
   return g;
 }
 
