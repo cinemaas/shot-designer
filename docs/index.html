@@ -1,78 +1,176 @@
 <!doctype html>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Sightline</title>
-<div id="app">
-  <svg id="stage" tabindex="0">
-    <defs>
-      <marker id="arrowEnd" viewBox="0 0 10 10" refX="9" refY="5"
-              markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
-      </marker>
-      <marker id="arrowStart" viewBox="0 0 10 10" refX="9" refY="5"
-              markerWidth="5" markerHeight="5" orient="auto">
-        <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
-      </marker>
-    </defs>
-    <g id="world">
-      <g id="l-grid"></g>
-      <g id="l-background"></g>
-      <g id="l-set"></g>
-      <g id="l-track"></g>
-      <g id="l-prop"></g>
-      <g id="l-lighting"></g>
-      <g id="l-lines"></g>
-      <g id="l-walk"></g>
-      <g id="l-rig"></g>
-      <g id="l-character"></g>
-      <g id="l-camera"></g>
-      <g id="l-caption"></g>
-      <g id="l-storyboard"></g>
-      <g id="l-overlay"></g>
-    </g>
-    <g id="hud"></g>
-  </svg>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sightline — overheads, blocking and shot lists</title>
+<meta name="description" content="Draw the set, put people and cameras in it, and see what the lens sees. Overheads, blocking, lighting plans and shot lists for people who shoot.">
+<style>
+  :root{
+    --ink:#12161a; --dim:#5c6670; --line:#d8dde2; --paper:#fff;
+    --wash:#eef3f8; --accent:#1d5f9c; --beam:#dbe9f7;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font:16px/1.55 "Helvetica Neue",Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  a{color:inherit}
 
-  <button id="shotListToggle" class="chevron" title="Shot List">&#171;</button>
-  <aside id="shotList" hidden></aside>
-  <aside id="beatPanel" hidden></aside>
+  /* The rule down the page is the frameline. */
+  header{border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:5}
+  .bar{display:flex;align-items:center;gap:14px;height:62px}
+  .mark{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+        text-transform:uppercase;font-size:13px}
+  .mark svg{display:block}
+  nav{margin-left:auto;display:flex;gap:22px;font-size:14px;color:var(--dim)}
+  nav a{text-decoration:none}
+  nav a:hover{color:var(--ink)}
+  .go{
+    display:inline-block;padding:9px 18px;border-radius:999px;background:var(--ink);
+    color:#fff;text-decoration:none;font-weight:600;font-size:14px;
+  }
+  .go:hover{background:var(--accent)}
 
-  <div id="toolbar">
-    <div class="tb-left">
-      <button data-act="menu"      title="Menu"></button>
-      <button data-act="add"       title="Add New"></button>
-      <button data-act="label"     title="Add Label"></button>
-      <button data-act="layers"    title="Layers"></button>
-      <button data-act="undo"      title="Undo (&#8984;Z)"></button>
-      <button data-act="redo"      title="Redo (&#8679;&#8984;Z)"></button>
-      <button data-act="wall"      title="Wall Tool"></button>
+  .hero{padding:74px 0 8px}
+  h1{font-size:clamp(34px,5.4vw,60px);line-height:1.04;margin:0 0 18px;letter-spacing:-.02em}
+  h1 em{font-style:normal;color:var(--accent)}
+  .lede{font-size:19px;color:var(--dim);max-width:52ch;margin:0 0 26px}
+  .cta{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .note{font-size:13px;color:var(--dim)}
+
+  figure{margin:40px 0 0}
+  .shot{
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;
+    box-shadow:0 18px 50px rgba(18,22,26,.09);
+  }
+  .shot img{display:block;width:100%}
+  figcaption{font-size:13px;color:var(--dim);margin-top:10px}
+
+  .strip{border-top:1px solid var(--line);margin-top:70px;padding:52px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:34px}
+  h3{font-size:15px;margin:0 0 7px;letter-spacing:.02em}
+  .grid p{margin:0;color:var(--dim);font-size:15px}
+
+  .two{display:grid;grid-template-columns:1.15fr .85fr;gap:38px;align-items:center}
+  @media (max-width:760px){.two{grid-template-columns:1fr}}
+  h2{font-size:clamp(23px,3.2vw,32px);line-height:1.2;margin:0 0 14px;letter-spacing:-.01em}
+  .two p{color:var(--dim);margin:0 0 12px}
+
+  ul.plain{margin:0;padding:0;list-style:none;color:var(--dim);font-size:15px}
+  ul.plain li{padding:7px 0;border-bottom:1px solid var(--line)}
+  ul.plain li b{color:var(--ink);font-weight:600}
+
+  footer{border-top:1px solid var(--line);padding:30px 0 54px;color:var(--dim);font-size:13px}
+  footer .bar{height:auto;gap:18px;flex-wrap:wrap}
+</style>
+
+<header>
+  <div class="wrap bar">
+    <span class="mark">
+      <!-- the mark: a lens and the wedge it sees -->
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 12 L23 5.5 A13 13 0 0 1 23 18.5 Z" fill="#dbe9f7"/>
+        <circle cx="8" cy="12" r="5.2" fill="none" stroke="#12161a" stroke-width="2"/>
+        <circle cx="8" cy="12" r="1.7" fill="#12161a"/>
+      </svg>
+      Sightline
+    </span>
+    <nav>
+      <a href="#what">What it does</a>
+      <a href="#lens">Through the lens</a>
+      <a href="#files">Your files</a>
+    </nav>
+    <a class="go" href="app/">Open Sightline</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Draw the set.<br>Put the camera in it.<br><em>See what it sees.</em></h1>
+    <p class="lede">
+      Overheads, blocking, lighting plans and shot lists — drawn to scale, so the
+      distances you read off the page are the distances on the floor.
+    </p>
+    <div class="cta">
+      <a class="go" href="app/">Open Sightline</a>
+      <span class="note">Runs in the browser. Nothing to install.</span>
     </div>
-    <div class="tb-right">
-      <button data-act="blocking"  title="Blocking Mode (B)"></button>
-      <button data-act="templates" title="Templates"></button>
-      <button data-act="pause"     title="Pause"></button>
-      <button data-act="timeline"  title="Timeline"></button>
-      <button data-act="play"      title="Play"></button>
-      <button data-act="pages" title="Pages" class="pages"></button>
-      <span id="slices"></span>
-      <button data-act="collapse"  title="Hide Toolbar" class="chev">&#171;</button>
+
+    <figure>
+      <div class="shot"><img src="plan.png" alt="An overhead lighting plan drawn in Sightline: a room, two named characters, a camera, and three fixtures with their throw."></div>
+      <figcaption>A plan drawn in Sightline. Fixtures named, throw shown, people to scale.</figcaption>
+    </figure>
+  </section>
+</main>
+
+<section class="strip" id="what">
+  <div class="wrap grid">
+    <div>
+      <h3>To scale, not to taste</h3>
+      <p>Twenty units to the foot. A fifteen-foot car is fifteen feet, an 18-inch
+         shoulder is 18 inches, and a lens cone is the real angle for that focal
+         length on your format.</p>
+    </div>
+    <div>
+      <h3>Blocking that moves</h3>
+      <p>Click out where somebody walks. Each move has its own start and length,
+         so one person can cross while another waits and a camera can begin its
+         move halfway through.</p>
+    </div>
+    <div>
+      <h3>Rigs with their mechanics</h3>
+      <p>Dolly, dolly and jib, slider — and track in the lengths and angles it
+         actually comes in, so the plan tells you what to order.</p>
+    </div>
+    <div>
+      <h3>Shot lists, fast</h3>
+      <p>Type the shorthand you already write. Lay out standard coverage in a
+         click, and send the list to a Google Sheet with pictures.</p>
     </div>
   </div>
+</section>
 
-  <div id="timeline" hidden></div>
-  <div id="lensview" hidden></div>
-  <div id="toolbanner" hidden></div>
-  <div id="handbook" hidden></div>
-  <div id="status"></div>
-  <div id="popover" hidden></div>
-  <div id="modal" hidden><div class="sheet"></div></div>
-  <div id="toast" hidden></div>
-</div>
+<section class="strip" id="lens">
+  <div class="wrap two">
+    <div class="shot"><img src="lens.png" alt="The through-the-lens view in Sightline: a rough 3D of the room with the characters in frame."></div>
+    <div>
+      <h2>Look down the lens before you carry anything</h2>
+      <p>Every camera has a real lens on a real format at a real height. Open the
+         viewfinder and you get a rough, honest picture of the room from there —
+         enough to settle whether she's behind the sofa without moving a light.</p>
+      <p>Fly it from the panel: height, tilt and pan on sliders, with the overhead
+         turning as you drag.</p>
+      <ul class="plain">
+        <li><b>Storyboard</b> — drop the frame on the plan</li>
+        <li><b>Save PNG</b> — or a still of every beat, in a folder</li>
+        <li><b>Brief</b> — the shot written out, measured off the scene</li>
+      </ul>
+    </div>
+  </div>
+</section>
 
-<style>html,body{margin:0;height:100%;background:#fff;overflow:hidden}</style>
-<script type="module">
-const { build } = await fetch("build.json", { cache: "no-store" }).then((r) => r.json());
-document.head.append(Object.assign(document.createElement("link"),
-  { rel: "stylesheet", href: "style.css?v=" + build }));
-await import("./app.js?v=" + build);
-</script>
+<section class="strip" id="files">
+  <div class="wrap two">
+    <div>
+      <h2>It reads the files you already have</h2>
+      <p>Scenes are <code>.hcw</code>, read and written in place. A library you
+         already own opens as it is, and anything you save still opens anywhere
+         else that reads the format — byte for byte.</p>
+      <p>It saves itself while you work, and keeps every previous version.</p>
+    </div>
+    <ul class="plain">
+      <li><b>414 scenes</b> opened, drawn and saved back unchanged</li>
+      <li><b>Overheads and lighting plans</b> in one drawing</li>
+      <li><b>Dark and light</b>, and it prints</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap bar">
+    <span class="mark">Sightline</span>
+    <span>Built for people who shoot.</span>
+    <a class="go" style="margin-left:auto" href="app/">Open Sightline</a>
+  </div>
+</footer>
