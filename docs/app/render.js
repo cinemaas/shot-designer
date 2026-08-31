@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=b42f8da2";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=b42f8da2";
-import { EXTRA_SVG } from "./props.js?v=b42f8da2";
-import { GAUGE } from "./track.js?v=b42f8da2";
-import * as H from "./hcw.js?v=b42f8da2";
+import { FXG } from "./assets.js?v=3d227114";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=3d227114";
+import { EXTRA_SVG } from "./props.js?v=3d227114";
+import { GAUGE } from "./track.js?v=3d227114";
+import * as H from "./hcw.js?v=3d227114";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -263,14 +263,8 @@ function drawPlanFigure(obj, color, female) {
     fill: color, stroke: INK, "stroke-width": 2.2,
   }));
 
-  // The nose, so you can see which way somebody faces without reading the
-  // arrows. It's the one thing the top of a head does tell you.
-  g.append(el("path", {
-    d: `M${hx + headR * 0.4},${-4} L${hx + headR + 8},0 ` +
-       `L${hx + headR * 0.4},${4} Z`,
-    fill: shade(color, 0.42), stroke: INK, "stroke-width": 1.6,
-    "stroke-linejoin": "round",
-  }));
+  // No nose. A wedge off the front of a head reads as a snout, and the feet in
+  // front already say which way somebody is pointed.
 
   // The top of the head, darker so it separates from the shoulders.
   g.append(el("circle", {
