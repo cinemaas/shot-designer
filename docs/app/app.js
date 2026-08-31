@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=3d227114";
-import * as H from "./hcw.js?v=3d227114";
-import * as R from "./render.js?v=3d227114";
-import { FXG } from "./assets.js?v=3d227114";
-import * as B from "./blocking.js?v=3d227114";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=3d227114";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=3d227114";
-import { HANDBOOK } from "./handbook.js?v=3d227114";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=3d227114";
-import * as V3 from "./view3d.js?v=3d227114";
-import * as TR from "./track.js?v=3d227114";
-import * as RIG from "./rigs.js?v=3d227114";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=3d227114";
-import { Library } from "./library.js?v=3d227114";
+import { BRAND, SLUG } from "./brand.js?v=97c52203";
+import * as H from "./hcw.js?v=97c52203";
+import * as R from "./render.js?v=97c52203";
+import { FXG } from "./assets.js?v=97c52203";
+import * as B from "./blocking.js?v=97c52203";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=97c52203";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=97c52203";
+import { HANDBOOK } from "./handbook.js?v=97c52203";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=97c52203";
+import * as V3 from "./view3d.js?v=97c52203";
+import * as TR from "./track.js?v=97c52203";
+import * as RIG from "./rigs.js?v=97c52203";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=97c52203";
+import { Library } from "./library.js?v=97c52203";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=3d227114";
+} from "./catalog.js?v=97c52203";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -4093,7 +4093,8 @@ function thumbFor(key, tag = "GenericProp") {
  */
 const castKey = () => {
   const folder = (S.path || "").split("/").slice(0, -1).join("/");
-  return "cast:" + (folder || "_loose");
+  // Keys are a safe slug path on disk, so no colons.
+  return "cast/" + (folder || "_loose").replace(/[^A-Za-z0-9 _./-]+/g, "-");
 };
 
 let CAST = [];
