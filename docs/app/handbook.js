@@ -175,23 +175,18 @@ widths too, 18 inches against 14.</p>
 Down the lens you're looking at the room at one moment, and there is only ever
 one of anybody in it — so the viewer shows the position this beat belongs to
 and leaves the rest out. Play it and you watch one person walk.</p>
+<p>On the plan a person is what you actually see looking down at them: the
+crown of the head, the shoulders spread round it, and their feet just showing
+in front. There is no face, because from up there there isn't one. It is the
+shape every good lighting diagram uses and it holds up at any size.</p>
 <p>Everybody is built to real height — an average adult is five foot eight, so
 that is what they are, with men a little over and women a little under. Down
-the lens people are built out of limbs — head, torso, arms, legs — so
-a figure reads as a person rather than a slab, and the three postures are three
-arrangements of the same body rather than three different shapes. Each has a
-<b>face</b> in their own colour — eyes, a mouth, and a nose that sticks out far
-enough to read from the side — so you know whose face you are looking at as
-well as which way it points. The shapes come from the signs on lavatory
-doors, which are the most legible drawings of a person anybody has made — a
-round head above the shoulders and one continuous body that says everything by
-its outline. Not copied, since those are flat and these have to hold up from
-any angle in a room, but the same idea: a silhouette carries further than
-detail. A man is a shield, narrow at the hips and widening to the shoulders
-where the arms are part of the mass. A woman is a bell: a waist, then a skirt
-out to the hem. Neither has a feature you have to go looking for. Somebody flat on their back looks at the ceiling, so their face is on
-top of their head where it belongs. You should never have to work out which way
-someone is looking.</p>
+the lens they are the same person in one solid colour with a darker head, and a
+nose so you can see which way they are looking. A man is a shield, narrow at
+the hips and widening to the shoulders where the arms are part of the mass; a
+woman is a bell — a waist, then a skirt out to the hem. Nothing else: at the
+size these draw, a face only ever reads as a toy, and the colour is what tells
+you who it is.</p>
 <h4>Getting a frame out of the lens view</h4>
 <p>Three buttons under the through-the-lens view. <b>Storyboard</b> drops that
 frame onto the plan as a real storyboard object beside its camera — drag it

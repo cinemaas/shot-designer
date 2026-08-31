@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=65852e25";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=65852e25";
-import { EXTRA_SVG } from "./props.js?v=65852e25";
-import { GAUGE } from "./track.js?v=65852e25";
-import * as H from "./hcw.js?v=65852e25";
+import { FXG } from "./assets.js?v=f082f472";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=f082f472";
+import { EXTRA_SVG } from "./props.js?v=f082f472";
+import { GAUGE } from "./track.js?v=f082f472";
+import * as H from "./hcw.js?v=f082f472";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -235,40 +235,38 @@ function drawCharacter(obj) {
 }
 
 /**
- * A person from directly above, drawn the way a lighting diagram draws one: a
- * solid body mass with the head sat in the front of it. Diagrams like these
- * are read at a glance across a table, so the figure is a filled shape rather
- * than an outline — it holds up small and it prints.
+ * A person from directly above.
+ *
+ * This is what you actually see looking down at somebody: the crown of their
+ * head, their shoulders spread round it, and their feet just showing in front.
+ * Nothing else — no face, because from up here there isn't one. It's the
+ * shape every good lighting diagram uses, and it holds up at any size.
  */
 function drawPlanFigure(obj, color, female) {
   const g = el("g");
-  const sh = shoulderHalf(female);
-  const depth = female ? 11 : 12.5;
+  const across = female ? 13 : 15.5;     // half the shoulders
+  const deep = female ? 9 : 10;          // half of front to back
+  const headR = female ? 7.4 : 6.9;      // a woman's hair reads bigger from above
 
-  // Shoulders and arms as one mass, a little narrower at the front.
-  g.append(el("path", {
-    d: `M${-depth},${-sh} Q${depth * 1.1},${-sh * 0.92} ${depth * 0.95},0 ` +
-       `Q${depth * 1.1},${sh * 0.92} ${-depth},${sh} ` +
-       `Q${-depth * 1.5},0 ${-depth},${-sh} Z`,
-    fill: color, stroke: INK, "stroke-width": 2.4, "stroke-linejoin": "round",
-  }));
-
-  // The head, forward of the shoulders and darker, so the two never merge.
-  const head = { cx: depth * 0.42, cy: 0, r: PLAN_HEAD };
-  g.append(el("circle", {
-    ...head, fill: shade(color, 0.66), stroke: INK, "stroke-width": 2.2,
-  }));
-
-  // The original's own mark: one line across the face for a man, two for a
-  // woman. It costs nothing and every scene in the library already uses it.
-  for (const d of female ? [PLAN_HEAD * 0.2, PLAN_HEAD * 0.62]
-                         : [PLAN_HEAD * 0.42]) {
-    const h = Math.sqrt(Math.max(0, PLAN_HEAD * PLAN_HEAD - d * d)) * 0.86;
-    g.append(el("line", {
-      x1: head.cx + d, y1: -h, x2: head.cx + d, y2: h,
-      stroke: INK, "stroke-width": 2, "stroke-linecap": "round",
+  // Feet, just in front of the body.
+  for (const s2 of [-1, 1]) {
+    g.append(el("circle", {
+      cx: deep * 1.05, cy: s2 * across * 0.3, r: 3.8,
+      fill: shade(color, 0.45), stroke: "none",
     }));
   }
+
+  // Shoulders.
+  g.append(el("ellipse", {
+    cx: -1, cy: 0, rx: deep, ry: across,
+    fill: color, stroke: INK, "stroke-width": 2.2,
+  }));
+
+  // The top of the head, darker so it separates from the shoulders.
+  g.append(el("circle", {
+    cx: 1.5, cy: 0, r: headR,
+    fill: shade(color, 0.58), stroke: INK, "stroke-width": 2,
+  }));
   return g;
 }
 

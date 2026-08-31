@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=65852e25";
-import * as R from "./render.js?v=65852e25";
-import { UNITS_PER_FOOT } from "./catalog.js?v=65852e25";
-import { fieldOfView } from "./optics.js?v=65852e25";
+import * as H from "./hcw.js?v=f082f472";
+import * as R from "./render.js?v=f082f472";
+import { UNITS_PER_FOOT } from "./catalog.js?v=f082f472";
+import { fieldOfView } from "./optics.js?v=f082f472";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -464,81 +464,28 @@ const DARK = "#2b2b2b";
  * where it belongs on somebody flat on their back.
  */
 function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
+  // No face. Looking down on a plan you see the top of somebody's head, and
+  // these should say the same thing: a shape, a colour, and which way it
+  // points. Eyes and a mouth at this size only ever read as a toy. What is
+  // left is a nose, because you still have to know where somebody is looking.
   const cs = Math.cos(facing), sn = Math.sin(facing);
-
-  // Features are flat patches laid on the face, so they have to be dropped
-  // once the face turns away — otherwise they smear round the side of the
-  // head and somebody with their back to you appears to be looking at you.
-  // Somebody on their back is looking at the ceiling, so that case always
-  // draws.
   if (!up) {
     const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
-    if (Math.cos(facing - toCam) < 0.12) return;
+    if (Math.cos(facing - toCam) < 0.05) return;
   }
-
-  // Features sit on the head itself rather than on a panel stuck to it — the
-  // head is already the character's colour, so a plate over it only made the
-  // face look like a sticker. u runs across the face, v up it; when somebody
-  // is on their back the face points at the ceiling and v runs forward.
-  const shape = (pts, fill, lift) => {
-    const q = pts.map(([u, v]) => {
-      const f = up ? fwd + v : fwd + lift;
-      const h = up ? z + lift : z + v;
-      return project(cam, p.x + f * cs - u * sn, p.y + f * sn + u * cs, h);
-    });
-    if (q.some((v) => !v)) return;
-    out.push({ pts: q, fill, stroke: "none",
-               depth: q.reduce((t, v) => t + v.depth, 0) / q.length - 0.06 - lift * 0.02 });
-  };
-
-  /** A rounded blob, which is what an eye needs to be at this size. */
-  const blob = (cu, cv, ru, rv, fill, lift) => {
-    const pts = [];
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      pts.push([cu + Math.cos(a) * ru, cv + Math.sin(a) * rv]);
-    }
-    shape(pts, fill, lift);
-  };
-
-  const L = 0.6;                        // how far features stand off the head
-  const eyeU = r * 0.44, eyeV = r * 0.16;
-
-  // Brows first — a face without them reads as a doll.
-  for (const s2 of [-1, 1]) {
-    shape([[s2 * eyeU - r * 0.2, eyeV + r * 0.3], [s2 * eyeU + r * 0.2, eyeV + r * 0.34],
-           [s2 * eyeU + r * 0.2, eyeV + r * 0.2], [s2 * eyeU - r * 0.2, eyeV + r * 0.16]],
-          tone(colour, 0.62), L);
-    blob(s2 * eyeU, eyeV, r * 0.17, r * 0.15, "#ffffff", L);
-    blob(s2 * eyeU, eyeV, r * 0.09, r * 0.1, DARK, L * 1.6);
-  }
-
-  // A mouth with a bit of curve in it, rather than a bar.
-  shape([[-r * 0.3, -r * 0.44], [-r * 0.14, -r * 0.52], [r * 0.14, -r * 0.52],
-         [r * 0.3, -r * 0.44], [r * 0.14, -r * 0.42], [-r * 0.14, -r * 0.42]],
-        tone(colour, 0.42), L);
-
-  // The nose: a wedge down the middle of the face, standing off far enough
-  // that a profile still reads as a face rather than a coloured ball.
-  const nose = ft(0.17), w = r * 0.11;
+  const nose = ft(0.13), w = r * 0.14;
   const pt = (u, v, lift) => {
     const f = up ? fwd + v : fwd + lift;
     const hgt = up ? z + lift : z + v;
     return project(cam, p.x + f * cs - u * sn, p.y + f * sn + u * cs, hgt);
   };
-  const bridge = [pt(-w, eyeV + r * 0.06, L), pt(w, eyeV + r * 0.06, L)];
-  const tip = pt(0, -r * 0.1, L + nose);
-  const flank = [pt(-w * 1.6, -r * 0.13, L), pt(w * 1.6, -r * 0.13, L)];
-  for (const tri of [[bridge[0], bridge[1], tip],
-                     [bridge[0], tip, flank[0]],
-                     [bridge[1], tip, flank[1]]]) {
-    if (tri.some((v) => !v)) continue;
-    out.push({ pts: tri, fill: tone(colour, 0.84), stroke: "none",
-               depth: tri.reduce((a, v) => a + v.depth, 0) / 3 - 0.12 });
-  }
+  const tri = [pt(-w, r * 0.18, 0.4), pt(w, r * 0.18, 0.4),
+               pt(0, -r * 0.12, 0.4 + nose)];
+  if (tri.some((v) => !v)) return;
+  out.push({ pts: tri, fill: tone(colour, 0.78), stroke: "none",
+             depth: tri.reduce((a, v) => a + v.depth, 0) / 3 - 0.1 });
 }
 
-/** Head, neck and face as one unit, wherever the body needs them. */
 /** One outline round a head, rather than one round each slice of it. */
 function outlineBall(out, cam, p, facing, fwd, r, z0, z1) {
   const cs = Math.cos(facing), sn = Math.sin(facing);
@@ -558,7 +505,7 @@ function outlineBall(out, cam, p, facing, fwd, r, z0, z1) {
 function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
                                               female = false }) {
   const r = ft(0.35);
-  const hair = tone(colour, 0.52);
+  const crown = tone(colour, 0.62);
 
   // A ball, in three slices — a jaw that narrows in, the width of the head at
   // the cheekbones, and a crown that rounds off. One tapered tube with a lid
@@ -570,29 +517,16 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
       len1: r * 2 * w1 * grow, wide1: r * 1.9 * w1 * grow,
       z0: z0 + h * a, z1: z0 + h * b, fill, sides: 16, outline: false,
     });
-  slice(0, 0.22, 0.72, 0.94, colour);
-  slice(0.22, 0.62, 0.94, 1, colour);
-  slice(0.62, 1, 1, 0.42, colour);
+  slice(0, 0.22, 0.72, 0.94, crown);
+  slice(0.22, 0.62, 0.94, 1, crown);
+  slice(0.62, 1, 1, 0.42, crown);
   outlineBall(out, cam, p, facing, fwd, r * 1.02, z0, z1);
 
-  // Hair follows the same ball rather than sitting on it as a slab: a cap over
-  // the crown for a man, and for a woman the same cap carried down the back.
-  if (female) {
-    // Set well back so it frames the face rather than covering it.
-    slice(0.44, 0.72, 0.99, 1.01, hair, 1.07, r * 0.34);
-    slice(0.72, 1, 1.01, 0.44, hair, 1.07, r * 0.34);
-    if (!up) {
-      part(out, cam, p, facing, {
-        fwd: fwd - r * 0.78, len: r * 0.8, wide: r * 1.95,
-        len1: r * 0.66, wide1: r * 1.6,
-        z0: z0 - h * 0.7, z1: z0 + h * 0.6, fill: hair, sides: 10,
-        outline: false,
-      });
-    }
-  } else {
-    slice(0.66, 0.82, 1.0, 0.94, hair, 1.05, r * 0.06);
-    slice(0.82, 1, 0.94, 0.42, hair, 1.05, r * 0.06);
-  }
+  // One solid colour: the head is a darker tone of the body and that is all,
+  // the way the crown of somebody's head reads darker than their shoulders
+  // looking down at them. A woman's reads a touch fuller, which is the same
+  // difference the plan uses.
+  if (female) slice(0.46, 0.94, 1.05, 0.92, crown, 1.06, r * 0.18);
 
   faceOn(out, cam, p, facing, up
     ? { at: fwd, z: z1, r: r * 0.9, up: true, colour }
