@@ -1,25 +1,26 @@
-// Shot Designer — a working copy of Hollywood Camera Work's 1.80.8 layout,
+// Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import * as H from "./hcw.js?v=8fc282b9";
-import * as R from "./render.js?v=8fc282b9";
-import { FXG } from "./assets.js?v=8fc282b9";
-import * as B from "./blocking.js?v=8fc282b9";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=8fc282b9";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=8fc282b9";
-import { HANDBOOK } from "./handbook.js?v=8fc282b9";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=8fc282b9";
-import * as V3 from "./view3d.js?v=8fc282b9";
-import * as TR from "./track.js?v=8fc282b9";
-import * as RIG from "./rigs.js?v=8fc282b9";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=8fc282b9";
-import { Library } from "./library.js?v=8fc282b9";
+import { BRAND, SLUG } from "./brand.js?v=2c53de9e";
+import * as H from "./hcw.js?v=2c53de9e";
+import * as R from "./render.js?v=2c53de9e";
+import { FXG } from "./assets.js?v=2c53de9e";
+import * as B from "./blocking.js?v=2c53de9e";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=2c53de9e";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=2c53de9e";
+import { HANDBOOK } from "./handbook.js?v=2c53de9e";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=2c53de9e";
+import * as V3 from "./view3d.js?v=2c53de9e";
+import * as TR from "./track.js?v=2c53de9e";
+import * as RIG from "./rigs.js?v=2c53de9e";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=2c53de9e";
+import { Library } from "./library.js?v=2c53de9e";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=8fc282b9";
+} from "./catalog.js?v=2c53de9e";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -43,7 +44,8 @@ const S = {
   beat: 1,
   page: 1,               // scenes can hold several pages of the same set
   coverage: false,       // draw what each lens actually sees
-  lensView: false,       // the rough view through the selected camera
+  lensView: false,
+  timeline: false,       // the beat-by-beat strip along the bottom
   info: null,            // derived beat structure
   ghosts: true,
   compactLabels: false,
@@ -319,46 +321,108 @@ function slicePositions() {
   // for get out of the way. Showing the walker and the parked copies at the
   // same time was the thing that read as broken.
   S.hidden = new Set();
+
+  // A turn happens on the spot, so both of its positions sit on the same
+  // patch of floor. Drawing them stacked is just a smudge — show the one the
+  // beat belongs to and let the arc say where they end up.
+  for (const link of objects()) {
+    if (link.tag !== "WalkArrow" || !H.getBool(link, "turnMark")) continue;
+    const from = byID(H.get(link, "fromConstraints"));
+    const to = byID(H.get(link, "toConstraints"));
+    if (!from || !to) continue;
+    const at = Math.max(1, stopsOf(to)[0] || 2);
+    S.hidden.add(idOf(t + 1 >= at ? from : to));
+  }
+
   if (t <= 0) return moves;
 
   for (const start of chainHeads()) {
     const legs = chainFrom(start);
     if (!legs.length) continue;
-    const stops = [Math.max(1, stopsOf(start)[0] || 1),
-                   ...legs.map((l, i) => Math.max(1, stopsOf(l.to)[0] || i + 2))];
-    const now = t + 1;                              // marks are 1-based
-    let leg = 0;
-    while (leg < legs.length - 1 && now >= stops[leg + 1]) leg++;
-    const a = stops[leg], b = stops[leg + 1];
-    const f = b > a ? Math.max(0, Math.min(1, (now - a) / (b - a))) : 1;
 
-    const here = leg === 0 ? start : legs[leg - 1].to;
+    // Each leg runs on its own clock, so one person can dawdle while another
+    // is already there, and two can set off together.
+    let atLeg = -1, f = 1;
+    for (let i = 0; i < legs.length; i++) {
+      const { start: s0, span } = timingOf(legs[i].to);
+      if (t + 0.0001 < s0) break;                 // not started yet
+      atLeg = i;
+      f = Math.max(0, Math.min(1, (t - s0) / span));
+    }
+    if (atLeg < 0) continue;                      // still standing at position 1
+
+    const here = atLeg === 0 ? start : legs[atLeg - 1].to;
+    const dest = legs[atLeg].to;
     const arrived = f >= 1;
-    const dest = legs[leg].to;
 
-    // Everything the walker is standing in for steps aside. Once they've
-    // arrived it's the position itself that shows, so the number under it is
-    // the one you'd expect rather than the number of wherever they set off.
     for (const l of legs) S.hidden.add(idOf(l.to));
     S.hidden.add(idOf(start));
-    const walker = arrived ? legs[leg].to : here;
+    const walker = arrived ? dest : here;
     S.hidden.delete(idOf(walker));
+
     if (!arrived) {
       // A camera doesn't just travel between positions, it swings, rises and
       // tilts between them — so the whole pose crosses, not only the point.
-      const pose = { ...alongPath(legs[leg].route(here), f) };
+      const pose = { ...alongPath(legs[atLeg].route(here), ease(f)) };
       if (R.hasRotator(here) && R.hasRotator(dest)) {
-        pose.a = lerpAngle(R.angleOf(here), R.angleOf(dest), f);
+        pose.a = lerpAngle(R.angleOf(here), R.angleOf(dest), ease(f));
       }
       if (here.tag === "Camera" && dest.tag === "Camera") {
         const h0 = lensFtOf(here), h1 = lensFtOf(dest);
-        pose.h = h0 + (h1 - h0) * f;
-        pose.tilt = lerpAngle(V3.tiltOf(here), V3.tiltOf(dest), f);
+        pose.h = h0 + (h1 - h0) * ease(f);
+        pose.tilt = lerpAngle(V3.tiltOf(here), V3.tiltOf(dest), ease(f));
       }
       moves.set(idOf(walker), pose);
     }
   }
   return moves;
+}
+
+/** Ease in and out of a move, so it starts and settles rather than snapping. */
+const ease = (f) => (f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2);
+
+/**
+ * When a move happens and how long it takes.
+ *
+ * Every position carries a start and a length, in beats, on the object being
+ * moved *to*. A position numbered 2 starts at beat 1 and takes one beat unless
+ * you say otherwise — which is what everything did before there was any way to
+ * say otherwise, so old scenes play exactly as they used to.
+ *
+ * Both numbers are absolute rather than a running total, so you can push one
+ * move later without disturbing the rest, stretch it to take three beats
+ * instead of one, or give two moves the same start so they happen together.
+ * People don't walk in lockstep, and a plan shouldn't pretend they do.
+ */
+function timingOf(o) {
+  const n = Math.max(1, stopsOf(o)[0] || 1);
+  const start = H.getNum(o, "beatStart", NaN);
+  const span = H.getNum(o, "beatSpan", NaN);
+  return {
+    start: Number.isFinite(start) ? start : n - 2,
+    span: Number.isFinite(span) && span > 0.01 ? span : 1,
+  };
+}
+
+const setTiming = (o, start, span) => {
+  H.set(o, "beatStart", Math.round(Math.max(0, start) * 100) / 100);
+  H.set(o, "beatSpan", Math.round(Math.max(0.1, span) * 100) / 100);
+};
+
+/** How long the whole scene runs, in beats. */
+function sceneSpan() {
+  let end = 0;
+  for (const start of chainHeads()) {
+    for (const leg of chainFrom(start)) {
+      const t = timingOf(leg.to);
+      end = Math.max(end, t.start + t.span);
+    }
+  }
+  for (const o of objects()) {
+    for (const m of marksOf(o)) end = Math.max(end, m.slice - 1);
+    for (const k of stopsOf(o)) end = Math.max(end, k - 1);
+  }
+  return end;
 }
 
 /** People a walk chain starts from: linked onward, but nothing links to them. */
@@ -536,6 +600,7 @@ function draw() {
   drawMoves();
   drawCoverage();
   renderLensView();
+  renderTimeline();
   if (!S.blocking) drawPositionBadges();
   declutterLabels();
   drawSelection();
@@ -667,6 +732,29 @@ function chainOf(cam) {
 }
 
 /**
+ * Positions that shouldn't appear down the lens.
+ *
+ * A chain of positions is a diagram: on the plan you want to see all of them
+ * at once. Through the lens you are looking at the room at one moment, and
+ * there is only ever one of anybody in it — so every member of a chain except
+ * the one this beat belongs to is left out. Worked out once per render rather
+ * than per object, because chains are walked by search.
+ */
+function chainGhosts() {
+  const out = new Set(S.hidden || []);
+  const want = S.slice + 1;
+  for (const start of chainHeads()) {
+    const members = [start, ...chainFrom(start).map((l) => l.to)];
+    if (members.length < 2) continue;
+    const live = members.find((m) => !S.hidden?.has(idOf(m))) ||
+                 members.find((m) => stopsOf(m).includes(want)) ||
+                 members[0];
+    for (const m of members) if (idOf(m) !== idOf(live)) out.add(idOf(m));
+  }
+  return out;
+}
+
+/**
  * Which camera the lens view should be showing. On the page each position is
  * its own camera and you look through the one you picked. On the timeline the
  * positions are one camera making one move, so whichever of them you happen to
@@ -674,7 +762,11 @@ function chainOf(cam) {
  * before pressing play.
  */
 function liveCamera(cam) {
-  if (!S.playing && S.slice === 0) return cam;
+  // Only while it is playing. Parked, the camera you clicked is the camera you
+  // are looking through and the camera the sliders drive — otherwise clicking
+  // position 1 to set its height quietly changed position 2's instead, which
+  // makes it look as though the two don't hold their own settings at all.
+  if (!S.playing) return cam;
   const members = chainOf(cam);
   if (!members) return cam;
   return members.find((m) => !S.hidden?.has(idOf(m))) || cam;
@@ -734,14 +826,25 @@ function renderLensView() {
   svg.append(R.el("rect", { x: 0, y: Math.max(0, Math.min(HGT, hz)),
     width: W, height: HGT, fill: "#dfe5ea" }));
 
+  const ghosts = chainGhosts();
   for (const shape of V3.build(view, objects(), S.scene, {
-    skip: (o) => o === cam || !onPage(o, S.page) || !layerOn(o) ||
+    // The stand-ins a walker is covering for are hidden on the plan; they have
+    // to be hidden down the lens too, or a move plays as a crowd of copies
+    // with one of them sliding through it.
+    skip: (o) => o === shown || o === cam || ghosts.has(idOf(o)) ||
+                 !onPage(o, S.page) || !layerOn(o) ||
                  (S.blocking && !presentAt(o, S.slice)),
     posOf: (o) => drawnPos(o),
+    // Somebody mid-walk faces the way the move is taking them.
+    angleOf: (o) => {
+      const m = S.moves?.get(idOf(o));
+      return m && Number.isFinite(m.a) ? m.a : null;
+    },
   })) {
     const d = "M" + shape.pts.map((q) => toPx(q).join(",")).join(" L") + " Z";
     svg.append(R.el("path", {
-      d, fill: shape.fill, stroke: shape.stroke, "stroke-width": 1,
+      d, fill: shape.fill, stroke: shape.stroke,
+      "stroke-width": shape.width == null ? 1 : shape.width,
       "stroke-linejoin": "round",
     }));
   }
@@ -866,13 +969,263 @@ function renderLensView() {
     btn("Move To…", "Drop the next position of this move on the plan",
         () => startFromHere("move", cam));
   }
+  // These are built once and live across redraws, so they must not close over
+  // anything from the render that made them — the frame they captured would
+  // be a stale, detached copy, which is exactly how a storyboard came out
+  // empty. Everything is looked up fresh at the moment you click.
   btn("Storyboard", "Drop this frame on the plan as a storyboard",
-      () => frameToStoryboard(cam, svg, W, HGT, mm, fmt));
+      () => withLiveFrame((a) => frameToStoryboard(a.cam, a.svg, a.W, a.H, a.mm, a.fmt)));
   btn("Save PNG", "Save the frame as a picture",
-      () => frameToFile(cam, svg, W, HGT, mm, fmt));
+      () => withLiveFrame((a) => frameToFile(a.cam, a.svg, a.W, a.H, a.mm, a.fmt)));
   btn("AI Brief", "Copy a written brief of this exact shot, to go with the frame",
-      () => copyBrief(cam, view, mm, fmt, lensFt));
+      () => withLiveFrame((a) => copyBrief(a.cam, a.view, a.mm, a.fmt, a.lensFt)));
   box.append(row);
+}
+
+/**
+ * The timeline.
+ *
+ * Positions used to be a running order — 1, then 2, then 3, everyone in step.
+ * A scene isn't like that: one person crosses while another waits, a camera
+ * starts its move halfway through somebody's walk, two people set off
+ * together. So each move gets a bar on its own lane. Drag it to make it happen
+ * later, pull its right edge to make it take longer, line two bars up to make
+ * them happen together.
+ */
+function renderTimeline() {
+  const box = $("#timeline");
+  if (!box) return;
+  if (!S.timeline || !S.doc) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const lanes = [];
+  for (const start of chainHeads()) {
+    const legs = chainFrom(start);
+    if (legs.length) lanes.push({ mover: start, legs });
+  }
+
+  const end = Math.max(2, Math.ceil(sceneSpan()) + 0.5);
+  const pct = (b) => (b / end) * 100;
+
+  box.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "head";
+  head.innerHTML = `<b>Timeline</b><span class="hint">drag a move to delay it · ` +
+    `pull its edge to slow it down · line two up to run them together</span>`;
+  const close = document.createElement("button");
+  close.textContent = "Close";
+  close.style.marginLeft = "auto";
+  close.onclick = () => { S.timeline = false; renderTimeline(); syncChrome(); };
+  head.append(close);
+  box.append(head);
+
+  if (!lanes.length) {
+    const none = document.createElement("div");
+    none.className = "hint";
+    none.textContent = "Nothing moves yet — give somebody a Walk To or a camera a Move To.";
+    box.append(none);
+    return;
+  }
+
+  for (const lane of lanes) {
+    const row = document.createElement("div");
+    row.className = "lane";
+
+    const who = document.createElement("div");
+    who.className = "who";
+    const swatch = document.createElement("i");
+    swatch.style.background = lane.mover.tag === "Camera"
+      ? R.cameraColour(lane.mover)
+      : "#" + H.getNum(lane.mover, "color", 0x888888).toString(16).padStart(6, "0");
+    const label = lane.mover.tag === "Camera"
+      ? (shotFor(lane.mover) && H.get(shotFor(lane.mover), "headerText")) || "Camera"
+      : nameOf(lane.mover);
+    who.append(swatch, document.createTextNode(label));
+    row.append(who);
+
+    const track = document.createElement("div");
+    track.className = "track";
+    for (let b = 1; b < end; b++) {
+      const g = document.createElement("div");
+      g.className = "beatline";
+      g.style.left = pct(b) + "%";
+      track.append(g);
+    }
+
+    for (const [i, leg] of lane.legs.entries()) {
+      const t = timingOf(leg.to);
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      bar.style.left = pct(t.start) + "%";
+      bar.style.width = Math.max(2, pct(t.span)) + "%";
+      bar.title = `Position ${i + 2} — starts at beat ${(t.start + 1).toFixed(2)}, ` +
+                  `takes ${t.span} beat${t.span === 1 ? "" : "s"}`;
+      bar.textContent = String(i + 2);
+      const grip = document.createElement("div");
+      grip.className = "grip";
+      bar.append(grip);
+      dragBar(bar, grip, track, leg.to, end);
+      track.append(bar);
+    }
+
+    const head2 = document.createElement("div");
+    head2.className = "play";
+    head2.style.left = pct(Math.min(end, S.playing ? S.time : S.slice)) + "%";
+    track.append(head2);
+
+    // Scrub by clicking the empty part of a lane.
+    track.onpointerdown = (ev) => {
+      if (ev.target !== track) return;
+      const r = track.getBoundingClientRect();
+      S.time = Math.max(0, Math.min(end, ((ev.clientX - r.left) / r.width) * end));
+      S.slice = Math.max(0, Math.min(timeSlices().length - 1, Math.round(S.time)));
+      S.playing = false;
+      draw(); syncChrome();
+    };
+    row.append(track);
+    box.append(row);
+  }
+
+  const ruler = document.createElement("div");
+  ruler.className = "lane";
+  ruler.append(document.createElement("div"));
+  const marks = document.createElement("div");
+  marks.className = "ruler";
+  for (let b = 0; b <= end; b++) {
+    const t = document.createElement("span");
+    t.style.left = pct(b) + "%";
+    t.textContent = b + 1;
+    marks.append(t);
+  }
+  ruler.append(marks);
+  box.append(ruler);
+}
+
+/** Drag a bar to delay a move; drag its edge to stretch it. */
+function dragBar(bar, grip, track, obj, end) {
+  const begin = (ev, mode) => {
+    ev.preventDefault(); ev.stopPropagation();
+    const r = track.getBoundingClientRect();
+    const t0 = timingOf(obj);
+    const x0 = ev.clientX;
+    mark("timing");
+    const move = (e) => {
+      const d = ((e.clientX - x0) / r.width) * end;
+      if (mode === "shift") setTiming(obj, t0.start + d, t0.span);
+      else setTiming(obj, t0.start, t0.span + d);
+      renderTimeline(); draw();
+    };
+    const up = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      syncChrome();
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  };
+  bar.onpointerdown = (ev) => begin(ev, "shift");
+  grip.onpointerdown = (ev) => begin(ev, "stretch");
+}
+
+/**
+ * A still of every beat: the overhead, and what each camera sees.
+ *
+ * The point is to end up with a folder you can hand to somebody — or feed to
+ * an image model — rather than screenshotting the app beat by beat. Frames go
+ * next to the scenes, in Stills/<scene name>/.
+ */
+async function exportBeats() {
+  if (!isLocal()) return toast("Beat stills are written from the app on your Mac");
+  const cams = objects().filter((o) => o.tag === "Camera" && onPage(o, S.page));
+  const beats = Math.max(1, Math.round(sceneSpan()) + 1);
+
+  sheet({
+    title: "Stills For Every Beat",
+    sub: `${beats} beat${beats > 1 ? "s" : ""}, ${cams.length} camera${cams.length === 1 ? "" : "s"}.`,
+    fields: [
+      { name: "overhead", label: "The overhead", type: "check", value: true },
+      { name: "lenses", label: "Every camera's view", type: "check", value: cams.length > 0 },
+      { name: "folder", label: "Folder", type: "text",
+        value: "Stills/" + (baseName() || "Untitled") },
+    ],
+    onOK: async ({ overhead, lenses, folder }) => {
+      const was = { slice: S.slice, sel: new Set(S.sel), lens: S.lensView };
+      const dir = (folder || "Stills").replace(/\/+$/, "");
+      let n = 0;
+      try {
+        for (let b = 1; b <= beats; b++) {
+          S.slice = b - 1;
+          if (overhead) {
+            S.sel.clear(); S.lensView = false; draw();
+            await put(`${dir}/beat-${b}-overhead.png`, await frameToPNG());
+            n++;
+          }
+          if (lenses) {
+            for (const cam of cams) {
+              S.sel = new Set([idOf(cam)]); S.lensView = true; draw();
+              const svg = $("#lensview")?.querySelector(".lensframe svg");
+              if (!svg) continue;
+              const c = await lensPNG(svg, +svg.getAttribute("width") || 320,
+                                     +svg.getAttribute("height") || 180, 3);
+              await put(`${dir}/beat-${b}-${camLabel(cam)}.png`, c.toDataURL("image/png"));
+              n++;
+            }
+          }
+        }
+        toast(`${n} still${n === 1 ? "" : "s"} written to ${dir}`);
+      } catch (e) {
+        toast("Stills failed: " + e.message);
+      } finally {
+        S.slice = was.slice; S.sel = was.sel; S.lensView = was.lens;
+        draw(); syncChrome();
+      }
+    },
+  });
+
+  function put(path, dataURL) {
+    return api("/api/still", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, dataURL }),
+    });
+  }
+}
+
+/** What to call a camera in a filename. */
+function camLabel(cam) {
+  const shot = objects().find((o) => o.tag === "ShotVersion" &&
+    H.get(o, "attachObjectID") === idOf(cam));
+  const name = shot ? (H.get(shot, "headerText") || "").trim() : "";
+  return (name || "Cam").replace(/[^\w.-]+/g, "-").slice(0, 40);
+}
+
+/**
+ * What the lens view is showing *now*: the frame on screen, and the numbers
+ * that go with it. The buttons under the panel outlive any one render, so
+ * they ask for this rather than remembering anything.
+ */
+function withLiveFrame(fn) {
+  const box = $("#lensview");
+  const svg = box?.querySelector(".lensframe svg");
+  if (!svg) return toast("Open the lens view first");
+  const sel = S.sel.size === 1 ? byID([...S.sel][0]) : null;
+  const cam = sel && sel.tag === "Camera" ? sel
+    : sel && sel.tag === "ShotVersion" ? byID(H.get(sel, "attachObjectID")) : null;
+  if (!cam) return toast("Select a camera first");
+  const shown = liveCamera(cam);
+  const fmt = packageFormat();
+  const shot = objects().find((o) => o.tag === "ShotVersion" &&
+    H.get(o, "attachObjectID") === idOf(cam));
+  const mm = shot ? parseFloat(H.get(shot, "versionLens")) || 0 : 0;
+  const rig = byID(RIG.rigParentID(shown)) || null;
+  const moved = S.moves?.get(idOf(shown));
+  const lensFt = moved?.h != null ? moved.h : RIG.lensHeightOn(shown, rig);
+  const pitch = moved?.tilt != null ? moved.tilt : V3.tiltOf(shown);
+  const view = V3.cameraAt(shown, fmt, mm, drawnPos(shown),
+                           lensFt * UNITS_PER_FOOT, pitch);
+  if (moved?.a != null) view.yaw = moved.a;
+  const W = +svg.getAttribute("width") || 320;
+  const HGT = +svg.getAttribute("height") || Math.round(W * (fmt.h / fmt.w));
+  return fn({ cam, shown, svg, W, H: HGT, mm, fmt, view, lensFt });
 }
 
 /** The through-the-lens view as a PNG, at whatever size you ask for. */
@@ -1845,6 +2198,7 @@ stage.addEventListener("pointerdown", (ev) => {
       drag = ev.shiftKey && S.sel.size === 1 && R.hasRotator(hit)
         ? { mode: "rotate", obj: hit, start: pt }
         : { mode: "move", start: pt, moved: false, detached,
+            freeDrop: ev.altKey,          // ⌥ places it off the wall
             origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
     }
   } else {
@@ -1889,6 +2243,11 @@ stage.addEventListener("pointermove", (ev) => {
     for (const o of drag.origins) {
       if (o.pts) R.setPoints(o.obj, o.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })));
       else { H.set(o.obj, "x", round(o.x + dx)); H.set(o.obj, "y", round(o.y + dy)); }
+    }
+    // Wall-mounted kit takes the wall as you drag it, not when you let go —
+    // so you can see it click into the line and stop fighting it.
+    if (!drag.freeDrop) {
+      for (const o of drag.origins) snapToWall(o.obj);
     }
     reflowConstraints(new Set(drag.origins.map((o) => idOf(o.obj))));
     reflowRigs();
@@ -2027,6 +2386,8 @@ stage.addEventListener("pointerup", (ev) => {
   if (drag?.mode === "move" && drag.moved && !drag.detached) {
     for (const o of drag.origins) {
       if (RIG.isRig(o.obj) && !RIG.ridesTrack(o.obj)) snapRigToNearestTrack(o.obj);
+      if (!drag.freeDrop) snapToWall(o.obj);
+      if (o.obj.tag === "Wall") reseatWallKit();
     }
     reflowRigs();
   }
@@ -2599,6 +2960,60 @@ function snapRigToNearestTrack(rig) {
   placeRigOnTrack(rig);
 }
 
+/**
+ * Doors, windows and openings belong to a wall. Dropped or dragged near one
+ * they take its line and its angle, the way they do on any floor plan — and
+ * they have to, because a window that isn't sitting in the wall can't be cut
+ * out of it, so you'd never see through it.
+ *
+ * Hold ⌥ while dragging to place one freely.
+ */
+const WALL_GRAB = UNITS_PER_FOOT * 2.5;
+
+/** After a wall moves, everything mounted on it goes with it. */
+function reseatWallKit() {
+  for (const o of objects()) {
+    if (!R.GENERIC_TAGS.has(o.tag)) continue;
+    if (!V3.WALL_MOUNTED.has(H.get(o, "objectKey"))) continue;
+    snapToWall(o);
+  }
+}
+
+function snapToWall(obj, { force = false } = {}) {
+  if (!R.GENERIC_TAGS.has(obj.tag)) return false;
+  if (!force && !V3.WALL_MOUNTED.has(H.get(obj, "objectKey"))) return false;
+
+  const here = { x: H.getNum(obj, "x"), y: H.getNum(obj, "y") };
+  let best = null;
+  for (const w of objects()) {
+    if (w.tag !== "Wall") continue;
+    const pts = R.pointsOf(w);
+    const runs = [...pts.slice(1).map((p, i) => [pts[i], p])];
+    if (H.getBool(w, "closedLoop") && pts.length > 2) runs.push([pts[pts.length - 1], pts[0]]);
+    for (const [a, b] of runs) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      if (!len2) continue;
+      const t = Math.max(0, Math.min(1, ((here.x - a.x) * dx + (here.y - a.y) * dy) / len2));
+      const at = { x: a.x + dx * t, y: a.y + dy * t };
+      const d = Math.hypot(at.x - here.x, at.y - here.y);
+      if (d < WALL_GRAB && (!best || d < best.d)) best = { at, d, ang: Math.atan2(dy, dx) };
+    }
+  }
+  if (!best) return false;
+
+  H.set(obj, "x", round(best.at.x));
+  H.set(obj, "y", round(best.at.y));
+  // Take the wall's line, but the way round it was already facing — flipping a
+  // door end for end because you nudged it is maddening.
+  if (R.hasRotator(obj)) {
+    const was = R.angleOf(obj);
+    let d = ((best.ang - was) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    R.setAngle(obj, Math.abs(d) > Math.PI / 2 ? best.ang + Math.PI : best.ang);
+  }
+  return true;
+}
+
 /** Put anything that rides a track where its track says it is. */
 function placeRigOnTrack(rig) {
   const track = byID(H.get(rig, "snapPath"));
@@ -2846,7 +3261,7 @@ function groupMenu(x, y) {
 
 // ---------------------------------------------------------------- clipboard
 
-const CLIP_MIME = "application/x-shot-designer";
+const CLIP_MIME = "application/x-" + SLUG;
 let localClip = null;
 let pasteRun = 0;      // successive pastes cascade instead of stacking
 
@@ -3141,24 +3556,19 @@ function beatDuration(from, to) {
 function startPlay() {
   // Run to the last beat anything actually uses, not to however many slices
   // the file happens to carry — a two-position move should take one beat.
-  const n = lastBeat();
-  if (n < 2) return toast("Nothing to play — give something a second position first");
+  const end = sceneSpan();
+  if (end < 0.05) return toast("Nothing to play — give something a second position first");
   S.playing = true;
   S.time = 0;
-  // Each beat gets its own length, so a long travel reads as a long travel.
-  const durs = [];
-  for (let i = 0; i < n - 1; i++) durs.push(beatDuration(i, i + 1));
-  const total = durs.reduce((a, b) => a + b, 0) + SLICE_MS * 0.6;
-  let t0 = performance.now();
+  // One clock for the whole scene, in beats, so a move that has been slowed
+  // down or pushed later plays exactly where it was put.
+  const total = (end + 0.5) * SLICE_MS;
+  const t0 = performance.now();
   const step = (now) => {
     if (!S.playing) return;
-    let ms = (now - t0) % total;
-    let i = 0;
-    while (i < durs.length && ms > durs[i]) { ms -= durs[i]; i++; }
-    // eased within the beat, so it ramps on and settles off
-    S.time = i >= durs.length ? n - 1 : i + easeInOut(Math.min(1, ms / durs[i]));
-    S.time = Math.min(S.time, n - 1);
-    S.slice = Math.min(n - 1, Math.round(S.time));
+    const ms = (now - t0) % total;
+    S.time = Math.min(end, ms / SLICE_MS);
+    S.slice = Math.max(0, Math.min(timeSlices().length - 1, Math.round(S.time)));
     draw(); syncChrome();
     playTimer = requestAnimationFrame(step);
   };
@@ -3187,6 +3597,9 @@ const ICONS = {
   templates: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M10 3h4v3a2 2 0 0 0 4 0V3h3v4h-3a2 2 0 0 0 0 4h3v10H3V11h3a2 2 0 0 0 0-4H3V3h3v3a2 2 0 0 0 4 0V3Z"/></svg>`,
   pause: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`,
   play: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2v13.6L19 12 8 5.2Z"/></svg>`,
+  // Lanes and a bar: what the timeline actually looks like.
+  timeline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round"><path d="M3 7h9M3 12h14M3 17h6"/></svg>`,
 };
 
 for (const b of document.querySelectorAll("#toolbar button[data-act]")) {
@@ -3207,6 +3620,11 @@ function toolbar(act, ev) {
   if (act === "pages") return pagesMenu(...at);
   if (act === "blocking") return toggleBlocking();
   if (act === "templates") return templatesMenu(...at);
+  if (act === "timeline") {
+    S.timeline = !S.timeline;
+    renderTimeline(); syncChrome();
+    return;
+  }
   if (act === "play") return S.playing ? stopPlay() : startPlay();
   if (act === "pause") return stopPlay();
   if (act === "collapse") return $("#toolbar").classList.toggle("collapsed");
@@ -3223,6 +3641,7 @@ function syncChrome() {
   $("[data-act=redo]").disabled = !S.redo.length;
   $("[data-act=wall]").classList.toggle("on", S.tool === "wall");
   $("[data-act=play]").classList.toggle("on", S.playing);
+  $("[data-act=timeline]")?.classList.toggle("on", S.timeline);
   $("[data-act=blocking]").classList.toggle("on", S.blocking);
 
   const pageBtn = $("[data-act=pages]");
@@ -3322,7 +3741,7 @@ function syncChrome() {
       : "Reconnecting…";
     badge.append(t);
   }
-  document.title = `${name}${S.dirty ? " •" : ""} — Shot Designer`;
+  document.title = `${name}${S.dirty ? " •" : ""} — ${BRAND.short}`;
   if (!$("#shotList").hidden) renderShotList();
   if (!$("#beatPanel").hidden) renderBeatPanel();
 }
@@ -3549,6 +3968,7 @@ function mainMenu(x, y) {
     "-",
     { head: "Export" },
     { label: "Export As PNG", key: "⌘E", run: exportPNG },
+    { label: "Stills For Every Beat…", run: exportBeats },
     { label: "Export As SVG", run: exportSVG },
     { label: "Export As Scene File", run: exportHCW },
     "-",
@@ -3607,7 +4027,9 @@ function palette(title, list, tag, at, x, y) {
       thumb: thumbFor(key, tag),
       run: () => {
         mark("add " + label);
-        canvas().children.push(H.makeGeneric(tag, round(at.x), round(at.y), key, { scale: 1 }));
+        const made = H.makeGeneric(tag, round(at.x), round(at.y), key, { scale: 1 });
+        canvas().children.push(made);
+        snapToWall(made);
         reindex();
         S.sel = new Set([idOf(objects()[objects().length - 1])]);
         draw(); syncChrome();
@@ -3656,11 +4078,24 @@ function thumbFor(key, tag = "GenericProp") {
  * scene already coloured and cast. Colours run out long before names do, which
  * is the whole reason for this — and the brief reads far better for it.
  */
-const CAST_KEY = "cast";
+/**
+ * A cast belongs to a production, not to the app. Scenes live in a folder per
+ * job, so the folder is the production: open anything under PN/ and you get
+ * the people from PN, not everybody you have ever named.
+ */
+const castKey = () => {
+  const folder = (S.path || "").split("/").slice(0, -1).join("/");
+  return "cast:" + (folder || "_loose");
+};
+
 let CAST = [];
+let CAST_FOR = null;
 
 async function loadCast() {
-  try { CAST = (await api("/api/data?key=" + CAST_KEY)).value || []; }
+  const key = castKey();
+  if (CAST_FOR === key) return;
+  CAST_FOR = key;
+  try { CAST = (await api("/api/data?key=" + encodeURIComponent(key))).value || []; }
   catch { CAST = []; }
 }
 
@@ -3668,7 +4103,7 @@ async function saveCast() {
   try {
     await api("/api/data", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: CAST_KEY, value: CAST }),
+      body: JSON.stringify({ key: castKey(), value: CAST }),
     });
   } catch { /* the names still live on the objects */ }
 }
@@ -3721,7 +4156,8 @@ function addFromCast(entry, at) {
 }
 
 function castMenu(x, y, at) {
-  const items = [{ head: "Cast" }];
+  const where = (S.path || "").split("/").slice(0, -1).join("/");
+  const items = [{ head: where ? "Cast — " + where : "Cast" }];
   for (const e of CAST) {
     items.push({
       label: e.name,
@@ -4029,6 +4465,7 @@ function objectMenu(obj, x, y) {
           ? `Rename “${H.get(obj, "castName")}”…` : "Name…",
         run: () => nameCharacter(obj) },
       { label: "Walk To…", run: () => startFromHere("walk", obj) },
+      { label: "Turn To…", run: () => turnInPlace(obj) },
       ...moveItems(obj),
       { label: "Axis Line To…", run: () => startFromHere("axis", obj) },
       { label: "Add Label…", run: () => attachLabel(obj) },
@@ -4061,6 +4498,7 @@ function objectMenu(obj, x, y) {
       { head: "Edit Camera" },
       { label: shot ? "Edit Shot Description…" : "Shot Description…", run: () => shotDescription(obj) },
       { label: "Move To…", run: () => startFromHere("move", obj) },
+      { label: "Turn To…", run: () => turnInPlace(obj) },
       ...(marksOf(obj).length >= 2 ? [{ label: "Clear Move", run: () => dropMove(obj) }] : []),
       { label: "Add Label…", run: () => attachLabel(obj) },
       "-",
@@ -4286,6 +4724,44 @@ function cameraRig3D(cam) {
       toast(`${lensFtOf(cam).toFixed(2)} ft · ${(V3.tiltOf(cam) * 180 / Math.PI).toFixed(1)}°`);
     },
   });
+}
+
+/**
+ * A turn is a beat like any other. Somebody standing still and turning to face
+ * the door is a move — it just doesn't go anywhere — and a plan that can't say
+ * so makes you write it in the margin. This drops the next position on the
+ * same spot, so all you do is swing it.
+ */
+function turnInPlace(obj) {
+  mark("turn");
+  const copy = reid(structuredClone(obj));
+  H.set(copy, "x", H.get(obj, "x"));
+  H.set(copy, "y", H.get(obj, "y"));
+
+  const slices = timeSlices();
+  if (!stopsOf(obj).length) setStops(obj, [1]);
+  const next = Math.max(1, ...stopsOf(obj)) + 1;
+  setStops(copy, [next]);
+  if (next > slices.length) {
+    H.child(H.child(S.doc, "CurrentSnapshot"), "TimeSlices")
+      .children.push(H.makeTimeNumber(slices.length));
+  }
+  canvas().children.push(copy);
+
+  const link = H.makePath("WalkArrow", [
+    { x: H.getNum(obj, "x"), y: H.getNum(obj, "y") },
+    { x: H.getNum(obj, "x"), y: H.getNum(obj, "y") },
+  ]);
+  H.set(link, "fromConstraints", idOf(obj));
+  H.set(link, "toConstraints", idOf(copy));
+  H.set(link, "turnMark", true);
+  canvas().children.push(link);
+
+  reindex();
+  S.sel = new Set([idOf(copy)]);
+  S.slice = next - 1;
+  draw(); syncChrome();
+  toast(`Position ${next} — swing it to where they turn to`);
 }
 
 /** Pin this object here, at the slice you're currently parked on. */
@@ -5114,8 +5590,11 @@ function sheet({ title, sub, fields = [], okLabel = "OK", onOK, body }) {
         opt.value = o; opt.textContent = o || "Not Set";
         i.append(opt);
       }
+    } else if (f.type === "check") {
+      i = document.createElement("input"); i.type = "checkbox";
+      i.checked = !!f.value;
     } else { i = document.createElement("input"); i.type = "text"; }
-    i.value = f.value ?? "";
+    if (f.type !== "check") i.value = f.value ?? "";
     inputs[f.name] = i;
     box.append(i);
   }
@@ -5133,7 +5612,8 @@ function sheet({ title, sub, fields = [], okLabel = "OK", onOK, body }) {
     if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") { e.stopPropagation(); submit(); }
   };
   const submit = () => {
-    const vals = Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value]));
+    const vals = Object.fromEntries(Object.entries(inputs).map(
+      ([k, i]) => [k, i.type === "checkbox" ? i.checked : i.value]));
     close(); onOK?.(vals);
   };
   cancel.onclick = close;
@@ -5277,6 +5757,7 @@ async function loadScene(path) {
     const { xml } = await api("/api/scene?path=" + encodeURIComponent(path));
     S.doc = H.parseXML(xml);
     S.path = path; S.dirty = false; S.sel.clear(); S.slice = 0;
+    loadCast();                         // the cast belongs to this production
     S.undo.length = 0; S.redo.length = 0;
     reindex(); fitToContent(); draw(); syncChrome();
     toast("Opened " + path);
@@ -5411,7 +5892,7 @@ function connectDialog() {
     sub: "One passphrase for all your devices. Share links don't need it.",
     fields: [
       { name: "base", label: "Cloud address", type: "text",
-        value: Cloud.base || "https://shot-designer.<your-subdomain>.workers.dev" },
+        value: Cloud.base || `https://${SLUG}.<your-subdomain>.workers.dev` },
       { name: "key", label: "Passphrase", type: "text", value: Cloud.key },
       { name: "who", label: "Your name (shown to others when live)", type: "text",
         value: Cloud.who || "Josh" },
@@ -6035,4 +6516,4 @@ async function openShared(shareId) {
 
 // Exposed for quick console poking while iterating.
 loadCast();
-window.SD = { S, H, R, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };
+window.SD = { S, H, R, snapToWall, reseatWallKit, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };

@@ -1,3 +1,4 @@
+import { SLUG } from "./brand.js?v=2c53de9e";
 // Where scenes live.
 //
 // Served from localhost, the app reads and writes the real "Shot Designer
@@ -83,7 +84,7 @@ export const Cloud = {
 
 /** A scene's cloud id: stable for a given path, so every device agrees. */
 export async function sceneId(path) {
-  const bytes = new TextEncoder().encode("shot-designer:" + path.toLowerCase());
+  const bytes = new TextEncoder().encode(SLUG + ":" + path.toLowerCase());
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(hash)].slice(0, 11)
     .map((b) => b.toString(16).padStart(2, "0")).join("");

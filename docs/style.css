@@ -1,4 +1,4 @@
-/* Chrome matched to Shot Designer 1.80.8: white paper, one black tool bar. */
+/* Chrome matched to the plan itself: white paper, one black tool bar. */
 
 :root {
   --bar-h: 44px;
@@ -427,3 +427,54 @@ body.view-only #stage { cursor: grab; }
   background: var(--bg); color: var(--ink); cursor: pointer;
 }
 #lensview .lensbar button:hover { background: var(--sel); color: #fff; border-color: var(--sel); }
+
+
+/* ---------------------------------------------------------------- timeline */
+/* Beats run left to right; each thing that moves gets a lane. A bar is one
+   move, so dragging it is a delay and stretching it is a slower move. */
+#timeline {
+  position: absolute; left: 12px; right: 12px; bottom: 58px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 6px 26px rgba(0,0,0,.14);
+  padding: 8px 10px 10px; font-size: 11px; z-index: 40;
+  max-height: 42vh; overflow: auto;
+}
+#timeline .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+#timeline .head b { font-size: 12px; }
+#timeline .head .hint { opacity: .6; }
+#timeline .lane {
+  display: grid; grid-template-columns: 96px 1fr; align-items: center;
+  gap: 8px; height: 26px;
+}
+#timeline .who {
+  display: flex; align-items: center; gap: 6px; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; font-weight: 600;
+}
+#timeline .who i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+#timeline .track {
+  position: relative; height: 20px; border-radius: 4px;
+  background: color-mix(in srgb, var(--line) 22%, transparent);
+}
+#timeline .beatline {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+}
+#timeline .bar {
+  position: absolute; top: 2px; height: 16px; border-radius: 4px;
+  background: var(--sel); color: #fff; cursor: grab;
+  display: flex; align-items: center; padding: 0 6px; gap: 4px;
+  font-size: 10px; font-weight: 700; overflow: hidden;
+}
+#timeline .bar .grip {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 8px;
+  cursor: ew-resize; background: rgba(255,255,255,.35);
+  border-radius: 0 4px 4px 0;
+}
+#timeline .play {
+  position: absolute; top: -4px; bottom: -4px; width: 2px;
+  background: #e5484d; pointer-events: none;
+}
+#timeline .ruler { position: relative; height: 14px; }
+#timeline .ruler span {
+  position: absolute; transform: translateX(-50%); opacity: .6;
+}

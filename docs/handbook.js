@@ -112,8 +112,8 @@ degree.</p>
 <h4>It saves itself</h4>
 <p>A scene that has a name on disk writes itself a couple of seconds after you
 stop working. Undo still goes back as far as it ever did. Because it is writing
-your real scene file, don't have the same scene open in the old Shot Designer
-at the same time.</p>
+your real scene file, don't have the same scene open in another app at the
+same time.</p>
 <p>From then on, dragging that camera while parked on a slice re-pins <i>that</i>
 position, so you can keep adjusting either end without starting over.
 <b>Add Position 3…</b> extends the move, <kbd>M</kbd> pins the current slice, and
@@ -122,6 +122,26 @@ position, so you can keep adjusting either end without starting over.
 position, in that camera's own colour, so the whole thing reads without pressing
 anything. <kbd>P</kbd> plays it, and the camera travels and turns between the
 marks rather than jumping. People work the same way.</p>
+<h4>The timeline</h4>
+<p>Positions used to be a running order — 1, then 2, then 3, everybody in step.
+A scene isn't like that. Open the <b>timeline</b> from the toolbar and every
+move gets a bar on its own lane: <b>drag a bar</b> to make that move happen
+later, <b>pull its right edge</b> to make it take longer, and <b>line two bars
+up</b> to make them happen together. One person can cross while another waits;
+a camera can start its move halfway through somebody's walk. Click an empty
+part of a lane to scrub.</p>
+<p>Nothing has to be set: a position numbered 2 starts at beat 1 and takes one
+beat unless you say otherwise, which is what everything did before.</p>
+<h4>Turning on the spot</h4>
+<p><b>Turn To…</b> gives somebody a position where they are, so all you do is
+swing it. A turn is a beat like any other — somebody facing the door is a move,
+it just doesn't go anywhere — and it draws as an arc round them from where they
+were looking to where they end up.</p>
+<h4>Stills for every beat</h4>
+<p><b>Stills For Every Beat…</b> in the menu walks the whole scene and writes a
+picture of each beat: the overhead, and what every camera sees. They land in
+<code>Stills/&lt;scene&gt;/</code> next to your scenes, so you end up with a
+folder to hand somebody rather than screenshots.</p>
 <h4>Bending a move</h4>
 <p>Select a walk arrow, a track, or a camera with a move on it and you get a
 <b>hollow handle in the middle of each run</b>. Drag one and it becomes a real
@@ -134,10 +154,38 @@ and the figure or camera is on the curve where you can see it.</p>
 <p>Dragging the end of a walk arrow <b>walks the person on it</b> rather than
 leaving the arrow pointing at nobody — either end, coming or going. The arrow
 keeps its clearance from them as they go.</p>
+<h4>Doors and windows go on walls</h4>
+<p>Drop a door, a window or an opening near a wall and it takes that wall's
+line and its angle — it sits <i>in</i> the wall rather than beside it. That
+isn't tidiness: an opening has to be in the wall to be cut out of it, and an
+opening that isn't cut out is one you can't see through when you look down the
+lens. Drag one and it re-seats on whatever wall it lands near, and moving a
+wall brings everything on it along. Hold <kbd>⌥</kbd> while dragging to place
+one exactly where you want instead. Furniture and props are left alone.</p>
 <h4>Standing, sitting, on the floor</h4>
-<p>Men get one line across the face, women two — the same mark the original
-uses, so scenes read the same way they always did. Shoulders are drawn at the
-real widths too, 18 inches against 14.</p>
+<p>Men get one line across the face, women two. Shoulders are drawn at the real
+widths too, 18 inches against 14.</p>
+<p>A chain of positions is a diagram, so the plan shows all of them at once.
+Down the lens you're looking at the room at one moment, and there is only ever
+one of anybody in it — so the viewer shows the position this beat belongs to
+and leaves the rest out. Play it and you watch one person walk.</p>
+<p>Everybody is built to real height — an average adult is five foot eight, so
+that is what they are, with men a little over and women a little under. Down
+the lens people are built out of limbs — head, torso, arms, legs — so
+a figure reads as a person rather than a slab, and the three postures are three
+arrangements of the same body rather than three different shapes. Each has a
+<b>face</b> in their own colour — eyes, a mouth, and a nose that sticks out far
+enough to read from the side — so you know whose face you are looking at as
+well as which way it points. The shapes come from the signs on lavatory
+doors, which are the most legible drawings of a person anybody has made — a
+round head above the shoulders and one continuous body that says everything by
+its outline. Not copied, since those are flat and these have to hold up from
+any angle in a room, but the same idea: a silhouette carries further than
+detail. A man is a shield, narrow at the hips and widening to the shoulders
+where the arms are part of the mass. A woman is a bell: a waist, then a skirt
+out to the hem. Neither has a feature you have to go looking for. Somebody flat on their back looks at the ceiling, so their face is on
+top of their head where it belongs. You should never have to work out which way
+someone is looking.</p>
 <h4>Getting a frame out of the lens view</h4>
 <p>Three buttons under the through-the-lens view. <b>Storyboard</b> drops that
 frame onto the plan as a real storyboard object beside its camera — drag it
@@ -402,8 +450,9 @@ which layer is holding it.</p>`,
     id: "files",
     title: "Files, and getting it to people",
     body: `
-<p>This reads and writes the same <code>.hcw</code> files as Shot Designer,
-straight out of your Shot Designer Scenes folder. Every save leaves a
+<p>Scenes are <code>.hcw</code> files, read and written in place from your
+scenes folder — so a library you already have opens as it is, and anything you
+save here still opens anywhere else that reads the format. Every save leaves a
 timestamped copy of the previous version behind.</p>
 <p><b>Don't have the same scene open in both apps.</b> The original has its own
 sync and will write over what you did here.</p>

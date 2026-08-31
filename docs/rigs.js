@@ -10,9 +10,9 @@
 // in the file format. The camera-to-rig link is ours; a scene opened in the
 // original still reads, the camera just comes off the rig.
 
-import * as H from "./hcw.js?v=8fc282b9";
-import * as R from "./render.js?v=8fc282b9";
-import { UNITS_PER_FOOT } from "./catalog.js?v=8fc282b9";
+import * as H from "./hcw.js?v=2c53de9e";
+import * as R from "./render.js?v=2c53de9e";
+import { UNITS_PER_FOOT } from "./catalog.js?v=2c53de9e";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -27,7 +27,13 @@ export const RIGS = {
 
 export const isRig = (o) => !!RIGS[H.get(o, "objectKey")];
 /** Anything riding a track: a rig, or a camera put straight on it. */
-export const ridesTrack = (o) => !!H.get(o, "snapPath");
+/**
+ * Riding one of our tracks. It has to be one of our rigs as well as having a
+ * snapPath: the original app writes snapPath on plain cameras for its own
+ * purposes, and treating that as "on our track" moved people's cameras across
+ * the room the moment they opened a scene.
+ */
+export const ridesTrack = (o) => isRig(o) && !!H.get(o, "snapPath");
 export const rigSpec = (o) => RIGS[H.get(o, "objectKey")] || null;
 export const rigCameraID = (o) => H.get(o, "rigCamera");
 export const rigParentID = (o) => H.get(o, "rigParent");

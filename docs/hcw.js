@@ -1,8 +1,13 @@
-// Read and write Hollywood Camera Work .hcw scene files.
+// Read and write .hcw scene files.
+//
+// The magic string below is the format's own header and has to be written
+// exactly, or a scene will not open in the app it came from. Reading and
+// writing somebody's existing files is the point — nobody should have to
+// abandon years of work to change tools.
 //
 // The parser keeps every element in document order, including tags this app
 // doesn't understand, so a scene saved here survives a round-trip through the
-// original Shot Designer untouched apart from what was actually edited.
+// original the file untouched apart from what was actually edited.
 
 export function parseXML(src) {
   const doc = new DOMParser().parseFromString(src, "application/xml");
@@ -261,5 +266,8 @@ export function serialize(doc) {
     set(post, "numObjects", canvas.children.length);
     set(post, "numSnapshot", kids(doc, "Snapshot").length);
   }
-  return toXML(doc);
+  // No trailing newline: the format doesn't have one, and with the app saving
+  // itself every scene you merely opened would come back a byte different from
+  // how it went in. A round trip should change nothing at all.
+  return toXML(doc).replace(/\n$/, "");
 }

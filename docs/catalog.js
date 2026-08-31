@@ -1,4 +1,4 @@
-// Object palette, transcribed from Shot Designer 1.80.8's own tables.
+// Object palette, transcribed from the formats people actually shoot.
 // `fxg` names index the converted vector art in assets.js.
 
 export const PROPS = [
@@ -49,7 +49,7 @@ export const LIGHTING = [
   ["CYCLIGHT", "Cyc Light", "CycLight"],
   ["SOFTBOX", "Soft Box", "SoftBox"],
   ["PRACTICALLIGHT", "Practical Light", "Practical"],
-  ["HOLLYWOODLIGHT", "Light On A Stick", "HollywoodLight"],
+  ["HOLLYWOODLIGHT", "Light On A Stick", "StickLight"],
   ["BALLOONLIGHT", "Balloon Light", "BalloonLight"],
   ["CHINABALL", "China Ball", "ChinaBall"],
   ["BOUNCEBOARD", "Bounce Board", "BounceBoard"],
@@ -72,6 +72,7 @@ export const SETPIECES = [
 // Vector art shipped with the app but absent from its 1.80.8 palette.
 export const EXTRAS = [
   ["CAR", "Car", "Car"],
+  ["CARINTERIOR", "Car Interior", "CarInterior"],
   ["DOG", "Dog", "Dog"],
   ["HORSE", "Horse", "Horse"],
   ["GUN", "Gun", "Gun"],

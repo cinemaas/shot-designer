@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Shot Designer</title>
+<title>Sightline</title>
 <div id="app">
   <svg id="stage" tabindex="0">
     <defs>
@@ -51,6 +51,7 @@
       <button data-act="blocking"  title="Blocking Mode (B)"></button>
       <button data-act="templates" title="Templates"></button>
       <button data-act="pause"     title="Pause"></button>
+      <button data-act="timeline"  title="Timeline"></button>
       <button data-act="play"      title="Play"></button>
       <button data-act="pages" title="Pages" class="pages"></button>
       <span id="slices"></span>
@@ -58,6 +59,7 @@
     </div>
   </div>
 
+  <div id="timeline" hidden></div>
   <div id="lensview" hidden></div>
   <div id="toolbanner" hidden></div>
   <div id="handbook" hidden></div>

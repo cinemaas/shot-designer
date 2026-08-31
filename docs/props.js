@@ -1,9 +1,9 @@
-// Extra kit the original never had.
+// The kit beyond the core catalogue.
 //
 // Everything here is drawn overhead at the same scale the grid implies —
 // 20 units to the foot — so a 12x12 frame really is twelve feet across and you
-// can trust the spacing you see. Colours match the FXG artwork the app ships
-// with, so these sit alongside the originals without looking bolted on.
+// can trust the spacing you see. Same palette as the rest of the kit, so it
+// all reads as one set of symbols.
 
 const G = "#808080";      // becomes the usual pale grey once a prop is tinted
 const D = "#231f20";      // the near-black the app's own art outlines with

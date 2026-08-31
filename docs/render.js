@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
-// real Shot Designer exported, so shapes land on top of the original.
+// real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=8fc282b9";
-import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=8fc282b9";
-import { EXTRA_SVG } from "./props.js?v=8fc282b9";
-import { GAUGE } from "./track.js?v=8fc282b9";
-import * as H from "./hcw.js?v=8fc282b9";
+import { FXG } from "./assets.js?v=2c53de9e";
+import { KEY_TO_FXG, CAMERA_COLORS } from "./catalog.js?v=2c53de9e";
+import { EXTRA_SVG } from "./props.js?v=2c53de9e";
+import { GAUGE } from "./track.js?v=2c53de9e";
+import * as H from "./hcw.js?v=2c53de9e";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -340,7 +340,13 @@ function drawGeneric(obj) {
     }));
     return g;
   }
-  // FXG art is authored around its own origin; scale it to scene units.
+  // What the lamp covers goes down first, so the symbol sits on top of it.
+  // Bounds are read from the artwork itself, not from here, so this can be as
+  // long as the throw really is without upsetting anybody's scale.
+  const cone = throwCone(key);
+  if (cone) g.append(cone);
+
+  // The art is authored around its own origin; scale it to scene units.
   const inner = el("g", { transform: `scale(${H.getBool(obj, "mirror") ? -1 : 1},1)` });
   inner.innerHTML = art.svg;
   const tint = [
@@ -423,6 +429,41 @@ export function samplePath(pts, { hard = false, steps = 96 } = {}) {
   return out;
 }
 
+/** The arc of a turn: from the old facing to the new one, round the figure. */
+function turnArc(from, to) {
+  const g = el("g");
+  const x = H.getNum(from, "x"), y = H.getNum(from, "y");
+  const r = radiusOf(from) + 22;
+  let a0 = angleOf(from) ?? 0, a1 = angleOf(to) ?? 0;
+  let sweep = ((a1 - a0) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+  if (Math.abs(sweep) < 0.05) return g;
+
+  const at = (a) => `${(x + Math.cos(a) * r).toFixed(1)},${(y + Math.sin(a) * r).toFixed(1)}`;
+  const big = Math.abs(sweep) > Math.PI ? 1 : 0;
+  const dir = sweep > 0 ? 1 : 0;
+  const col = from.tag === "Camera" ? cameraColour(from)
+    : hexOf(H.getNum(from, "color", 0x888888));
+
+  g.append(el("path", {
+    d: `M${at(a0)} A${r},${r} 0 ${big} ${dir} ${at(a1)}`,
+    fill: "none", stroke: col, "stroke-width": 3.4, "stroke-linecap": "round",
+  }));
+  // A head on the end, turned along the arc.
+  const tipA = a1, back = tipA - (sweep > 0 ? 0.16 : -0.16);
+  const tip = { x: x + Math.cos(tipA) * r, y: y + Math.sin(tipA) * r };
+  const b = { x: x + Math.cos(back) * r, y: y + Math.sin(back) * r };
+  const nx = tip.x - b.x, ny = tip.y - b.y;
+  const L = Math.hypot(nx, ny) || 1;
+  const ux = nx / L, uy = ny / L;
+  g.append(el("path", {
+    d: `M${tip.x + ux * 5},${tip.y + uy * 5} ` +
+       `L${tip.x - ux * 3 - uy * 4.5},${tip.y - uy * 3 + ux * 4.5} ` +
+       `L${tip.x - ux * 3 + uy * 4.5},${tip.y - uy * 3 - ux * 4.5} Z`,
+    fill: col, stroke: "none",
+  }));
+  return g;
+}
+
 function drawPathObject(obj, scene) {
   const tag = obj.tag;
   const pts = pointsOf(obj);
@@ -440,6 +481,15 @@ function drawPathObject(obj, scene) {
     AxisLine: { stroke: INK, width: 1.6, dash: "9 7" },
     WalkArrow: { stroke: INK, width: 2.2, dash: null },
   }[tag] || { stroke: INK, width: STROKE, dash: null };
+
+  // A turn goes nowhere, so a line between its ends would be a dot. It draws
+  // as an arc round the figure instead, from where they were looking to where
+  // they end up — which is what you'd sketch on paper.
+  if (tag === "WalkArrow" && H.getBool(obj, "turnMark") && scene?.byID) {
+    const from = scene.byID.get(H.get(obj, "fromConstraints"));
+    const to = scene.byID.get(H.get(obj, "toConstraints"));
+    if (from && to) return turnArc(from, to);
+  }
 
   // An arrow between two cameras is a camera move, not somebody walking, so it
   // draws in that camera's colour and lighter — it's a note about the rig.
@@ -655,6 +705,49 @@ function darken(hex) {
 }
 
 // --- dispatch ---------------------------------------------------------------
+
+/**
+ * How wide and how far each lamp throws, in degrees and feet. Drawn live
+ * rather than baked into the symbol, because a symbol's size is what scenes
+ * measure their scale against and a twelve-foot throw would make every light
+ * in an existing scene enormous. It's also the more useful half of a lighting
+ * plan: what a lamp covers, not what its housing looks like from above.
+ */
+const THROW = {
+  FRESNELSMALL: [45, 6], FRESNELMEDIUM: [45, 9], FRESNELLARGE: [45, 13],
+  OPENFACE: [70, 9], PAR: [20, 16], SCOOP: [90, 6], ELLIPSOIDAL: [18, 14],
+  GENERICMOVIELIGHT: [55, 9], HOLLYWOODLIGHT: [55, 9], LED: [65, 8],
+  LEDPANEL1X1: [100, 8], LIGHTPANEL: [110, 8], SOFTBOX: [120, 8],
+  CHINABALL: [360, 6], BALLOONLIGHT: [360, 9], CYCLIGHT: [120, 6],
+  FLO2: [90, 5], FLO4: [90, 6], SINGLEFLOTUBE: [90, 5], PRACTICAL: [360, 4],
+  SPACELIGHT: [360, 10], BOOKLIGHT: [90, 7], RINGLIGHT: [70, 6],
+  HMI1200: [40, 16], HMI2500: [40, 20], HMI4000: [40, 26], HMI18000: [35, 40],
+  SKYPANEL30: [100, 9], SKYPANEL60: [100, 11], SKYPANEL120: [100, 14],
+  LEDTUBE: [90, 5],
+};
+
+export let showThrow = true;
+export const setShowThrow = (v) => { showThrow = !!v; };
+
+/** The cone a lamp covers, on the floor. */
+function throwCone(key) {
+  const spec = THROW[key];
+  if (!spec || !showThrow) return null;
+  const [deg, feet] = spec;
+  const r = feet * 20;
+  const g = el("g", { class: "throw" });
+  if (deg >= 300) {
+    g.append(el("circle", { cx: 0, cy: 0, r, fill: "#f2c94c", "fill-opacity": 0.14 }));
+    return g;
+  }
+  const a = (deg * Math.PI) / 180 / 2;
+  g.append(el("path", {
+    d: `M0,0 L${(r * Math.cos(a)).toFixed(1)},${(-r * Math.sin(a)).toFixed(1)} ` +
+       `A${r},${r} 0 0 1 ${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)} Z`,
+    fill: "#f2c94c", "fill-opacity": 0.16,
+  }));
+  return g;
+}
 
 export function drawObject(obj, scene, opts = {}) {
   const tag = obj.tag;
