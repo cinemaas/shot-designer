@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=97c52203";
-import * as H from "./hcw.js?v=97c52203";
-import * as R from "./render.js?v=97c52203";
-import { FXG } from "./assets.js?v=97c52203";
-import * as B from "./blocking.js?v=97c52203";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=97c52203";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=97c52203";
-import { HANDBOOK } from "./handbook.js?v=97c52203";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=97c52203";
-import * as V3 from "./view3d.js?v=97c52203";
-import * as TR from "./track.js?v=97c52203";
-import * as RIG from "./rigs.js?v=97c52203";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=97c52203";
-import { Library } from "./library.js?v=97c52203";
+import { BRAND, SLUG } from "./brand.js?v=ee372fb3";
+import * as H from "./hcw.js?v=ee372fb3";
+import * as R from "./render.js?v=ee372fb3";
+import { FXG } from "./assets.js?v=ee372fb3";
+import * as B from "./blocking.js?v=ee372fb3";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=ee372fb3";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ee372fb3";
+import { HANDBOOK } from "./handbook.js?v=ee372fb3";
+import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=ee372fb3";
+import * as V3 from "./view3d.js?v=ee372fb3";
+import * as TR from "./track.js?v=ee372fb3";
+import * as RIG from "./rigs.js?v=ee372fb3";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=ee372fb3";
+import { Library } from "./library.js?v=ee372fb3";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=97c52203";
+} from "./catalog.js?v=ee372fb3";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -4963,6 +4963,10 @@ function toggleShotList() {
   if (!p.hidden) renderShotList();
 }
 $("#shotListToggle").addEventListener("click", toggleShotList);
+
+// Open from the start. A shot list you have to go and find is a shot list you
+// forget to keep up, and the toolbar is never in the way — both stay put.
+$("#shotListToggle").classList.add("open");
 
 function renderShotList() {
   const p = $("#shotList");

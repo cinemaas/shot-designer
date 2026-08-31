@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=97c52203";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=97c52203";
-import { EXTRA_SVG } from "./props.js?v=97c52203";
-import { GAUGE } from "./track.js?v=97c52203";
-import * as H from "./hcw.js?v=97c52203";
+import { FXG } from "./assets.js?v=ee372fb3";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=ee372fb3";
+import { EXTRA_SVG } from "./props.js?v=ee372fb3";
+import { GAUGE } from "./track.js?v=ee372fb3";
+import * as H from "./hcw.js?v=ee372fb3";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -244,9 +244,9 @@ function drawCharacter(obj) {
  */
 function drawPlanFigure(obj, color, female) {
   const g = el("g");
-  const across = female ? 13 : 15.5;     // half the shoulders
-  const deep = female ? 9 : 10;          // half of front to back
-  const headR = female ? 7.4 : 6.9;
+  const across = female ? 11.4 : 13.4;   // half the shoulders
+  const deep = female ? 7.8 : 8.6;       // half of front to back
+  const headR = female ? 6.9 : 6.4;
   const hx = 1.5;                        // where the head sits
 
   // Feet, just in front of the body.

@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=97c52203";
-import * as R from "./render.js?v=97c52203";
-import { UNITS_PER_FOOT } from "./catalog.js?v=97c52203";
-import { fieldOfView } from "./optics.js?v=97c52203";
+import * as H from "./hcw.js?v=ee372fb3";
+import * as R from "./render.js?v=ee372fb3";
+import { UNITS_PER_FOOT } from "./catalog.js?v=ee372fb3";
+import { fieldOfView } from "./optics.js?v=ee372fb3";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -553,7 +553,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
   const k = (female ? STATURE.female : STATURE.male) / STATURE.any;
   const z = (v) => ft(v) * k;
 
-  const SH = female ? ft(0.55) : ft(0.72);     // half the shoulders
+  const SH = female ? ft(0.5) : ft(0.66);      // half the shoulders
   const HIPW = female ? ft(0.53) : ft(0.46);   // half the hips
   const WAIST = female ? ft(0.4) : ft(0.47);
 

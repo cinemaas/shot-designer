@@ -433,7 +433,7 @@ body.view-only #stage { cursor: grab; }
 /* Beats run left to right; each thing that moves gets a lane. A bar is one
    move, so dragging it is a delay and stretching it is a slower move. */
 #timeline {
-  position: absolute; left: 12px; right: 12px; bottom: 58px;
+  position: absolute; left: 12px; right: 12px; bottom: calc(var(--bar-h) + 14px);
   background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
   box-shadow: 0 6px 26px rgba(0,0,0,.14);
   padding: 8px 10px 10px; font-size: 11px; z-index: 40;
