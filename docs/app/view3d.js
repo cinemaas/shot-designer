@@ -7,10 +7,11 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=5a428ade";
-import * as R from "./render.js?v=5a428ade";
-import { UNITS_PER_FOOT } from "./catalog.js?v=5a428ade";
-import { fieldOfView } from "./optics.js?v=5a428ade";
+import * as H from "./hcw.js?v=f5fff69f";
+import * as R from "./render.js?v=f5fff69f";
+import * as HU from "./human.js?v=f5fff69f";
+import { UNITS_PER_FOOT } from "./catalog.js?v=f5fff69f";
+import { fieldOfView } from "./optics.js?v=f5fff69f";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -597,462 +598,63 @@ const tone = (hex, k) => {
 const DARK = "#2b2b2b";
 
 /**
- * A head.
- *
- * Rebuilt from scratch, because the last one read as an angry bald man and
- * that is the one thing a stand-in must never do — you look at a plan to think
- * about a scene, not to be scowled at from it.
- *
- * Three things were doing it. A heavy black line round the whole head, which
- * at any distance reads as a helmet and, being a convex hull, bulged past the
- * hair it was supposed to contain. A dark band of hair sitting flat across the
- * forehead, which lands exactly where a lowered brow goes — the single
- * strongest anger cue a face has, and it was on every head from every angle,
- * including the ones with no face turned towards you. And a pair of dark brows
- * under it, doing the same thing again.
- *
- * So: no outline, no brow, and a hairline that curves the way a real one does
- * and stops well above the eyes. Round shapes read as friendly and angular
- * ones read as threatening — which is a thing worth using rather than
- * fighting, so the head is a smooth ball shaded by its own curve instead of a
- * stack of tapered tubes.
- *
- * Sources for the two ideas doing the work here:
- *   Shape language — https://blog.cg-wire.com/character-shape-language/
- *   Brows and anger — https://pmc.ncbi.nlm.nih.gov/articles/PMC8382696/
- */
-
-// The width of a head at height t through it: 0 at the chin, 1 at the crown.
-// An egg, not a ball — narrow at the jaw, widest at the cheekbones.
-const HEAD_PROFILE = [
-  [0.00, 0.30], [0.10, 0.60], [0.22, 0.78], [0.36, 0.92],
-  [0.50, 0.99], [0.62, 1.00], [0.74, 0.97], [0.86, 0.86],
-  [0.94, 0.68], [1.00, 0.34],
-];
-
-function headWidth(t) {
-  const P = HEAD_PROFILE;
-  if (t <= 0) return P[0][1];
-  if (t >= 1) return P[P.length - 1][1];
-  for (let i = 1; i < P.length; i++) {
-    if (t <= P[i][0]) {
-      const f = (t - P[i - 1][0]) / (P[i][0] - P[i - 1][0]);
-      return P[i - 1][1] + (P[i][1] - P[i - 1][1]) * f;
-    }
-  }
-  return P[P.length - 1][1];
-}
-
-/**
- * Where the hair stops on the forehead, as a fraction of the way up the head.
- * High and curved at the front so it never crosses the brow, low at the nape.
- */
-const hairline = (a) => 0.30 + 0.50 * Math.pow(0.5 + 0.5 * Math.cos(a), 0.7);
-
-const LAT = 12, LON = 18;         // enough to read as round, cheap enough for a crowd
-
-/**
- * A ball, shaded by which way its surface turns. The shading is the whole
- * reason this reads as a head rather than a polygon: a flat fill with an
- * outline is a shape, and a graded one is a form.
- */
-function ball(out, cam, p, facing, {
-  z0, z1, fwd = 0, colour, squash = 0.94, grow = 1,
-  t0 = 0, t1 = 1, a0 = 0, a1 = Math.PI * 2, r, lift = 1, shade = 1,
-}) {
-  const cs = Math.cos(facing), sn = Math.sin(facing);
-  const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
-  const h = z1 - z0;
-
-  const at = (t, a) => {
-    const w = headWidth(t) * grow * lift;
-    const f = fwd + Math.cos(a) * r * w * squash;
-    const s = Math.sin(a) * r * w;
-    return { x: p.x + f * cs - s * sn, y: p.y + f * sn + s * cs, z: z0 + h * t,
-             f, s, t };
-  };
-
-  for (let i = 0; i < LAT; i++) {
-    const ta = t0 + (t1 - t0) * (i / LAT), tb = t0 + (t1 - t0) * ((i + 1) / LAT);
-    for (let j = 0; j < LON; j++) {
-      const aa = a0 + (a1 - a0) * (j / LON), ab = a0 + (a1 - a0) * ((j + 1) / LON);
-      const c = [at(ta, aa), at(ta, ab), at(tb, ab), at(tb, aa)];
-      const q = c.map((v) => project(cam, v.x, v.y, v.z));
-      if (q.some((v) => !v)) continue;
-
-      // The surface normal, near enough: which way round the head this facet
-      // points, and how much of it is pointing at the sky rather than at you.
-      const am = (aa + ab) / 2, tm = (ta + tb) / 2;
-      const rise = (headWidth(tm + 0.06) - headWidth(tm - 0.06)) / 0.12;
-      const nz = -rise / Math.sqrt(1 + rise * rise);
-      const flat = 1 / Math.sqrt(1 + rise * rise);
-      const lit = 0.78 + 0.24 * Math.cos(am + facing - toCam) * flat + 0.14 * nz;
-      const f = tone(colour, Math.max(0.45, lit) * shade);
-      out.push({ pts: q, fill: f, stroke: f, width: 1,
-                 depth: q.reduce((s2, v) => s2 + v.depth, 0) / 4 });
-    }
-  }
-}
-
-/**
- * The face.
- *
- * Every feature sits on the surface of the head rather than on a plate in
- * front of it, so an eye near the edge of a face wraps round it instead of
- * floating. No brows at all: on something this size they are two dark marks
- * above the eyes, and two dark marks above the eyes is a scowl. What is left
- * is what you actually need — which way somebody is looking.
- */
-function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
-  const cs = Math.cos(facing), sn = Math.sin(facing);
-  const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
-  const straightOn = Math.cos(facing - toCam);
-  if (!up && straightOn < 0.12) return;        // nothing on the back of a head
-
-  const on = (u, v, out2) => {
-    const d = Math.sqrt(Math.max(0.0001, r * r - u * u - v * v)) * out2;
-    return project(cam, p.x + (fwd + d) * cs - u * sn,
-                        p.y + (fwd + d) * sn + u * cs, z + v);
-  };
-
-  /**
-   * Has this bit of the head turned away from us yet?
-   *
-   * Culling the whole face at once is not enough: in profile the far eye has
-   * gone round the side but is still drawn, and being drawn in front of
-   * everything it appears just outside the edge of the head — colour outside
-   * the lines. So each feature is asked separately, against the surface it
-   * sits on.
-   */
-  const rel = toCam - facing;
-  const facingUs = (u, v) => {
-    const d = Math.sqrt(Math.max(0.0001, r * r - u * u - v * v));
-    return d * Math.cos(rel) + u * Math.sin(rel) > r * 0.2;
-  };
-
-  const lay = (pts, fill, lift) => {
-    if (pts.some((q) => !q)) return;
-    // Nearer than the head by a fraction of its own distance rather than by a
-    // fixed amount — a fixed nudge is plenty at twenty feet and nothing at two.
-    const d = pts.reduce((t, q) => t + q.depth, 0) / pts.length;
-    out.push({ pts, fill, stroke: fill, width: 1, depth: d * (0.955 - (lift - 1)) });
-  };
-
-  const blob = (cu, cv, ru, rv, fill, tilt = 0, lift = 1.035, n = 16) => {
-    if (!up && !facingUs(cu, cv)) return;
-    const pts = [];
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const x = Math.cos(a) * ru, y = Math.sin(a) * rv;
-      pts.push(on(cu + x * Math.cos(tilt) - y * Math.sin(tilt),
-                  cv + x * Math.sin(tilt) + y * Math.cos(tilt), lift));
-    }
-    lay(pts, fill, lift);
-  };
-
-  /** A shallow arc, thickened into a ribbon: a closed mouth that turns up. */
-  const arc = (cu, cv, half, rise, thick, fill, lift = 1.04) => {
-    if (!up && !facingUs(cu, cv)) return;
-    const top = [], bot = [];
-    for (let i = 0; i <= 10; i++) {
-      const f = i / 10, x = (f - 0.5) * 2 * half;
-      // The corners ride above the middle. The other way round is a frown, and
-      // a frown is the whole thing this head was rebuilt to stop doing.
-      const y = cv - rise * (1 - (f - 0.5) * (f - 0.5) * 4);
-      top.push(on(cu + x, y + thick, lift));
-      bot.push(on(cu + x, y - thick, lift));
-    }
-    lay([...top, ...bot.reverse()], fill, lift);
-  };
-
-  const blob2 = (cu, cv, ru, rv, fill, lift) => {
-    const pts = [];
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      pts.push(on(cu + Math.cos(a) * ru, cv + Math.sin(a) * rv, lift));
-    }
-    lay(pts, fill, lift);
-  };
-
-  // Eyes: big, round and sitting a touch below the middle of the head, which
-  // is where a face people warm to keeps them. White, iris, catchlight.
-  const U = r * 0.335, EYE = -r * 0.05;
-  for (const s of [-1, 1]) {
-    blob(s * U, EYE, r * 0.152, r * 0.145, "#fbfcfd", 0, 1.035);
-    blob(s * U, EYE - r * 0.008, r * 0.088, r * 0.092, "#2c323a", 0, 1.05);
-    blob(s * U + r * 0.04, EYE + r * 0.042, r * 0.029, r * 0.03, "#ffffff", 0, 1.062);
-  }
-
-  // A nose you would not notice if it were not there, and would if it were not.
-  blob(0, -r * 0.30, r * 0.048, r * 0.075, tone(colour, 0.84), 0, 1.045, 10);
-
-  // A closed mouth with the corners lifted. Straight across reads as flat and
-  // down reads as cross, so up it is — barely, at the size this is drawn.
-  arc(0, -r * 0.55, r * 0.155, r * 0.035, r * 0.018, tone(colour, 0.52));
-
-  // Ears, on the side of the head where the surface has already turned away —
-  // so they read in profile and all but vanish head on, as ears do.
-  for (const s of [-1, 1]) {
-    // An ear is on the turn of the head by definition, so it is allowed
-    // further round than anything on the face itself.
-    const d = Math.sqrt(Math.max(0.0001, r * r - (r * 0.92) ** 2));
-    if (d * Math.cos(rel) + s * r * 0.92 * Math.sin(rel) < -r * 0.1) continue;
-    blob2(s * r * 0.92, -r * 0.04, r * 0.085, r * 0.155, tone(colour, 0.9), 1.02);
-  }
-}
-
-/**
- * Hair, and the job it is really doing.
- *
- * At the distance a plan is read from, hair is the one cue that says who is
- * who — before build, before height, and from behind, where a face tells you
- * nothing. So it is a silhouette rather than a texture: a short crop that
- * follows the skull, or a longer one that falls past the ears and widens the
- * outline at the shoulders.
- *
- * It is built on the head's own surface, a hair's thickness out from it, which
- * is why it cannot spill past the edge of the face the way a shape laid over
- * the top of one always eventually does.
- */
-function hairOn(out, cam, p, facing, { z0, z1, fwd, r, colour, long }) {
-  const shade = tone(colour, 0.62);
-  const cs = Math.cos(facing), sn = Math.sin(facing);
-  const h = z1 - z0;
-
-  // Below the chin the head has run out, but hair has not — so past that point
-  // it keeps the width it had rather than following the jaw in to a point,
-  // which is what was pinching the back of a long style into a V.
-  const at = (t, a, lift, hold = null) => {
-    const w = (hold != null ? hold : headWidth(Math.max(0, Math.min(1, t)))) * lift;
-    const f = fwd + Math.cos(a) * r * w * 0.94;
-    const s = Math.sin(a) * r * w;
-    return project(cam, p.x + f * cs - s * sn, p.y + f * sn + s * cs, z0 + h * t);
-  };
-
-  // The cap: from the hairline up over the crown, all the way round.
-  for (let j = 0; j < LON; j++) {
-    const aa = (j / LON) * Math.PI * 2, ab = ((j + 1) / LON) * Math.PI * 2;
-    const t0a = hairline(aa), t0b = hairline(ab);
-    for (let i = 0; i < 5; i++) {
-      const fa = i / 5, fb = (i + 1) / 5;
-      const q = [
-        at(t0a + (1 - t0a) * fa, aa, 1.045), at(t0b + (1 - t0b) * fa, ab, 1.045),
-        at(t0b + (1 - t0b) * fb, ab, 1.045), at(t0a + (1 - t0a) * fb, aa, 1.045),
-      ];
-      if (q.some((v) => !v)) continue;
-      const lit = 0.9 + 0.16 * Math.cos((aa + ab) / 2 + facing -
-        Math.atan2(cam.y - p.y, cam.x - p.x));
-      const f = tone(shade, lit);
-      out.push({ pts: q, fill: f, stroke: f, width: 1,
-                 depth: q.reduce((s2, v) => s2 + v.depth, 0) / 4 * 0.992 });
-    }
-  }
-
-  if (!long) return;
-
-  // Longer: a fall down the sides and back, past the ears to the jaw. This is
-  // the bit that reads across a room, and it reads from behind too.
-  for (let j = 0; j < LON; j++) {
-    const aa = (j / LON) * Math.PI * 2, ab = ((j + 1) / LON) * Math.PI * 2;
-    const am = (aa + ab) / 2;
-    // Not across the face. The angle either side of straight ahead that hair
-    // is allowed to reach is the difference between a hairstyle and a hood.
-    const off = Math.min(Math.abs(am), Math.PI * 2 - Math.abs(am));
-    if (off < 1.05) continue;
-    const drop = -0.55 * Math.min(1, (off - 1.05) / 0.7);
-    // It hangs at about the width of the head it is hanging off.
-    const wide = headWidth(0.42);
-    const q = [
-      at(hairline(aa), aa, 1.06), at(hairline(ab), ab, 1.06),
-      at(drop, ab, 1.02, wide), at(drop, aa, 1.02, wide),
-    ];
-    if (q.some((v) => !v)) continue;
-    const f = tone(shade, 0.94);
-    out.push({ pts: q, fill: f, stroke: f, width: 1,
-               depth: q.reduce((s2, v) => s2 + v.depth, 0) / 4 * 0.992 });
-  }
-}
-
-function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
-                                              female = false, lift = 0 }) {
-  z0 += lift; z1 += lift;
-  const r = ft(0.35);
-
-  ball(out, cam, p, facing, { z0, z1, fwd, colour, r });
-  hairOn(out, cam, p, facing, { z0, z1, fwd, r, colour, long: female });
-
-  // The face works out the curve of the head for itself, so hand it the middle
-  // of the head — hand it the front and every feature ends up a head's width
-  // out in front of one, floating.
-  faceOn(out, cam, p, facing, {
-    at: fwd, z: z0 + (z1 - z0) * 0.58, r: r * 0.97, up, colour,
-  });
-}
-
-/**
  * A person.
  *
- * Nothing here is a straight tube. A body tapers everywhere — shoulders down
- * to a waist, thigh down to an ankle, upper arm down to a wrist — and it was
- * the absence of that taper, more than the number of sides, that made these
- * look machined. Heights are the real ones: an average adult is five foot
- * eight, so that is what they are built to.
+ * All of the work is in human.js, which builds one body out of a skeleton and
+ * swept surfaces and lets proportion, clothing and hair say who somebody is.
+ * This is only the join: it turns a Character in a scene file into the numbers
+ * that body wants, and hands anything they are carrying to the right hand.
  */
 function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0,
                 lift = 0, who = null) {
-  // No outline on any of it. A line round every limb is a line round every
-  // limb — the shading is what gives a body its form, and a dozen strokes on
-  // top only ever looked like a diagram of a person rather than a person.
-  // Everything is measured off the floor the person is standing on, which is
-  // not always the floor of the room: a bed, a step, a rostrum, a kerb.
-  const put = (o) => part(out, cam, p, facing, {
-    sides: 12, outline: false, ...o,
-    z0: (o.z0 || 0) + lift, z1: (o.z1 || 0) + lift,
+  const get = (k) => (who ? H.get(who, k) : "");
+  const getNum = (k, d) => (who ? H.getNum(who, k, d) : d);
+  const getBool = (k) => (who ? H.getBool(who, k) : female);
+  const h = HU.readHuman(get, getNum, getBool, colour);
+  h.female = female;
+
+  const pose = poseOf(who);
+  HU.drawHuman(out, cam, p, h, {
+    facing, lift, pose,
+    seated: posture === POSTURES.sit,
+    lying: !!posture.lying,
   });
-  const limbTone = tone(colour, 0.88);
-  const dark = tone(colour, 0.74);
 
-  // Scale the whole body to this person's own height.
-  const k = (female ? STATURE.female : STATURE.male) / STATURE.any;
-  const z = (v) => ft(v) * k;
-
-  const SH = female ? ft(0.5) : ft(0.66);      // half the shoulders
-  const HIPW = female ? ft(0.53) : ft(0.46);   // half the hips
-  const WAIST = female ? ft(0.4) : ft(0.47);
-
-  if (posture.lying) {
-    // The same body, on its back. Everything that was height when they were
-    // standing is length along the floor now, and what is left off the floor
-    // is how thick a person is — which is what stops this looking like a set
-    // of planks. Head at the front, feet behind, arms tucked to the sides.
-    const T = z(0.46);                    // half the thickness of a body
-    const lie = (f0, f1, w0, w1, t0, t1, fill) => put({
-      fwd: (f0 + f1) / 2, len: Math.abs(f1 - f0),
-      wide: w0, wide1: w1, len1: Math.abs(f1 - f0),
-      z0: t0, z1: t1, fill, sides: 10,
-    });
-
-    for (const s of [-1, 1]) {
-      // shin then thigh, tapering to the ankle
-      lie(z(-2.85), z(-1.5), ft(0.34), ft(0.42), 0, T * 1.25, dark);
-      put({ fwd: z(-2.2), side: s * ft(0.2), len: z(1.35), wide: ft(0.38),
-            z0: 0, z1: T * 1.3, fill: dark, sides: 8 });
-      put({ fwd: z(-0.85), side: s * ft(0.22), len: z(1.4), wide: ft(0.46),
-            z0: 0, z1: T * 1.6, fill: dark, sides: 8 });
-    }
-    // hips, then the chest widening to the shoulders
-    put({ fwd: z(-0.1), len: z(0.8), wide: HIPW * 2, wide1: WAIST * 2,
-          z0: 0, z1: T * 1.8, fill: colour, sides: 10 });
-    put({ fwd: z(0.85), len: z(1.2), wide: WAIST * 2, wide1: SH * 1.9,
-          z0: 0, z1: T * 2, fill: colour, sides: 10 });
-    for (const s of [-1, 1]) {
-      put({ fwd: z(0.5), side: s * (SH + ft(0.12)), len: z(1.9), wide: ft(0.32),
-            z0: 0, z1: T * 1.3, fill: limbTone, sides: 8 });
-    }
-    // and the head, a ball resting on the floor rather than a slab
-    headOn(out, cam, p, facing, colour,
-           { fwd: z(2.15), z0: 0, z1: ft(0.78), up: true, female, lift });
-    return;
-  }
-
-  if (posture === POSTURES.sit) {
-    const SEAT = z(1.5), KNEE = z(1.15), SHOULDER = z(3.35), CROWN = z(4.1);
-    for (const s of [-1, 1]) {
-      put({ fwd: ft(1.42), side: s * ft(0.26), len: ft(0.46), wide: ft(0.4),
-            len1: ft(0.4), wide1: ft(0.32), z0: 0, z1: KNEE, fill: dark, sides: 8 });
-      put({ fwd: ft(0.72), side: s * ft(0.27), len: ft(1.75), wide: ft(0.46),
-            len1: ft(1.75), wide1: ft(0.4), z0: KNEE, z1: SEAT,
-            fill: female ? colour : limbTone, sides: 8 });
-    }
-    put({ len: ft(0.78), wide: HIPW * 2.2, len1: ft(0.7), wide1: WAIST * 2,
-          z0: SEAT - z(0.12), z1: SEAT + z(0.5), fill: colour });
-    put({ len: ft(0.7), wide: WAIST * 2, len1: ft(0.78), wide1: SH * 2,
-          z0: SEAT + z(0.45), z1: SHOULDER - z(0.12), fill: colour });
-    put({ len: ft(0.78), wide: SH * 2, len1: ft(0.34), wide1: ft(0.34),
-          z0: SHOULDER - z(0.14), z1: SHOULDER + z(0.16), fill: colour, dome: 0.2 });
-    for (const s of [-1, 1]) {
-      put({ fwd: ft(0.08), side: s * (SH + ft(0.16)), len: ft(0.38), wide: ft(0.34),
-            len1: ft(0.3), wide1: ft(0.26),
-            z0: SEAT + z(0.3), z1: SHOULDER - z(0.05), fill: limbTone, sides: 8 });
-    }
-    headOn(out, cam, p, facing, colour,
-           { z0: SHOULDER + z(0.12), z1: CROWN, female, lift });
-    return;
-  }
-
-  // Standing. Everything is a ratio of the person's own height, and every run
-  // hands over to the next at the same width so the body reads as one form
-  // rather than a stack of parts.
-  const ANKLE = z(0.3), KNEEZ = z(1.55), HIPZ = z(2.85);
-  const WAISTZ = z(3.45), CHEST = z(4.15), SHOULDER = z(4.6);
-  const CROWN = z(5.67), NECK = CROWN - z(0.84);
-  const armTop = SHOULDER - z(0.12);
-
-  if (female) {
-    const HEM = z(2.1);
-    for (const s of [-1, 1]) {
-      put({ side: s * ft(0.17), len: ft(0.4), wide: ft(0.33), len1: ft(0.34),
-            wide1: ft(0.27), z0: 0, z1: KNEEZ, fill: limbTone, sides: 8 });
-      put({ side: s * ft(0.18), len: ft(0.44), wide: ft(0.37), len1: ft(0.4),
-            wide1: ft(0.31), z0: KNEEZ, z1: HEM + z(0.15), fill: limbTone, sides: 8 });
-    }
-    put({ len: ft(1.45), wide: ft(2.2), len1: ft(0.64), wide1: WAIST * 2,
-          z0: HEM, z1: WAISTZ, fill: colour });
-  } else {
-    for (const s of [-1, 1]) {
-      put({ fwd: ft(0.12), side: s * ft(0.25), len: ft(0.78), wide: ft(0.35),
-            z0: 0, z1: ANKLE, fill: dark, sides: 8 });
-      put({ side: s * ft(0.25), len: ft(0.48), wide: ft(0.42), len1: ft(0.42),
-            wide1: ft(0.34), z0: ANKLE - z(0.04), z1: KNEEZ, fill: dark, sides: 8 });
-      put({ side: s * ft(0.26), len: ft(0.56), wide: ft(0.5), len1: ft(0.46),
-            wide1: ft(0.4), z0: KNEEZ, z1: HIPZ, fill: dark, sides: 8 });
-    }
-    put({ len: ft(0.72), wide: HIPW * 2, len1: ft(0.68), wide1: WAIST * 2,
-          z0: HIPZ - z(0.2), z1: WAISTZ, fill: colour });
-  }
-
-  // Waist to chest to shoulders, in two runs that share a width, then the
-  // shoulder cap and a short neck. No seam anywhere along it.
-  put({ len: ft(0.68), wide: WAIST * 2, len1: ft(0.76), wide1: SH * 1.86,
-        z0: WAISTZ, z1: CHEST, fill: colour });
-  put({ len: ft(0.76), wide: SH * 1.86, len1: ft(0.74), wide1: SH * 2,
-        z0: CHEST, z1: armTop, fill: colour });
-  put({ len: ft(0.74), wide: SH * 2, len1: ft(0.4), wide1: ft(0.42),
-        z0: armTop, z1: SHOULDER + z(0.1), fill: colour, dome: 0.3 });
-  put({ len: ft(0.34), wide: ft(0.36), z0: SHOULDER - z(0.02), z1: NECK,
-        fill: colour, sides: 10 });
-
-  // Arms. They start inside the shoulder rather than beside it, so there is
-  // no gap where one should join the other, and they taper to a wrist.
-  // Arms hang off the shoulders and point wherever the pose says, and the
-  // wrist is where anything they are carrying goes.
-  const pose = armPoseOf(who);
-  const SHZ = armTop - z(0.05);
-  let hand = null;
-  for (const s of [-1, 1]) {
-    const at = ([f, a, u]) => [f * z(1), s * (SH + ft(0.08) + a * z(0.45)),
-                               SHZ + u * z(1)];
-    const shoulder = [0, s * (SH + ft(0.05)), SHZ];
-    const elbow = at(pose.elbow), wrist = at(pose.wrist);
-    limb(out, cam, p, facing, shoulder, elbow, ft(0.19), ft(0.15), colour, 10);
-    limb(out, cam, p, facing, elbow, wrist, ft(0.15), ft(0.11), limbTone, 10);
-    limb(out, cam, p, facing, wrist,
-         [wrist[0] + z(0.08), wrist[1], wrist[2] - z(0.12)],
-         ft(0.11), ft(0.085), limbTone, 8);
-    if (s === 1) hand = wrist;
-  }
-
+  // Anything in a hand goes where that hand actually ended up, which is the
+  // entire reason the arms are joints rather than decoration: a phone at
+  // somebody's side and a phone out in front of them are different shots.
   const held = heldOf(who);
-  if (held && held.w && hand) {
+  if (held && held.w && !posture.lying) {
+    const at = HU.handAt(h, { facing, pose, side: 1 });
     part(out, cam, p, facing, {
-      fwd: hand[0] + ft(held.w) * 0.35, side: hand[1],
+      fwd: (at[0] - p.x) * Math.cos(facing) + (at[1] - p.y) * Math.sin(facing)
+           + ft(held.w) * 0.3,
+      side: -(at[0] - p.x) * Math.sin(facing) + (at[1] - p.y) * Math.cos(facing),
       len: ft(held.w), wide: ft(held.d),
-      z0: hand[2] - ft(held.h) / 2, z1: hand[2] + ft(held.h) / 2,
-      fill: tone(colour, 0.5), sides: 8, outline: false,
+      z0: at[2] + lift - ft(held.h) / 2, z1: at[2] + lift + ft(held.h) / 2,
+      fill: "#3d444b", sides: 8, outline: false,
     });
   }
-
-  headOn(out, cam, p, facing, colour,
-           { z0: NECK - z(0.04), z1: CROWN, female, lift });
 }
+
+/**
+ * What somebody is doing with themselves, as data.
+ *
+ * The arm poses that already exist in scenes keep working: each one names a
+ * pose in the new set, so a character saved holding a phone out in front is
+ * still holding it out in front.
+ */
+const ARM_POSE_TO_POSE = {
+  down: "relaxed", out: "held_out", front: "holding", folded: "crossed",
+  raised: "raised", pocket: "pockets",
+};
+
+export function poseOf(obj) {
+  const named = obj ? H.get(obj, "pose") : "";
+  if (named && HU.POSES[named]) return HU.POSES[named];
+  const arm = obj ? H.get(obj, "armPose") : "";
+  const mapped = ARM_POSE_TO_POSE[arm];
+  return (mapped && HU.POSES[mapped]) || HU.POSES.relaxed;
+}
+
 

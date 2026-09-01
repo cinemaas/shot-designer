@@ -1,28 +1,29 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=5a428ade";
-import * as H from "./hcw.js?v=5a428ade";
-import * as R from "./render.js?v=5a428ade";
-import { FXG } from "./assets.js?v=5a428ade";
-import * as B from "./blocking.js?v=5a428ade";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=5a428ade";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=5a428ade";
-import { HANDBOOK } from "./handbook.js?v=5a428ade";
+import { BRAND, SLUG } from "./brand.js?v=f5fff69f";
+import * as H from "./hcw.js?v=f5fff69f";
+import * as R from "./render.js?v=f5fff69f";
+import { FXG } from "./assets.js?v=f5fff69f";
+import * as B from "./blocking.js?v=f5fff69f";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=f5fff69f";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f5fff69f";
+import { HANDBOOK } from "./handbook.js?v=f5fff69f";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=5a428ade";
-import * as V3 from "./view3d.js?v=5a428ade";
-import { blenderScript } from "./blender.js?v=5a428ade";
-import * as TR from "./track.js?v=5a428ade";
-import * as RIG from "./rigs.js?v=5a428ade";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=5a428ade";
-import { Library } from "./library.js?v=5a428ade";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=f5fff69f";
+import * as V3 from "./view3d.js?v=f5fff69f";
+import * as HU from "./human.js?v=f5fff69f";
+import { blenderScript } from "./blender.js?v=f5fff69f";
+import * as TR from "./track.js?v=f5fff69f";
+import * as RIG from "./rigs.js?v=f5fff69f";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=f5fff69f";
+import { Library } from "./library.js?v=f5fff69f";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=5a428ade";
+} from "./catalog.js?v=f5fff69f";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -607,6 +608,7 @@ function draw() {
   drawCoverage();
   drawLensHeights();
   renderLensView();
+  renderCharPanel();
   renderTimeline();
   if (!S.blocking) drawPositionBadges();
   declutterLabels();
@@ -1003,6 +1005,172 @@ function renderLensView() {
       () => withLiveFrame((a) => makeStill(a)));
   box.append(row);
 }
+
+/**
+ * The character panel.
+ *
+ * Two things live here that must never be confused, and the panel is laid out
+ * to make confusing them hard: the colour that says *which* character this is,
+ * and what the person actually looks like. The first lands on their top and
+ * their mark on the plan. The second is their own skin and their own hair. A
+ * green character is not a green person.
+ *
+ * Everything applies as you touch it — the plan and the viewfinder are redrawn
+ * on the spot — and nothing here disturbs where somebody is standing, which way
+ * they face, how tall they are or what they are doing with their arms unless
+ * that is the control you reached for.
+ */
+function renderCharPanel() {
+  const box = $("#charpanel");
+  const one = S.sel.size === 1 ? byID([...S.sel][0]) : null;
+  const obj = one && one.tag === "Character" ? one : null;
+  if (!obj || S.readOnly) { box.hidden = true; box.replaceChildren(); return; }
+
+  // Rebuilt only when the selection changes, so a slider survives a drag.
+  if (box.dataset.for === idOf(obj)) return;
+  box.dataset.for = idOf(obj);
+  box.hidden = false;
+  box.replaceChildren();
+
+  const touch = (label, fn) => { mark(label); fn(); draw(); redraw(); };
+  const redraw = () => { box.dataset.for = ""; renderCharPanel(); };
+
+  const close = document.createElement("button");
+  close.className = "close"; close.textContent = "×";
+  close.title = "Hide this panel";
+  close.onclick = () => { box.hidden = true; box.dataset.for = "hidden"; };
+  box.append(close);
+
+  const who = document.createElement("div");
+  who.className = "who";
+  who.textContent = (H.get(obj, "castName") || "").trim() ||
+    (H.get(obj, "colorName") || "Character");
+  box.append(who);
+
+  const head = (t) => { const h = document.createElement("h4"); h.textContent = t; box.append(h); };
+
+  /** A row of colour chips. */
+  const swatches = (items, isOn, pick) => {
+    const row = document.createElement("div");
+    row.className = "sw";
+    for (const [name, col] of items) {
+      const b = document.createElement("button");
+      b.style.background = col;
+      b.title = name;
+      if (isOn(name, col)) b.classList.add("on");
+      b.onclick = () => pick(name, col);
+      row.append(b);
+    }
+    box.append(row);
+  };
+
+  /** A row of little buttons, one of which is on. */
+  const segment = (items, isOn, pick) => {
+    const row = document.createElement("div");
+    row.className = "seg";
+    for (const [key, label] of items) {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (isOn(key)) b.classList.add("on");
+      b.onclick = () => pick(key);
+      row.append(b);
+    }
+    box.append(row);
+  };
+
+  /** A slider that applies as it moves and never rebuilds under your finger. */
+  const slider = (label, min, max, step, value, fmt, apply) => {
+    const l = document.createElement("label");
+    l.className = "row";
+    const n = document.createElement("span"); n.textContent = label;
+    const v = document.createElement("span"); v.className = "v"; v.textContent = fmt(value);
+    const r = document.createElement("input");
+    r.type = "range"; r.min = min; r.max = max; r.step = step; r.value = value;
+    let marked = false;
+    r.oninput = () => {
+      if (!marked) { mark(label.toLowerCase()); marked = true; }
+      v.textContent = fmt(+r.value);
+      apply(+r.value);
+      draw();
+    };
+    r.onchange = () => { marked = false; syncChrome(); };
+    l.append(n, v, r);
+    box.append(l);
+  };
+
+  // ---- who they are ----------------------------------------------------
+  head("Character colour");
+  swatches(
+    CHARACTER_COLORS.map(([n, c]) => [n, "#" + c.toString(16).padStart(6, "0")]),
+    (n) => H.get(obj, "colorName") === n,
+    (n) => touch("colour", () => {
+      const i = CHARACTER_COLORS.findIndex(([x]) => x === n);
+      H.set(obj, "colorName", n);
+      H.set(obj, "color", CHARACTER_COLORS[i][1]);
+      H.set(obj, "colorIndex", i);
+    }));
+
+  // ---- what they look like ---------------------------------------------
+  head("Skin");
+  swatches(HU.SKIN_TONES,
+    (n) => HU.SKIN_TONES[clampTone(H.getNum(obj, "skinTone", 3))][0] === n,
+    (n) => touch("skin", () => H.set(obj, "skinTone",
+      HU.SKIN_TONES.findIndex(([x]) => x === n))));
+
+  head("Hair");
+  swatches(HU.HAIR_COLOURS,
+    (n) => (H.get(obj, "hairColour") || "Dark Brown") === n,
+    (n) => touch("hair", () => H.set(obj, "hairColour", n)));
+  segment(HU.HAIR_STYLES,
+    (k) => (H.get(obj, "hairStyle") ||
+            (H.getBool(obj, "female") ? "ponytail" : "short")) === k,
+    (k) => touch("hair", () => H.set(obj, "hairStyle", k)));
+
+  // ---- build ------------------------------------------------------------
+  head("Build");
+  segment([["male", "Male"], ["female", "Female"]],
+    (k) => (H.getBool(obj, "female") ? "female" : "male") === k,
+    (k) => touch("character", () => {
+      H.set(obj, "female", k === "female");
+      // Hair follows presentation only while it has never been chosen.
+      if (!H.get(obj, "hairStyle")) {
+        H.set(obj, "hairStyle", k === "female" ? "ponytail" : "short");
+      }
+    }));
+  segment(HU.BUILDS, (k) => (H.get(obj, "build") || "average") === k,
+    (k) => touch("build", () => H.set(obj, "build", k)));
+  slider("Height", 4.5, 7, 0.02,
+    H.getNum(obj, "heightFt", 0) || (H.getBool(obj, "female") ? 5.5 : 5.9),
+    (v) => `${Math.floor(v)}'${Math.round((v % 1) * 12)}"`,
+    (v) => H.set(obj, "heightFt", +v.toFixed(2)));
+
+  // ---- pose -------------------------------------------------------------
+  head("Pose");
+  segment(Object.entries(HU.POSES).map(([k, v]) => [k, v.label]),
+    (k) => V3.poseOf(obj) === HU.POSES[k],
+    (k) => touch("pose", () => { H.set(obj, "pose", k); H.set(obj, "armPose", ""); }));
+  segment(Object.entries(V3.POSTURES).map(([k, v]) => [k, v.label]),
+    (k) => (H.get(obj, "posture") || "stand") === k,
+    (k) => touch("posture", () => H.set(obj, "posture", k)));
+
+  head("Facing");
+  slider("Body", -180, 180, 1,
+    Math.round((R.angleOf(obj) || 0) * 180 / Math.PI),
+    (v) => `${v}°`,
+    (v) => { R.setAngle(obj, v * Math.PI / 180);
+             if (marksOf(obj).length >= 2) setMark(obj, S.slice + 1); });
+  // Body facing and head facing are different things, and on a blocking plan
+  // the difference is often the whole point of the shot: somebody stands one
+  // way and looks another.
+  slider("Head", -80, 80, 1, H.getNum(obj, "headYaw", 0),
+    (v) => `${v}°`,
+    (v) => H.set(obj, "headYaw", v));
+  slider("Head tilt", -30, 30, 1, H.getNum(obj, "headPitch", 0),
+    (v) => `${v}°`,
+    (v) => H.set(obj, "headPitch", v));
+}
+
+const clampTone = (v) => Math.max(0, Math.min(HU.SKIN_TONES.length - 1, v));
 
 /**
  * The timeline.
@@ -4959,11 +5127,16 @@ function objectMenu(obj, x, y) {
       } },
       { label: "Height Off The Floor…", run: () => setElevation(obj) },
       { label: "Holding…", run: () => setHeld(obj) },
-      { head: "Arms" },
-      ...Object.entries(V3.ARM_POSES).map(([key, spec]) => ({
+      { label: "Appearance & Pose…", run: () => {
+        S.sel = new Set([idOf(obj)]);
+        const box = $("#charpanel"); box.dataset.for = ""; draw(); syncChrome();
+      } },
+      { head: "Pose" },
+      ...Object.entries(HU.POSES).map(([key, spec]) => ({
         label: spec.label,
-        tick: (H.get(obj, "armPose") || "down") === key,
-        run: () => setArmPose(obj, key),
+        tick: V3.poseOf(obj) === HU.POSES[key],
+        run: () => { mark("pose"); H.set(obj, "pose", key);
+                     H.set(obj, "armPose", ""); draw(); syncChrome(); },
       })),
       { head: "Posture" },
       ...Object.entries(V3.POSTURES).map(([key, spec]) => ({

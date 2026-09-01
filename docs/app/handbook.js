@@ -198,6 +198,25 @@ is how you get a handsome still of a different room.</p>
 this machine: the page never sees it, and it cannot reach a share link or a
 published library. Without one you are offered the other route — the frame saved
 and the brief copied, ready to paste wherever you like.</p>
+<h4>Who somebody is, and what they look like</h4>
+<p>These are two different settings and they never touch. Select somebody and
+the character panel opens on the left.</p>
+<dl>
+<dt>Character colour</dt><dd>Which character this is. It lands on their top and
+on their mark on the plan, so you can pick the red one out of a room at a
+glance. It is not their skin — a green character does not have a green face.</dd>
+<dt>Skin</dt><dd>Eight tones. Face, ears, neck and hands, and nothing else.</dd>
+<dt>Hair</dt><dd>Colour and style, on their own again. Short and ponytail are
+the two built out properly; medium, long, bun and bald are there as well.</dd>
+<dt>Build</dt><dd>Presentation, build and real height. Change the height and the
+proportions change with it rather than the whole person being scaled — a tall
+person is longer in the leg, not bigger all over.</dd>
+<dt>Pose and facing</dt><dd>Body facing and head facing are separate numbers,
+because somebody standing one way and looking another is often the whole point
+of the shot.</dd>
+</dl>
+<p>Everything applies as you touch it. Nothing here moves anybody, turns them,
+or resets what they were doing.</p>
 <h4>Arms, and what's in their hands</h4>
 <p>Right-click a person for <b>Arms</b>: at their sides, held out, out in
 front, folded, raised, or hands in pockets. The arms actually go there, and so

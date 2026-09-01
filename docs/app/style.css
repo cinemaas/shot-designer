@@ -494,3 +494,42 @@ body.view-only #stage { cursor: grab; }
 #timeline .ruler span {
   position: absolute; transform: translateX(-50%); opacity: .6;
 }
+
+/* The character panel: appearance and pose, alive while you drag it. */
+#charpanel {
+  position: absolute; left: 12px; bottom: calc(var(--bar-h) + 12px); z-index: 6;
+  background: var(--sheet); border: 1px solid var(--hair); border-radius: 8px;
+  padding: 9px 10px; box-shadow: 0 4px 18px #00000030;
+  width: 226px; font-size: 11px;
+  max-height: calc(100vh - var(--bar-h) - 34px); overflow-y: auto;
+}
+#charpanel h4 {
+  margin: 9px 0 4px; font-size: 9.5px; letter-spacing: .08em;
+  text-transform: uppercase; opacity: .55; font-weight: 700;
+}
+#charpanel h4:first-child { margin-top: 0; }
+#charpanel .who { font-weight: 650; font-size: 12px; margin-bottom: 2px; }
+#charpanel .sw { display: flex; flex-wrap: wrap; gap: 4px; }
+#charpanel .sw button {
+  width: 20px; height: 20px; border-radius: 4px; padding: 0;
+  border: 1px solid rgba(0,0,0,.22); cursor: pointer;
+}
+#charpanel .sw button.on { outline: 2px solid var(--sel); outline-offset: 1px; }
+#charpanel .seg { display: flex; gap: 3px; flex-wrap: wrap; }
+#charpanel .seg button {
+  flex: 1 1 auto; padding: 3px 6px; font-size: 10.5px; border-radius: 4px;
+  border: 1px solid var(--hair); background: transparent; color: inherit;
+  cursor: pointer; white-space: nowrap;
+}
+#charpanel .seg button.on { background: var(--sel); border-color: var(--sel); color: #fff; }
+#charpanel label.row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 4px; margin-top: 3px;
+}
+#charpanel label.row .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+#charpanel input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--sel); height: 15px; }
+#charpanel .close {
+  position: absolute; top: 5px; right: 6px; border: 0; background: none;
+  color: var(--dim); opacity: .8; cursor: pointer; font-size: 14px; line-height: 1;
+}
+#charpanel .close:hover { opacity: 1; }

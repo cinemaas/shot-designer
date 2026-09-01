@@ -15,11 +15,11 @@
 // how it should look. That is the other half of the job and it belongs to
 // whoever opens the file.
 
-import * as H from "./hcw.js?v=5a428ade";
-import * as R from "./render.js?v=5a428ade";
-import * as V3 from "./view3d.js?v=5a428ade";
-import { UNITS_PER_FOOT } from "./catalog.js?v=5a428ade";
-import { projectedAspect } from "./optics.js?v=5a428ade";
+import * as H from "./hcw.js?v=f5fff69f";
+import * as R from "./render.js?v=f5fff69f";
+import * as V3 from "./view3d.js?v=f5fff69f";
+import { UNITS_PER_FOOT } from "./catalog.js?v=f5fff69f";
+import { projectedAspect } from "./optics.js?v=f5fff69f";
 
 // Scene units are twentieths of a foot. Blender works in metres.
 const M = (u) => +(u / UNITS_PER_FOOT * 0.3048).toFixed(4);
@@ -243,6 +243,12 @@ export function blenderScript(opts) {
   for (const [i, o] of cast.entries()) {
     const pose = V3.postureOf(o);
     const lift = V3.elevationOf(o);
+    // The stand-in is this person's own height, not an average one. Somebody
+    // six foot four clearing a doorway is the kind of thing you build a proxy
+    // to find out, so the proxy has to be them.
+    const ownFt = H.getNum(o, "heightFt", 0) ||
+                  (H.getBool(o, "female") ? 5.5 : 5.9);
+    const scale = (ownFt * UNITS_PER_FOOT) / V3.STATURE.any;
     const rgb = colourOf(o, 0xfc7b7b);
     const who = (H.get(o, "userText") || H.get(o, "colorName") || `Person${i + 1}`)
       .replace(/[^A-Za-z0-9]/g, "") || `Person${i + 1}`;
@@ -250,18 +256,16 @@ export function blenderScript(opts) {
     const rgbs = `(${rgb.map((c) => c.toFixed(3)).join(", ")})`;
 
     if (pose.lying) {
-      w(`p = box("${who}", (${x}, ${y}, ${M(lift + pose.top / 2)}), ` +
-        `(${M(pose.length)}, ${M(pose.width)}, ${M(pose.top)}), ` +
+      w(`p = box("${who}", (${x}, ${y}, ${M(lift + pose.top * scale / 2)}), ` +
+        `(${M(pose.length * scale)}, ${M(pose.width)}, ${M(pose.top * scale)}), ` +
         `${rad(flipA(R.angleOf(o)))}, ${rgbs})`);
     } else {
-      const bodyTop = pose.top - V3.HEIGHTS.wall * 0;
-      const headR = UNITS_PER_FOOT * 0.42;
-      const bodyH = pose.top - headR * 2;
+      const headR = UNITS_PER_FOOT * 0.42 * scale;
+      const bodyH = pose.top * scale - headR * 2;
       w(`p = capsule("${who}", (${x}, ${y}, ${M(lift + bodyH / 2)}), ` +
-        `${M(UNITS_PER_FOOT * 0.62)}, ${M(bodyH)}, ${rgbs})`);
+        `${M(UNITS_PER_FOOT * 0.62 * scale)}, ${M(bodyH)}, ${rgbs})`);
       w(`ball("${who}Head", (${x}, ${y}, ${M(lift + bodyH + headR)}), ` +
         `${M(headR)}, ${rgbs})`);
-      void bodyTop;
     }
   }
   if (!cast.length) w("# (nobody in this scene)");

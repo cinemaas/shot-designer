@@ -1,11 +1,12 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=5a428ade";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=5a428ade";
-import { EXTRA_SVG } from "./props.js?v=5a428ade";
-import { GAUGE } from "./track.js?v=5a428ade";
-import * as H from "./hcw.js?v=5a428ade";
+import { FXG } from "./assets.js?v=f5fff69f";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS, SKIN_TONES, HAIR_COLOURS,
+  } from "./catalog.js?v=f5fff69f";
+import { EXTRA_SVG } from "./props.js?v=f5fff69f";
+import { GAUGE } from "./track.js?v=f5fff69f";
+import * as H from "./hcw.js?v=f5fff69f";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -256,61 +257,88 @@ function drawCharacter(obj) {
  * Nothing else — no face, because from up here there isn't one. It's the
  * shape every good lighting diagram uses, and it holds up at any size.
  */
+/**
+ * The same person, from directly above.
+ *
+ * This is not a second piece of artwork. It reads the character's own data —
+ * their colour, their skin, their hair, which way they are facing — so the
+ * figure on the plan and the figure down the lens can never disagree about who
+ * somebody is or which way they are pointed. Change the hair in the editor and
+ * both change, because there is only one answer to look up.
+ *
+ * What it is not is a top-down render of the mesh: at plan zoom that would be
+ * a smudge. It is the same information drawn graphically — shoulders, the top
+ * of a head, hair, and a face that is only ever at the front.
+ */
 function drawPlanFigure(obj, color, female) {
   const g = el("g");
-  const across = female ? 11.4 : 13.4;   // half the shoulders
-  const deep = female ? 7.8 : 8.6;       // half of front to back
-  const headR = female ? 6.9 : 6.4;
+  const skin = SKIN_TONES[Math.max(0, Math.min(SKIN_TONES.length - 1,
+    H.getNum(obj, "skinTone", 3)))][1];
+  const hairStyle = H.get(obj, "hairStyle") || (female ? "ponytail" : "short");
+  const hairCol = (HAIR_COLOURS.find(([k]) => k === H.get(obj, "hairColour")) ||
+                   HAIR_COLOURS[1])[1];
+
+  const across = female ? 11.0 : 12.8;   // half the shoulders
+  const deep = female ? 7.4 : 8.2;       // half of front to back
+  const headR = female ? 6.6 : 6.9;
   const hx = 1.5;                        // where the head sits
+  const edge = shade(color, 0.55);
 
-  // Same language as the 3D: no black round anything, and hair doing the work
-  // of saying who somebody is. A line round every shape reads as a diagram of
-  // a person; a shape in their own colour reads as the person.
-  const edge = shade(color, 0.52);
-  const hair = shade(color, 0.62);
-
-  // Long hair first, behind everything — over the shoulders, which is exactly
-  // where it is and exactly what makes it read from across a room.
-  if (female) {
+  // Long hair goes down first, because from above it is behind and around the
+  // head and over the shoulders — and it is the thing that reads across a room.
+  if (hairStyle !== "short" && hairStyle !== "bald") {
+    const long = hairStyle === "long" || hairStyle === "medium";
     g.append(el("ellipse", {
-      cx: hx - headR * 0.6, cy: 0, rx: headR * 1.32, ry: headR * 1.68,
-      fill: hair, stroke: "none",
+      cx: hx - headR * (long ? 0.5 : 0.38), cy: 0,
+      rx: headR * (long ? 1.34 : 1.16), ry: headR * (long ? 1.62 : 1.30),
+      fill: hairCol, stroke: "none",
     }));
+    // A ponytail points backwards, which from above is the clearest statement
+    // of facing anybody could ask for.
+    if (hairStyle === "ponytail") {
+      g.append(el("ellipse", {
+        cx: hx - headR * 1.62, cy: 0, rx: headR * 0.62, ry: headR * 0.34,
+        fill: shade(hairCol, 0.9), stroke: "none",
+      }));
+    }
+    if (hairStyle === "bun") {
+      g.append(el("circle", { cx: hx - headR * 1.15, cy: 0, r: headR * 0.5,
+        fill: shade(hairCol, 1.12), stroke: "none" }));
+    }
   }
 
-  // Feet, just in front of the body, so which way somebody is pointed survives
-  // even when they are the size of a full stop.
+  // Feet, just in front of the body, so facing survives even at the size of a
+  // full stop.
   for (const s2 of [-1, 1]) {
     g.append(el("circle", {
-      cx: deep * 1.08, cy: s2 * across * 0.28, r: 3.7,
+      cx: deep * 1.06, cy: s2 * across * 0.3, r: 3.6,
       fill: shade(color, 0.5), stroke: "none",
     }));
   }
 
-  // Shoulders.
+  // Shoulders, in the character's own colour — this is the identification, and
+  // it is the largest thing on the mark for exactly that reason.
   g.append(el("ellipse", {
     cx: -1, cy: 0, rx: deep, ry: across,
     fill: color, stroke: edge, "stroke-width": 1.6,
   }));
 
-  // The head, seen from directly above — which means mostly hair, with a
-  // crescent of forehead at the front. That crescent is the cheapest facing
-  // cue there is: you know which way somebody faces without reading anything.
+  // The head: hair over the back and sides, face at the front. That is what
+  // the top of somebody's head actually looks like, and it settles which way
+  // they are pointed in one shape rather than in a legend.
   g.append(el("circle", {
-    cx: hx, cy: 0, r: headR, fill: hair, stroke: edge, "stroke-width": 1.4,
+    cx: hx, cy: 0, r: headR,
+    fill: hairStyle === "bald" ? skin : hairCol,
+    stroke: edge, "stroke-width": 1.3,
   }));
-  // The face is simply a smaller circle set forward on the head, which leaves
-  // hair round the back and sides and none at the front — which is what the
-  // top of somebody's head actually looks like, and settles which way they are
-  // pointed in one shape rather than in a legend.
-  const faceR = female ? headR * 0.72 : headR * 0.78;
+  const faceR = headR * (hairStyle === "bald" ? 0.95 : female ? 0.72 : 0.76);
   const fx = hx + headR - faceR;
-  g.append(el("circle", { cx: fx, cy: 0, r: faceR, fill: color, stroke: "none" }));
+  g.append(el("circle", { cx: fx, cy: 0, r: faceR, fill: skin, stroke: "none" }));
 
   // And a nose. Small enough not to be a snout, there enough to point.
   g.append(el("circle", {
-    cx: fx + faceR * 0.72, cy: 0, r: headR * 0.19,
-    fill: color, stroke: "none",
+    cx: fx + faceR * 0.70, cy: 0, r: headR * 0.18,
+    fill: shade(skin, 0.94), stroke: "none",
   }));
 
   return g;

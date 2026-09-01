@@ -90,6 +90,41 @@ export const KEY_TO_LABEL = Object.fromEntries(
 
 // The app's own eight, read out of Josh's scene files rather than guessed, in
 // the order colorIndex assigns them.
+// ---------------------------------------------------------------- people
+//
+// How somebody looks, which is a different question from which character they
+// are. The colour in CHARACTER_COLORS says *who*; these say what they look
+// like, and the two never touch — that separation is the whole reason a green
+// character does not have a green face.
+
+/**
+ * Skin, light through dark. Eight steps rather than a continuum, because a
+ * swatch you can point at beats a slider you have to hunt along, and because
+ * these want to be stable values a scene can be saved with.
+ *
+ * Chosen to sit evenly across the range rather than clustering at the pale end,
+ * which is the usual failure of a set like this.
+ */
+export const SKIN_TONES = [
+  ["Porcelain", "#f6ded0"], ["Fair", "#f0cdb4"], ["Light", "#e5b393"],
+  ["Olive", "#cf9a72"], ["Tan", "#b87c53"], ["Bronze", "#9d6844"],
+  ["Deep", "#7d5136"], ["Ebony", "#5d3a26"],
+];
+
+export const HAIR_COLOURS = [
+  ["Black", "#1f1a1a"], ["Dark Brown", "#3a2a20"], ["Brown", "#5a3d28"],
+  ["Light Brown", "#7d5836"], ["Blonde", "#c39a5c"], ["Auburn", "#7a3520"],
+  ["Red", "#9c4a24"], ["Grey", "#8e8b88"], ["White", "#d8d5d1"],
+];
+
+export const HAIR_STYLES = [
+  ["short", "Short"], ["ponytail", "Ponytail"], ["medium", "Medium"],
+  ["long", "Long"], ["bun", "Bun"], ["bald", "Bald"],
+];
+
+export const BUILDS = [["slight", "Slight"], ["average", "Average"],
+                       ["heavy", "Heavy"]];
+
 export const CHARACTER_COLORS = [
   ["Red", 0xfc837b], ["Blue", 0x94b8ff], ["Green", 0x76fa8a], ["Cyan", 0x7cffe0],
   ["Pink", 0xe69bf0], ["Yellow", 0xffff86], ["Gray", 0xbbbbbb], ["Extra", 0xffffff],
