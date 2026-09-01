@@ -222,6 +222,14 @@ of the shot.</dd>
 </dl>
 <p>Everything applies as you touch it. Nothing here moves anybody, turns them,
 or resets what they were doing.</p>
+<h4>What's in their hands</h4>
+<p><b>Holding</b> in the character panel, or <b>Holding…</b> on the right-click
+menu, and then which hand — left, right, or both.</p>
+<p>The thing is drawn in that hand's own frame, so it turns with the hand
+rather than floating near a wrist: a rifle points where the arm points, a mug
+stays upright in the palm. Something you look at puts a hand up in front of
+you; something long gets carried across the body, because hanging a rifle off a
+straight arm points it at the floor.</p>
 <h4>Arms, and what's in their hands</h4>
 <p>Right-click a person for <b>Arms</b>: at their sides, held out, out in
 front, folded, raised, or hands in pockets. The arms actually go there, and so
@@ -358,6 +366,10 @@ you're done.</dd>
     id: "kit",
     title: "The kit",
     body: `
+<p>A <b>prop</b> here means what it means on a set: something a person picks
+up. It is not a sofa. Furniture, vehicles, trees and grip each have their own
+heading, which is the difference between a menu you read and a menu you
+search.</p>
 <p><b>Add ▸</b> has characters, cameras, props, furniture, set pieces, lighting,
 grip, and camera support.</p>
 <p><b>Grip</b> is the part the original never had: C-stands, combo stands,

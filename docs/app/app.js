@@ -1,30 +1,32 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=64492301";
-import * as H from "./hcw.js?v=64492301";
-import * as R from "./render.js?v=64492301";
-import { FXG } from "./assets.js?v=64492301";
-import * as B from "./blocking.js?v=64492301";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=64492301";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=64492301";
-import { HANDBOOK } from "./handbook.js?v=64492301";
+import { BRAND, SLUG } from "./brand.js?v=c715b394";
+import * as H from "./hcw.js?v=c715b394";
+import * as R from "./render.js?v=c715b394";
+import { FXG } from "./assets.js?v=c715b394";
+import * as B from "./blocking.js?v=c715b394";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=c715b394";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=c715b394";
+import { HANDBOOK } from "./handbook.js?v=c715b394";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=64492301";
-import * as V3 from "./view3d.js?v=64492301";
-import * as HU from "./human.js?v=64492301";
-import { findWalls } from "./trace.js?v=64492301";
-import { blenderScript } from "./blender.js?v=64492301";
-import * as TR from "./track.js?v=64492301";
-import * as RIG from "./rigs.js?v=64492301";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=64492301";
-import { Library } from "./library.js?v=64492301";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=c715b394";
+import * as V3 from "./view3d.js?v=c715b394";
+import * as HU from "./human.js?v=c715b394";
+import { findWalls } from "./trace.js?v=c715b394";
+import { blenderScript } from "./blender.js?v=c715b394";
+import * as TR from "./track.js?v=c715b394";
+import * as RIG from "./rigs.js?v=c715b394";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=c715b394";
+import { Library } from "./library.js?v=c715b394";
 import {
-  PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
+  PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
+  LOOKED_AT, CARRIED,
+  LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=64492301";
+} from "./catalog.js?v=c715b394";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1163,6 +1165,25 @@ function renderCharPanel() {
     (v) => H.set(obj, "heightFt", +v.toFixed(2)));
 
   // ---- pose -------------------------------------------------------------
+  // ---- what they're carrying -------------------------------------------
+  head("Holding");
+  segment(Object.entries(HU.HAND_PROPS).map(([k, v]) => [k, v.label]),
+    (k) => (H.get(obj, "heldProp") || "") === k,
+    (k) => touch("holding", () => {
+      H.set(obj, "heldProp", k);
+      // Something to look at wants a hand up in front of you; something to
+      // carry doesn't. Only nudge the pose if it's still the default one.
+      if (k && !H.get(obj, "pose") && !H.get(obj, "armPose")) {
+        H.set(obj, "pose", CARRIED.has(k) ? "carry"
+                         : LOOKED_AT.has(k) ? "holding" : "relaxed");
+      }
+    }));
+  if (H.get(obj, "heldProp")) {
+    segment([["right", "Right hand"], ["left", "Left hand"], ["both", "Both"]],
+      (k) => (H.get(obj, "heldHand") || "right") === k,
+      (k) => touch("holding", () => H.set(obj, "heldHand", k)));
+  }
+
   head("Pose");
   segment(Object.entries(HU.POSES).map(([k, v]) => [k, v.label]),
     (k) => V3.poseOf(obj) === HU.POSES[k],
@@ -4732,17 +4753,25 @@ function addMenu(x, y, at) {
     { head: "Add New" },
     { label: "Add Character…", run: () => castMenu(x, y, at) },
     { label: "Add Camera…", run: () => addCamera(at) },
-    { label: "Add Prop…", run: () => palette("Prop", PROPS, "GenericProp", at, x, y) },
+    { label: "Add Prop…", run: () =>
+        palette("Prop — things people hold", PROPS, "GenericProp", at, x, y) },
     { label: "Add Furniture…", run: () =>
-        palette("Furniture", asList(byCategory("prop")), "GenericProp", at, x, y) },
+        palette("Furniture", [...FURNITURE, ...asList(byCategory("prop"))],
+                "GenericProp", at, x, y) },
     { label: "Add Set…", run: () => palette("Set", SETPIECES, "GenericSet", at, x, y) },
+    { label: "Add Vehicle…", run: () =>
+        palette("Vehicles", VEHICLES, "GenericProp", at, x, y) },
+    { label: "Add Outdoors…", run: () =>
+        palette("Outdoors", NATURE, "GenericProp", at, x, y) },
     { label: "Add Lighting…", run: () =>
         palette("Lighting", [...LIGHTING, ...asList(byCategory("light"))],
                 "GenericLight", at, x, y) },
     { label: "Add Grip…", run: () =>
         palette("Grip", asList(byCategory("grip")), "GenericSet", at, x, y) },
     { label: "Add Camera Support…", run: () =>
-        palette("Camera Support", asList(byCategory("camera")), "GenericProp", at, x, y) },
+        palette("Camera Support",
+                [...PRODUCTION, ...asList(byCategory("camera"))],
+                "GenericProp", at, x, y) },
     { label: "Lay Dolly Track…", run: () => layTrack(at) },
     { label: "Add Rigged Camera…", run: () => rigMenu(x, y, at) },
     { label: "Add Image Prop…", run: () => importImageProp(at) },
@@ -4755,7 +4784,8 @@ function addMenu(x, y, at) {
     { label: "Walk Arrow", run: () => startTool("walk") },
     { label: "Axis Line", run: () => startTool("axis") },
     "-",
-    { label: "More Objects…", run: () => palette("Other", EXTRAS, "GenericProp", at, x, y) },
+    { label: "More Objects…", run: () =>
+        palette("Other", [...ANNOTATION, ...EXTRAS], "GenericProp", at, x, y) },
   ]);
 }
 
@@ -5331,7 +5361,14 @@ function objectMenu(obj, x, y) {
           : byCategory("light").some((p) => p.key === key)
             ? [...LIGHTING, ...asList(byCategory("light"))]
           : tag === "GenericLight" ? [...LIGHTING, ...asList(byCategory("light"))]
-          : SETPIECES.some(([k]) => k === key) ? SETPIECES : PROPS;
+          : SETPIECES.some(([k]) => k === key) ? SETPIECES
+          : VEHICLES.some(([k]) => k === key) ? VEHICLES
+          : NATURE.some(([k]) => k === key) ? NATURE
+          : PRODUCTION.some(([k]) => k === key) ? PRODUCTION
+          : FURNITURE.some(([k]) => k === key)
+            ? [...FURNITURE, ...asList(byCategory("prop"))]
+          : ANNOTATION.some(([k]) => k === key) ? [...ANNOTATION, ...EXTRAS]
+          : PROPS;
         const list = mine;
         showPopover(x, y, [{ head: "Select Type" }, ...list.map(([key, label]) => ({
           label, thumb: thumbFor(key),
@@ -5468,6 +5505,7 @@ function setArmPose(obj, key) {
  */
 function setHeld(obj) {
   const items = Object.entries(V3.HAND_PROPS);
+  const hand = H.get(obj, "heldHand") || "right";
   showPopover(lastMenuAt.x, lastMenuAt.y, [
     { head: "In their hand" },
     ...items.map(([key, spec]) => ({
@@ -5479,17 +5517,21 @@ function setHeld(obj) {
           const o = byID(id);
           if (o?.tag !== "Character") continue;
           H.set(o, "heldProp", key);
-          // Something to look at wants a hand in front of you; something to
-          // carry doesn't. Only nudge the arms if they're still at default.
-          if (key && !H.get(o, "armPose")) {
-            H.set(o, "armPose",
-              ["PHONE", "LAPTOP", "PAPER", "BOOK", "CAMERA", "MUG", "GLASS"]
-                .includes(key) ? "front" : "down");
+          if (key && !H.get(o, "pose") && !H.get(o, "armPose")) {
+            H.set(o, "pose", CARRIED.has(key) ? "carry"
+                           : LOOKED_AT.has(key) ? "holding" : "relaxed");
           }
         }
         draw(); syncChrome();
-        toast(spec.label === "Nothing" ? "Empty handed" : "Holding a " + spec.label.toLowerCase());
+        toast(spec.label === "Nothing" ? "Empty handed"
+              : "Holding a " + spec.label.toLowerCase());
       },
+    })),
+    "-",
+    { head: "Which hand" },
+    ...[["right", "Right"], ["left", "Left"], ["both", "Both"]].map(([k, l]) => ({
+      label: l, tick: hand === k,
+      run: () => { mark("holding"); H.set(obj, "heldHand", k); draw(); syncChrome(); },
     })),
   ]);
 }

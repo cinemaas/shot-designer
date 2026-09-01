@@ -23,13 +23,13 @@
 // green face, and it is a mistake the data model here cannot express.
 
 import { UNITS_PER_FOOT, SKIN_TONES, HAIR_COLOURS, HAIR_STYLES,
-         BUILDS } from "./catalog.js?v=64492301";
-import { project } from "./view3d.js?v=64492301";
+         BUILDS, HAND_PROPS } from "./catalog.js?v=c715b394";
+import { project } from "./view3d.js?v=c715b394";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
 // Re-exported so anything drawing a person can reach them from here.
-export { SKIN_TONES, HAIR_COLOURS, HAIR_STYLES, BUILDS };
+export { SKIN_TONES, HAIR_COLOURS, HAIR_STYLES, BUILDS, HAND_PROPS };
 const M_PER_FT = 0.3048;
 
 // ---------------------------------------------------------------- appearance
@@ -842,14 +842,73 @@ function jointBall(ctx, fr, at, r, colour, sides = 8) {
 }
 
 /** A hand: a flattened mass with a thumb side, so it reads as a hand. */
-function hand(ctx, fr, m, colour) {
-  const stations = [
-    { p: [0, 0, 0], rx: m.wristR * 0.95, ry: m.wristR * 0.8 },
-    { p: [0, 0, -m.handL * 0.28], rx: m.wristR * 1.35, ry: m.wristR * 0.78 },
-    { p: [0, 0, -m.handL * 0.78], rx: m.wristR * 1.25, ry: m.wristR * 0.68 },
-    { p: [0, 0, -m.handL], rx: m.wristR * 0.7, ry: m.wristR * 0.42 },
-  ];
-  sweep(ctx, fr, stations, colour, { sides: 8 });
+/**
+ * A hand.
+ *
+ * It has a front and a back, which is the whole point: a flattened lump reads
+ * the same whichever way round it is, so a hand pointing at somebody looked
+ * exactly like a hand pointing away. The palm faces along this frame's forward
+ * axis and the fingers run down it, so pointing the hand is a matter of
+ * pointing the frame.
+ *
+ * The thumb is what makes that legible. Without one there is nothing to say
+ * which edge is which, and a hand with no thumb is a mitten.
+ */
+function hand(ctx, fr, m, colour, side) {
+  const L = m.handL, w = m.wristR;
+  sweep(ctx, fr, [
+    { p: [0, 0, 0], rx: w * 0.92, ry: w * 0.80 },
+    { p: [0, 0, -L * 0.26], rx: w * 1.34, ry: w * 0.74 },
+    { p: [0, 0, -L * 0.74], rx: w * 1.26, ry: w * 0.66 },
+    { p: [0, 0, -L], rx: w * 0.72, ry: w * 0.42 },
+  ], colour, { sides: 8 });
+
+  // The thumb, off the inside edge and swung forward across the palm.
+  const tx = -side * w * 1.15;
+  sweep(ctx, fr, [
+    { p: [w * 0.15, tx * 0.7, -L * 0.16], rx: w * 0.44, ry: w * 0.40 },
+    { p: [w * 0.42, tx, -L * 0.44], rx: w * 0.38, ry: w * 0.34 },
+    { p: [w * 0.58, tx * 0.92, -L * 0.62], rx: w * 0.24, ry: w * 0.22 },
+  ], colour, { sides: 6 });
+}
+
+/**
+ * Whatever they are carrying, in the hand that is carrying it.
+ *
+ * Drawn in the hand's own frame rather than worked out from where the hand
+ * ended up, so it turns with the hand: a rifle points where the arm points and
+ * a mug stays upright in the palm, without either of them needing to be told
+ * about the pose.
+ */
+function heldThing(ctx, fr, m, spec, colour) {
+  if (!spec || !spec.w) return;
+  const ft2 = (n) => n * UNITS_PER_FOOT;
+  const out = m.handL * (spec.out ?? 0.55);
+  // Along the hand, or sitting in the palm across it.
+  const box = spec.along
+    ? { len: ft2(spec.w), wide: ft2(spec.d), tall: ft2(spec.h) }
+    : { len: ft2(spec.d), wide: ft2(spec.w), tall: ft2(spec.h) };
+
+  const half = [box.len / 2, box.wide / 2, box.tall / 2];
+  const at = spec.along
+    ? [m.wristR * 0.5, 0, -out - half[0]]        // running away down the hand
+    : [m.wristR * 1.1, 0, -out];                 // held in front of the palm
+  const corner = (a, b, c) => spec.along
+    ? [at[0] + b * half[1], at[1] + c * half[2], at[2] + a * half[0]]
+    : [at[0] + c * half[2], at[1] + b * half[1], at[2] + a * half[0]];
+
+  const P = {};
+  for (const a of [-1, 1]) for (const b of [-1, 1]) for (const c of [-1, 1]) {
+    P[`${a}${b}${c}`] = apply(fr, corner(a, b, c));
+  }
+  const q = (s1, s2, s3, s4) => surface(ctx, [P[s1], P[s2], P[s3], P[s4]], colour,
+                                        { outward: apply(fr, at) });
+  q("-1-1-1", "-1-11", "-111", "-11-1");
+  q("1-1-1", "11-1", "111", "1-11");
+  q("-1-1-1", "1-1-1", "1-11", "-1-11");
+  q("-11-1", "-111", "111", "11-1");
+  q("-1-1-1", "-11-1", "11-1", "1-1-1");
+  q("-1-11", "1-11", "111", "-111");
 }
 
 /** A shoe: has a toe, which is what keeps a person's facing readable. */
@@ -871,6 +930,8 @@ function foot(ctx, fr, m, colour) {
 export const RELAXED = {
   torsoPitch: 0, headYaw: 0, headPitch: 0,
   armPitch: 0.05, armRoll: 0.11, elbow: 0.16,
+  // Which way the palm faces, on top of the default of facing the thigh.
+  handRoll: 0,
   hipPitch: 0, knee: 0.02, stance: 1,
 };
 
@@ -878,27 +939,30 @@ export const POSES = {
   relaxed: { label: "Relaxed", ...RELAXED },
   held_out: { label: "Arms Out", ...RELAXED, armRoll: 0.62, elbow: 0.10 },
 
-  // The rest are not guessed. Each one names where the hand has to end up — on
-  // the hip, across the chest, out in front — and the joint angles were solved
-  // for backwards from that, preferring the solution that does not have the
-  // arm screwed round its own axis to get there. Several sets of angles put a
-  // hand in the same place and only some of them look like a person.
+  // The rest are solved, not guessed. Each names where the hand has to end up —
+  // on the hip, across the chest, out in front — and the joint angles come from
+  // searching backwards for the set that puts it there, with a penalty on
+  // rolling the shoulder and on lifting the upper arm to reach something a bent
+  // elbow could reach. Several sets of angles put a hand in the same place and
+  // only some of them look like a person standing.
   //
-  // Every one of these lands its hand within a quarter of an inch of the mark,
-  // which is why they now read as the thing they are named after. Tuning them
-  // by eye is what had somebody pointing at the floor.
+  // Positive is forward. Every one lands within a quarter of an inch of its
+  // mark, bar pointing, which is nearly at full stretch.
   pockets: { label: "Hands In Pockets", ...RELAXED,
-             armPitch: -0.88, armRoll: 0.06, elbow: 1.28 },
+             armPitch: -0.47, armRoll: 0.06, elbow: 1.27 },
   hips: { label: "Hands On Hips", ...RELAXED,
-          armPitch: -0.67, armRoll: 0.13, elbow: 1.41 },
+          armPitch: -0.81, armRoll: 0.14, elbow: 1.38 },
   crossed: { label: "Arms Crossed", ...RELAXED,
-             armPitch: -1.63, armRoll: -1.06, elbow: 1.97 },
-  pointing: { label: "Pointing", ...RELAXED,
-              armPitch: -1.54, armRoll: -0.01, elbow: 0.02, asym: true },
+             armPitch: -0.55, armRoll: -1.05, elbow: 1.99 },
+  pointing: { label: "Pointing", ...RELAXED, handRoll: Math.PI / 2,
+              armPitch: 1.31, armRoll: 0, elbow: 0.47, asym: true },
   raised: { label: "Hand Raised", ...RELAXED,
-            armPitch: 2.35, armRoll: -0.20, elbow: 1.63, asym: true },
-  holding: { label: "Holding Something", ...RELAXED,
-             armPitch: -1.70, armRoll: -0.09, elbow: 1.52 },
+            armPitch: 2.18, armRoll: -0.20, elbow: 1.63, asym: true },
+  holding: { label: "Holding Something", ...RELAXED, handRoll: -Math.PI / 2,
+             armPitch: -0.28, armRoll: -0.02, elbow: 1.83 },
+  // Something long carried across the body, rather than pointed at the floor.
+  carry: { label: "Carrying", ...RELAXED, handRoll: -Math.PI / 2,
+           armPitch: -0.41, armRoll: 0.12, elbow: 1.63 },
   walking: { label: "Walking", ...RELAXED, armPitch: 0.5, elbow: 0.42,
              hipPitch: 0.38, knee: 0.34, stride: true },
 };
@@ -913,7 +977,7 @@ export const POSES = {
  */
 export function drawHuman(out, cam, p, h, {
   facing = 0, lift = 0, pose = RELAXED, seated = false, lying = false,
-  detail = 1,
+  detail = 1, held = null, heldSide = "right", heldColour = "#3d444b",
 } = {}) {
   const m = measures(h);
 
@@ -1071,9 +1135,12 @@ export function drawHuman(out, cam, p, h, {
     const armLen = m.shoulder - m.wrist;
     const shoulder = joint(torso,
       [m.chestDeep * 0.04, s * m.shoulderHalf * 0.80, collarZ - m.H * 0.030],
+      // Positive is forward, for both of these. The rig's own pitch runs the
+      // other way, and pose data that reads backwards is pose data somebody
+      // will get wrong — it is what had every bent elbow bending behind them.
       mul(rotRoll(s * (acts ? pose.armRoll : 0.10)),
-          rotPitch(pose.stride ? (i ? pose.armPitch : -pose.armPitch)
-                               : (acts ? pose.armPitch : 0.06))));
+          rotPitch(-(pose.stride ? (i ? pose.armPitch : -pose.armPitch)
+                                 : (acts ? pose.armPitch : 0.06)))));
 
     const upper = armLen * 0.47, lower = armLen * 0.53;
 
@@ -1084,7 +1151,7 @@ export function drawHuman(out, cam, p, h, {
     const bendA = Math.abs(acts ? pose.armPitch : 0.06) +
                   Math.abs(acts ? pose.armRoll : 0.10);
     if (bendA > 0.45) {
-      jointBall(ctx, shoulder, [0, 0, 0], m.upperArm * 0.98, h.top, S);
+      jointBall(ctx, shoulder, [0, 0, 0], m.upperArm * 0.86, h.top, S);
     }
     sweep(ctx, shoulder, [
       // Starts inside the torso, so the two never part company.
@@ -1100,11 +1167,11 @@ export function drawHuman(out, cam, p, h, {
 
     // The elbow is its own frame, so a bend is a bend rather than a crease.
     const elbow = joint(shoulder, [0, 0, -upper],
-                        rotPitch(acts ? pose.elbow : 0.16));
+                        rotPitch(-(acts ? pose.elbow : 0.16)));
     const skinArm = h.skin;
     // The elbow fills its own seam, and sits inside both runs while straight.
     if (Math.abs(acts ? pose.elbow : 0.16) > 0.45) {
-      jointBall(ctx, elbow, [0, 0, 0], m.upperArm * 0.82, h.top, S);
+      jointBall(ctx, elbow, [0, 0, 0], m.upperArm * 0.74, h.top, S);
     }
     const stop = lower * (1 - sleeve);              // where the sleeve ends
     sweep(ctx, elbow, [
@@ -1125,7 +1192,16 @@ export function drawHuman(out, cam, p, h, {
       { p: [0, 0, -lower], rx: m.wristR, ry: m.wristR * 0.9, colour: skinArm },
     ], skinArm, { sides: S, openLo: true });
 
-    hand(ctx, joint(elbow, [0, 0, -lower]), m, skinArm);
+    // The hand turns on the wrist, and the palm has to face somewhere: at
+    // rest it faces the thigh, pointing it faces down, carrying something it
+    // faces up. Without that the hand is the same lump whichever way round it
+    // is, which is why a pointing hand pointed the wrong way.
+    const wrist = joint(elbow, [0, 0, -lower],
+                        rotYaw(-s * Math.PI / 2 + (pose.handRoll || 0)));
+    hand(ctx, wrist, m, skinArm, s);
+    if (held && (heldSide === "both" || (heldSide === "left") === (s < 0))) {
+      heldThing(ctx, wrist, m, held, heldColour);
+    }
   }
 
   // ---- legs -------------------------------------------------------------
@@ -1196,8 +1272,8 @@ export function handAt(h, { facing = 0, pose = RELAXED, side = 1 } = {}) {
                                  [0, 0, 1]]);
   const shoulder = joint(joint(root, [0, 0, m.shoulder - m.H * 0.026]),
     [0, side * m.shoulderHalf * 0.82, 0],
-    mul(rotRoll(side * pose.armRoll), rotPitch(pose.armPitch)));
-  const elbow = joint(shoulder, [0, 0, -upper], rotPitch(pose.elbow));
+    mul(rotRoll(side * pose.armRoll), rotPitch(-pose.armPitch)));
+  const elbow = joint(shoulder, [0, 0, -upper], rotPitch(-pose.elbow));
   return apply(elbow, [0, 0, -lower]);
 }
 

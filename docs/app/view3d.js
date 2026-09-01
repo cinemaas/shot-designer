@@ -7,11 +7,13 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=64492301";
-import * as R from "./render.js?v=64492301";
-import * as HU from "./human.js?v=64492301";
-import { UNITS_PER_FOOT } from "./catalog.js?v=64492301";
-import { fieldOfView } from "./optics.js?v=64492301";
+import * as H from "./hcw.js?v=c715b394";
+import * as R from "./render.js?v=c715b394";
+import * as HU from "./human.js?v=c715b394";
+import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=c715b394";
+
+export { HAND_PROPS, LOOKED_AT };
+import { fieldOfView } from "./optics.js?v=c715b394";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -517,22 +519,6 @@ export const armPoseOf = (obj) =>
   (obj && ARM_POSES[H.get(obj, "armPose") || "down"]) || ARM_POSES.down;
 
 /** Things somebody can be holding, and roughly how big they are in feet. */
-export const HAND_PROPS = {
-  "": { label: "Nothing" },
-  PHONE: { label: "Phone", w: 0.25, d: 0.1, h: 0.5 },
-  BOTTLE: { label: "Bottle", w: 0.3, d: 0.3, h: 0.9 },
-  GLASS: { label: "Glass", w: 0.28, d: 0.28, h: 0.5 },
-  PAPER: { label: "Papers", w: 0.7, d: 0.05, h: 0.9 },
-  LAPTOP: { label: "Laptop", w: 1.1, d: 0.8, h: 0.15 },
-  GUN: { label: "Handgun", w: 0.9, d: 0.2, h: 0.45 },
-  RIFLE: { label: "Rifle", w: 3.2, d: 0.2, h: 0.4 },
-  TORCH: { label: "Torch", w: 0.9, d: 0.2, h: 0.2 },
-  BAG: { label: "Bag", w: 0.9, d: 0.5, h: 1.2 },
-  MUG: { label: "Mug", w: 0.35, d: 0.35, h: 0.4 },
-  BOOK: { label: "Book", w: 0.6, d: 0.15, h: 0.8 },
-  CAMERA: { label: "Stills camera", w: 0.5, d: 0.4, h: 0.35 },
-};
-
 export const heldOf = (obj) => (obj && HAND_PROPS[H.get(obj, "heldProp") || ""]) || null;
 
 /**
@@ -614,27 +600,18 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
   h.female = female;
 
   const pose = poseOf(who);
+  // Whatever they are carrying is handed to the body rather than placed after
+  // the fact, so it is drawn in the hand's own frame and turns with it. That
+  // is the difference between a rifle that points where the arm points and a
+  // rifle that floats near a wrist.
+  const held = posture.lying ? null : heldOf(who);
   HU.drawHuman(out, cam, p, h, {
     facing, lift, pose,
     seated: posture === POSTURES.sit,
     lying: !!posture.lying,
+    held: held && held.w ? held : null,
+    heldSide: (who && H.get(who, "heldHand")) || "right",
   });
-
-  // Anything in a hand goes where that hand actually ended up, which is the
-  // entire reason the arms are joints rather than decoration: a phone at
-  // somebody's side and a phone out in front of them are different shots.
-  const held = heldOf(who);
-  if (held && held.w && !posture.lying) {
-    const at = HU.handAt(h, { facing, pose, side: 1 });
-    part(out, cam, p, facing, {
-      fwd: (at[0] - p.x) * Math.cos(facing) + (at[1] - p.y) * Math.sin(facing)
-           + ft(held.w) * 0.3,
-      side: -(at[0] - p.x) * Math.sin(facing) + (at[1] - p.y) * Math.cos(facing),
-      len: ft(held.w), wide: ft(held.d),
-      z0: at[2] + lift - ft(held.h) / 2, z1: at[2] + lift + ft(held.h) / 2,
-      fill: "#3d444b", sides: 8, outline: false,
-    });
-  }
 }
 
 /**

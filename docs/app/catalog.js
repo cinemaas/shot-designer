@@ -1,22 +1,70 @@
 // Object palette, transcribed from the formats people actually shoot.
 // `fxg` names index the converted vector art in assets.js.
 
+// What "prop" means here is what it means on a set: something a person picks
+// up. It is not a sofa. Everything that was filed under props because it was
+// not a wall — the furniture, the vehicles, the trees, the grip — has moved to
+// a heading that describes it, which is the difference between a menu you read
+// and a menu you search.
 export const PROPS = [
+  ["CELLPHONE", "Cell Phone", "CellPhone"],
+  ["PAPER", "Paper", "Paper"],
+  ["LAPTOP", "Laptop", "Laptop"],
+  ["PLATE", "Plate", "Plate"],
+  ["BOTTLE", "Bottle", "Bottle"],
+  ["RIFLE", "Rifle", "Rifle"],
+  ["KEYBOARD", "Keyboard", "Keyboard"],
+];
+
+/**
+ * Things a person holds, with the size they actually are.
+ *
+ * `along` says the thing lies down the line of the hand rather than sitting in
+ * the palm — a rifle and a torch point where the arm points, a mug does not.
+ * `out` is how far past the wrist it sits, in hand-lengths.
+ */
+export const HAND_PROPS = {
+  "":       { label: "Nothing" },
+  CELLPHONE:{ label: "Phone", w: 0.24, d: 0.09, h: 0.50, out: 0.55 },
+  MUG:      { label: "Mug", w: 0.34, d: 0.34, h: 0.42, out: 0.55 },
+  GLASS:    { label: "Glass", w: 0.26, d: 0.26, h: 0.50, out: 0.55 },
+  BOTTLE:   { label: "Bottle", w: 0.28, d: 0.28, h: 0.95, out: 0.55 },
+  PAPER:    { label: "Papers", w: 0.70, d: 0.04, h: 0.92, out: 0.5 },
+  BOOK:     { label: "Book", w: 0.58, d: 0.14, h: 0.80, out: 0.5 },
+  LAPTOP:   { label: "Laptop", w: 1.10, d: 0.80, h: 0.14, out: 0.6 },
+  CAMERA:   { label: "Stills Camera", w: 0.50, d: 0.40, h: 0.34, out: 0.55 },
+  BAG:      { label: "Bag", w: 0.85, d: 0.45, h: 1.15, out: 0.75 },
+  CLIPBOARD:{ label: "Clipboard", w: 0.75, d: 0.06, h: 1.00, out: 0.5 },
+  RADIO:    { label: "Radio", w: 0.20, d: 0.14, h: 0.55, out: 0.5 },
+  GUN:      { label: "Handgun", w: 0.85, d: 0.16, h: 0.42, out: 0.35, along: true },
+  RIFLE:    { label: "Rifle", w: 3.20, d: 0.18, h: 0.38, out: 0.9, along: true },
+  TORCH:    { label: "Torch", w: 0.85, d: 0.18, h: 0.18, out: 0.45, along: true },
+  UMBRELLA: { label: "Umbrella", w: 0.16, d: 0.16, h: 2.60, out: 0.4 },
+  BOOMPOLE: { label: "Boom Pole", w: 6.00, d: 0.10, h: 0.10, out: 1.2, along: true },
+};
+
+/** Which of them want a hand up in front of you to be any use. */
+export const LOOKED_AT = new Set(
+  ["CELLPHONE", "LAPTOP", "PAPER", "BOOK", "CAMERA", "MUG", "GLASS",
+   "CLIPBOARD", "RADIO"]);
+
+/**
+ * And which are long enough that hanging them off a straight arm points them
+ * at the floor. These get carried across the body instead, which is both what
+ * people do and the only way a rifle reads as a rifle rather than as a stick.
+ */
+export const CARRIED = new Set(["RIFLE", "BOOMPOLE", "UMBRELLA", "TORCH"]);
+
+export const FURNITURE = [
   ["SQUARETABLE", "Square Table", "SquareTable"],
   ["OVALTABLE", "Oval Table", "OvalTable"],
   ["ROUNDTABLE", "Round Table", "RoundTable"],
   ["CHAIR", "Chair", "Chair"],
   ["SOFA", "Sofa", "Sofa"],
-  ["PAPER", "Paper", "Paper"],
-  ["CELLPHONE", "Cell Phone", "CellPhone"],
-  ["LAPTOP", "Laptop", "Laptop"],
-  ["KEYBOARD", "Keyboard", "Keyboard"],
   ["MONITOR", "Monitor", "Monitor"],
-  ["PLATE", "Plate", "Plate"],
-  ["BOTTLE", "Bottle", "Bottle"],
-  ["RIFLE", "Rifle", "Rifle"],
-  ["BUSH", "Bush", "Bush"],
-  ["TREE", "Tree", "Tree"],
+];
+
+export const VEHICLES = [
   ["MINIBUS", "Mini Bus", "MiniBus"],
   ["SEMITRUCK", "Semi Truck", "SemiTruck"],
   ["TRUCKTRAILER", "Truck Trailer", "TruckTrailer"],
@@ -25,12 +73,28 @@ export const PROPS = [
   ["SMALLPLANE", "Small Plane", "SmallPlane"],
   ["FIGHTERJET", "Fighter Jet", "FighterJet"],
   ["COMMERCIALJET", "Commercial Jet", "CommercialJet"],
-  ["STRAIGHTARROW", "Straight Arrow", "StraightArrow"],
-  ["CURVEDARROW", "Curved Arrow", "CurvedArrow"],
+  ["CAR", "Car", "Car"],
+  ["CARINTERIOR", "Car Interior", "CarInterior"],
+];
+
+export const NATURE = [
+  ["BUSH", "Bush", "Bush"],
+  ["TREE", "Tree", "Tree"],
+  ["DOG", "Dog", "Dog"],
+  ["HORSE", "Horse", "Horse"],
+  ["SUN", "Sun", "Sun"],
+];
+
+export const PRODUCTION = [
   ["CRANE", "Crane", "Crane"],
   ["BOOMMIC", "Boom Microphone", "BoomMicrophone"],
   ["MONITORVILLAGE", "Monitor Village", "MonitorVillage"],
   ["EQUIPMENT", "Equipment", "Equipment"],
+];
+
+export const ANNOTATION = [
+  ["STRAIGHTARROW", "Straight Arrow", "StraightArrow"],
+  ["CURVEDARROW", "Curved Arrow", "CurvedArrow"],
 ];
 
 export const LIGHTING = [
@@ -71,22 +135,18 @@ export const SETPIECES = [
 
 // Vector art shipped with the app but absent from its 1.80.8 palette.
 export const EXTRAS = [
-  ["CAR", "Car", "Car"],
-  ["CARINTERIOR", "Car Interior", "CarInterior"],
-  ["DOG", "Dog", "Dog"],
-  ["HORSE", "Horse", "Horse"],
   ["GUN", "Gun", "Gun"],
-  ["SUN", "Sun", "Sun"],
   ["GENERICMOVIELIGHT", "Generic Movie Light", "GenericMovieLight"],
   ["LED", "LED", "LED"],
 ];
 
-export const KEY_TO_FXG = Object.fromEntries(
-  [...PROPS, ...LIGHTING, ...SETPIECES, ...EXTRAS].map(([k, , f]) => [k, f])
-);
-export const KEY_TO_LABEL = Object.fromEntries(
-  [...PROPS, ...LIGHTING, ...SETPIECES, ...EXTRAS].map(([k, l]) => [k, l])
-);
+/** Everything with artwork, whatever heading it now sits under. */
+export const ALL_KIT = [...PROPS, ...FURNITURE, ...VEHICLES, ...NATURE,
+                        ...PRODUCTION, ...ANNOTATION, ...LIGHTING, ...SETPIECES,
+                        ...EXTRAS];
+
+export const KEY_TO_FXG = Object.fromEntries(ALL_KIT.map(([k, , f]) => [k, f]));
+export const KEY_TO_LABEL = Object.fromEntries(ALL_KIT.map(([k, l]) => [k, l]));
 
 // The app's own eight, read out of Josh's scene files rather than guessed, in
 // the order colorIndex assigns them.
