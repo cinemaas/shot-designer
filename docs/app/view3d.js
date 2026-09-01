@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=fafa41d3";
-import * as R from "./render.js?v=fafa41d3";
-import { UNITS_PER_FOOT } from "./catalog.js?v=fafa41d3";
-import { fieldOfView } from "./optics.js?v=fafa41d3";
+import * as H from "./hcw.js?v=870760ca";
+import * as R from "./render.js?v=870760ca";
+import { UNITS_PER_FOOT } from "./catalog.js?v=870760ca";
+import { fieldOfView } from "./optics.js?v=870760ca";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -592,10 +592,12 @@ function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
   }
 
   // ---- mouth ------------------------------------------------------------
-  // A mouth big enough to survive being small on screen: a soft shape rather
-  // than a hairline, with a hint of a smile to it.
-  blob(0, -r * 0.33, r * 0.19, r * 0.085, tone(colour, 0.42), 0, 1.04, 16);
-  blob(0, -r * 0.29, r * 0.13, r * 0.035, tone(colour, 0.62), 0, 1.045, 12);
+  // A nose: barely there, just enough that a face has something between the
+  // eyes and the mouth.
+  blob(0, -r * 0.1, r * 0.045, r * 0.075, tone(colour, 0.78), 0, 1.04, 10);
+
+  // And a closed mouth — a line, not an opening.
+  blob(0, -r * 0.33, r * 0.16, r * 0.028, tone(colour, 0.46), 0, 1.042, 12);
 }
 
 /** One outline round a head, rather than one round each slice of it. */
@@ -618,7 +620,7 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
                                               female = false, lift = 0 }) {
   z0 += lift; z1 += lift;
   const r = ft(0.35);
-  const crown = tone(colour, 0.62);
+  const crown = colour;
 
   // A ball, in three slices — a jaw that narrows in, the width of the head at
   // the cheekbones, and a crown that rounds off. One tapered tube with a lid
