@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=1edf8033";
-import * as H from "./hcw.js?v=1edf8033";
-import * as R from "./render.js?v=1edf8033";
-import { FXG } from "./assets.js?v=1edf8033";
-import * as B from "./blocking.js?v=1edf8033";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=1edf8033";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1edf8033";
-import { HANDBOOK } from "./handbook.js?v=1edf8033";
+import { BRAND, SLUG } from "./brand.js?v=33586abd";
+import * as H from "./hcw.js?v=33586abd";
+import * as R from "./render.js?v=33586abd";
+import { FXG } from "./assets.js?v=33586abd";
+import * as B from "./blocking.js?v=33586abd";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=33586abd";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=33586abd";
+import { HANDBOOK } from "./handbook.js?v=33586abd";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=1edf8033";
-import * as V3 from "./view3d.js?v=1edf8033";
-import * as HU from "./human.js?v=1edf8033";
-import { findWalls } from "./trace.js?v=1edf8033";
-import { blenderScript } from "./blender.js?v=1edf8033";
-import * as TR from "./track.js?v=1edf8033";
-import * as RIG from "./rigs.js?v=1edf8033";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=1edf8033";
-import { Library } from "./library.js?v=1edf8033";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=33586abd";
+import * as V3 from "./view3d.js?v=33586abd";
+import * as HU from "./human.js?v=33586abd";
+import { findWalls } from "./trace.js?v=33586abd";
+import { blenderScript } from "./blender.js?v=33586abd";
+import * as TR from "./track.js?v=33586abd";
+import * as RIG from "./rigs.js?v=33586abd";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=33586abd";
+import { Library } from "./library.js?v=33586abd";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=1edf8033";
+} from "./catalog.js?v=33586abd";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -200,13 +200,20 @@ function movePoints(marks, bends) {
 }
 
 /**
- * Where a camera is sitting on its rig, if it is on one.
+ * Where a thing sits on the thing it rides.
  *
- * A jib is an angle round the pivot and a slider is a distance along it, and
- * either way it is one number — which is the number a rigged camera's move is
- * actually made of. Its x and y are not its own: they belong to the dolly.
+ * A dolly rides track and a camera rides an arm, and neither of them is free to
+ * be anywhere: the dolly is a distance along the rails, the camera is an angle
+ * round the pivot or an offset down a slider. In every case it is one number,
+ * and that number — not an x and a y — is what a move on either of them is
+ * actually made of.
+ *
+ * Which is also why it is worth storing rather than deriving. Positions kept as
+ * points on the floor come adrift the moment the track is re-laid; kept as how
+ * far along the run they are, they stay where they were meant to be.
  */
 function armSeatOf(o) {
+  if (RIG.ridesTrack(o)) return H.getNum(o, "snapPercent", 0);
   if (o.tag !== "Camera") return null;
   const rig = byID(RIG.rigParentID(o));
   if (!rig) return null;
@@ -225,9 +232,47 @@ function seatCamera(cam, arm) {
   else if (spec?.travel) H.set(cam, "rigSlide", Math.max(-0.5, Math.min(0.5, arm)));
 }
 
+/**
+ * Everything a mark records, as things stand right now.
+ *
+ * A single mark is not a move, so it is not written — which means the first
+ * position you tag has to be remembered somewhere until a second one turns up
+ * to make a move out of it. Without that, tagging position 1, sliding the
+ * dolly and tagging position 3 gives you two marks in the same place: the
+ * anchor gets filled in from wherever the dolly has ended up rather than from
+ * where it was when you said "one".
+ */
+function snapshotOf(o) {
+  return {
+    x: H.getNum(o, "x"), y: H.getNum(o, "y"),
+    a: R.hasRotator(o) ? R.angleOf(o) : 0,
+    h: o.tag === "Camera" ? lensFtOf(o) : null,
+    tilt: o.tag === "Camera" ? V3.tiltOf(o) : null,
+    arm: armSeatOf(o),
+  };
+}
+
+/** How far along its track a dolly stands, in feet from the near end. */
+function feetAlong(rig, percent) {
+  const track = byID(H.get(rig, "snapPath"));
+  if (!track) return null;
+  const pts = R.pointsOf(track);
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  return (total * percent) / UNITS_PER_FOOT;
+}
+
 function writeMarks(o, list) {
   const clean = [...list].sort((p, q) => p.slice - q.slice);
-  H.set(o, "posMarks", clean.length < 2 ? "" :
+  // A single mark is kept, even though one position is not yet a move. Tagging
+  // position 1, sliding the dolly and tagging position 3 is the obvious way to
+  // build one, and throwing the first away meant the second had nothing to
+  // anchor to but wherever the dolly had since ended up — so both positions
+  // came out in the same place. Everything downstream already asks for two
+  // before it treats it as a move.
+  H.set(o, "posMarks", clean.length < 1 ? "" :
     clean.map((m) => `${m.slice}:${round(m.x)},${round(m.y)},${(m.a || 0).toFixed(4)}` +
       (m.h != null || m.tilt != null || m.arm != null
         ? `,${(m.h ?? 0).toFixed(2)},${(m.tilt ?? 0).toFixed(4)}` : "") +
@@ -339,14 +384,12 @@ function parkMarked(slice) {
       if (pose.h != null) H.set(o, "lensHeight", +pose.h.toFixed(3));
       if (pose.tilt != null) H.set(o, "tiltAngle", +(pose.tilt * 180 / Math.PI).toFixed(2));
     }
-    // A dolly that has been moved to a mark has to end up on its rails: the
-    // mark says where along the track it is, and the track says the rest.
-    if (RIG.ridesTrack(o)) {
-      const track = byID(H.get(o, "snapPath"));
-      if (track) {
-        H.set(o, "snapPercent",
-              RIG.percentOnTrack(R.pointsOf(track), { x: pose.x, y: pose.y }));
-      }
+    // A dolly that has been moved to a mark has to end up on its rails. The
+    // mark says how far along the run it is and the track says the rest, so
+    // re-laying the track moves the positions with it rather than stranding
+    // them where the old rails used to be.
+    if (RIG.ridesTrack(o) && pose.arm != null) {
+      H.set(o, "snapPercent", Math.max(0, Math.min(1, pose.arm)));
     }
   }
 }
@@ -395,7 +438,11 @@ function railed(rig, pose, t) {
 
   const marks = marksOf(rig);
   const pct = marks.map((m) => ({
-    slice: m.slice, p: RIG.percentOnTrack(pts, { x: m.x, y: m.y }),
+    slice: m.slice,
+    // The stored distance along the run if there is one, and the nearest point
+    // on the rails if the mark predates it.
+    p: m.arm != null ? Math.max(0, Math.min(1, m.arm))
+                     : RIG.percentOnTrack(pts, { x: m.x, y: m.y }),
   }));
   const slice = t + 1;
   let p = pct[0].p;
@@ -435,14 +482,7 @@ function slicePositions() {
   for (const o of objects()) {
     const marks = marksOf(o);
     if (marks.length < 2) continue;
-    if (!markHome.has(idOf(o)))
-      markHome.set(idOf(o), {
-        x: H.getNum(o, "x"), y: H.getNum(o, "y"),
-        a: R.hasRotator(o) ? R.angleOf(o) : 0,
-        h: o.tag === "Camera" ? lensFtOf(o) : null,
-        tilt: o.tag === "Camera" ? V3.tiltOf(o) : null,
-        arm: armSeatOf(o),
-      });
+    if (!markHome.has(idOf(o))) markHome.set(idOf(o), snapshotOf(o));
     moves.set(idOf(o), poseAt(marks, t, bendsOf(o)));
   }
 
@@ -4590,7 +4630,9 @@ function syncChrome() {
   const one = S.sel.size === 1 ? byID([...S.sel][0]) : null;
   const positionable = one && (RIG.isRig(one) || RIG.ridesTrack(one)
     || RIG.rigParentID(one) || one.tag === "Camera") ? one : null;
-  renderTrackPanel(isBuiltTrack(one) ? one : null, positionable);
+  const ridersTrack = one && RIG.ridesTrack(one)
+    ? byID(H.get(one, "snapPath")) : null;
+  renderTrackPanel(isBuiltTrack(one) ? one : (ridersTrack || null), positionable);
 
   const banner = $("#toolbanner");
   banner.hidden = !S.tool;
@@ -4751,6 +4793,53 @@ function renderTrackPanel(t, rider) {
   panel.hidden = false;
   panel.replaceChildren();
 
+  // Where the dolly stands at each beat, in feet along the run — because that
+  // is the number you say out loud on the day, not a coordinate.
+  const dolly = RIG.ridesTrack(rider) ? rider
+    : (t && objects().find(
+        (o) => RIG.ridesTrack(o) && H.get(o, "snapPath") === idOf(t))) || null;
+  if (dolly) {
+    const head = document.createElement("b");
+    head.textContent = "Dolly positions";
+
+    const marks = marksOf(dolly);
+    const here = feetAlong(dolly, H.getNum(dolly, "snapPercent", 0));
+    const tally = document.createElement("span");
+    tally.className = "tally";
+    tally.textContent = marks.length >= 2
+      ? marks.map((m) => `${m.slice}: ${(feetAlong(dolly, m.arm ?? 0) ?? 0).toFixed(1)}ft`)
+             .join("   ") + `   ·   now at ${here.toFixed(1)}ft`
+      : `At ${here.toFixed(1)}ft along the run — slide it and tag a position`;
+
+    const row = document.createElement("div");
+    row.className = "pieces";
+    for (let n = 1; n <= Math.max(timeSlices().length, 2); n++) {
+      const has = marks.some((m) => m.slice === n);
+      const b = document.createElement("button");
+      b.textContent = String(n);
+      b.className = has ? "" : "drop";
+      b.title = has ? `Position ${n} — click to move it here`
+                    : `Set position ${n} where the dolly stands`;
+      b.onclick = () => {
+        mark("dolly position");
+        ensureSlice(n);
+        setMark(dolly, n);
+        S.slice = n - 1;
+        draw(); syncChrome();
+        toast(`Position ${n} at ${(feetAlong(dolly, H.getNum(dolly, "snapPercent", 0)) ?? 0).toFixed(1)}ft`);
+      };
+      row.append(b);
+    }
+    if (marks.length >= 2) {
+      const clear = document.createElement("button");
+      clear.textContent = "Clear move";
+      clear.className = "drop";
+      clear.onclick = () => dropMove(dolly);
+      row.append(clear);
+    }
+    panel.append(head, tally, row);
+  }
+
   if (t) {
     const head = document.createElement("b");
     head.textContent = "Dolly track";
@@ -4776,7 +4865,7 @@ function renderTrackPanel(t, rider) {
     panel.append(head, list, row);
   }
 
-  if (rider) {
+  if (rider && rider !== dolly) {
     const head = document.createElement("b");
     head.textContent = RIG.rigParentID(rider) ? "Camera on the arm"
       : RIG.rigSpec(rider)?.label || "Camera";
@@ -5717,15 +5806,25 @@ function setTilt(obj, which) {
  * and the next position is one you drag it to on the next slice.
  */
 function addMove(obj) {
+  // A dolly cannot go anywhere without rails, so asking for a move before
+  // there is any track is really asking to lay some. Say so, and lay it.
+  if (RIG.isRig(obj) && RIG.rigSpec(obj)?.ride && !RIG.ridesTrack(obj)) {
+    return sheet({
+      title: "This dolly has no track",
+      sub: "A dolly only goes where the track goes, so the track comes first. " +
+           "Lay a run and its positions become points along it — which is also " +
+           "what the grip department needs to hear.",
+      okLabel: "Lay track from here",
+      onOK: () => {
+        layTrackFrom(obj);
+        toast("Track laid — add pieces in the panel, then set the positions");
+      },
+    });
+  }
   const marks = marksOf(obj);
   mark("move");
   if (marks.length < 2) {
-    markHome.set(idOf(obj), {
-      x: H.getNum(obj, "x"), y: H.getNum(obj, "y"),
-      a: R.hasRotator(obj) ? R.angleOf(obj) : 0,
-      h: obj.tag === "Camera" ? lensFtOf(obj) : null,
-      tilt: obj.tag === "Camera" ? V3.tiltOf(obj) : null,
-    });
+    markHome.set(idOf(obj), snapshotOf(obj));
     ensureSlice(2);
     setMark(obj, 2);                       // starts on top of position 1
     S.slice = 1;
@@ -7836,4 +7935,4 @@ async function openShared(shareId) {
 
 // Exposed for quick console poking while iterating.
 loadCast();
-window.SD = { S, H, R, blenderForScene, snapToWall, reseatWallKit, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };
+window.SD = { S, H, R, blenderForScene, syncChrome, snapToWall, reseatWallKit, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };

@@ -412,12 +412,18 @@ the sweep it can reach. A Fisher Jib 21 is 5'10", which is shorter than most
 people draw it. <b>Arm Reach…</b> sets it to something else for a 23.</dd>
 </dl>
 <h4>Moving a dolly, and moving the camera on it</h4>
-<p>These are two separate moves and you set them separately.</p>
+<p>Track first. A dolly only goes where the track goes, so ask for a move
+before there is any and it offers to lay some — and once it is down you build
+the run out of real pieces in the panel: 4, 8 and 10 foot straights, 45s and
+90s. The tally is what you would ask the key grip for.</p>
+<p>Then the two moves, which you set separately.</p>
 <dl>
-<dt>The dolly</dt><dd><b>Add a Move…</b> on the base. Position 1 is where it
-already stands; run it to where it lands next and pin that. On track it stays
-on the rails the whole way — what runs between the marks is how far along the
-track it is, so it takes a corner rather than cutting across it.</dd>
+<dt>The dolly</dt><dd>Select it and the panel shows <b>Dolly positions</b>:
+where it stands at each beat, in feet along the run, because that is the number
+you say out loud on the day. Slide it to where you want it and press the beat
+number. It stays on the rails the whole way — what runs between two marks is
+how far along the track it is, so it takes a corner rather than cutting across
+it, and re-laying the track carries the positions with it.</dd>
 <dt>The camera on it</dt><dd><b>Add a Swing / Rise…</b> on the camera. Its
 positions are not places on the floor — that is the dolly's business. They are
 where it sits on the arm, how high the lens is and how far it is tilted. So a

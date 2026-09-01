@@ -23,8 +23,8 @@
 // green face, and it is a mistake the data model here cannot express.
 
 import { UNITS_PER_FOOT, SKIN_TONES, HAIR_COLOURS, HAIR_STYLES,
-         BUILDS, HAND_PROPS } from "./catalog.js?v=1edf8033";
-import { project } from "./view3d.js?v=1edf8033";
+         BUILDS, HAND_PROPS } from "./catalog.js?v=33586abd";
+import { project } from "./view3d.js?v=33586abd";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
