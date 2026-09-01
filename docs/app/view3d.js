@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=4f894a9f";
-import * as R from "./render.js?v=4f894a9f";
-import { UNITS_PER_FOOT } from "./catalog.js?v=4f894a9f";
-import { fieldOfView } from "./optics.js?v=4f894a9f";
+import * as H from "./hcw.js?v=fe610ba4";
+import * as R from "./render.js?v=fe610ba4";
+import { UNITS_PER_FOOT } from "./catalog.js?v=fe610ba4";
+import { fieldOfView } from "./optics.js?v=fe610ba4";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -506,57 +506,87 @@ const DARK = "#2b2b2b";
  * `up` lays the face on the top of the head instead of the front, which is
  * where it belongs on somebody flat on their back.
  */
+/**
+ * A face, built on the head rather than stuck to it.
+ *
+ * Every feature is a small shape laid on the sphere itself: for a point that
+ * sits `u` across the face and `v` up it, how far forward the surface is at
+ * that point is what a sphere says it is, so an eye near the edge of a face
+ * wraps round it the way it should instead of floating flat in front. That,
+ * more than any amount of detail, is what stops a face looking pasted on.
+ *
+ * Whites, irises and a catchlight; brows; a soft mouth; and hair with a
+ * parting rather than a helmet. All of it flat-shaded to match the bodies —
+ * no strokes anywhere.
+ */
 function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
-  // A face the way the bodies are done: smooth shapes, no strokes, nothing
-  // outlined. Hair as a soft cap over the back and top of the head, and two
-  // eyes — large and simple, which is what makes a face read at this size
-  // without turning into a diagram of one.
   const cs = Math.cos(facing), sn = Math.sin(facing);
   const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
-  const facingCam = Math.cos(facing - toCam);
+  const straightOn = Math.cos(facing - toCam);
 
-  // Hair. Always drawn, because the back of a head is a shape you should be
-  // able to recognise from behind.
-  const hair = tone(colour, 0.66);
+  /** A point on the head's surface, u across and v up from the middle. */
+  const on = (u, v, out2 = 1.012) => {
+    const d = Math.sqrt(Math.max(0.0001, r * r - u * u - v * v)) * out2;
+    return project(cam,
+      p.x + (fwd + d) * cs - u * sn,
+      p.y + (fwd + d) * sn + u * cs,
+      z + v);
+  };
+
+  /** A blob laid on that surface: an ellipse, tilted if you like. */
+  const blob = (cu, cv, ru, rv, fill, tilt = 0, lift = 1.012, n = 14) => {
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const x = Math.cos(a) * ru, y = Math.sin(a) * rv;
+      pts.push(on(cu + x * Math.cos(tilt) - y * Math.sin(tilt),
+                  cv + x * Math.sin(tilt) + y * Math.cos(tilt), lift));
+    }
+    if (pts.some((q) => !q)) return;
+    out.push({ pts, fill, stroke: fill, width: 1,
+               depth: pts.reduce((t, q) => t + q.depth, 0) / pts.length
+                      - 0.1 - (lift - 1) * 8 });
+  };
+
+  // ---- hair -------------------------------------------------------------
+  // Over the back and the top, dipping to a fringe at the front on one side.
+  // Always drawn: the back of a head is a shape you should know from behind.
+  const hair = tone(colour, 0.62);
   const arc = [];
-  for (let i = 0; i <= 11; i++) {
-    const a = Math.PI * 0.44 + (i / 11) * Math.PI * 1.12;
-    arc.push([Math.cos(a), Math.sin(a)]);
+  for (let i = 0; i <= 13; i++) {
+    const a = Math.PI * 0.52 + (i / 13) * Math.PI * 0.96;
+    arc.push(a);
   }
-  const ring = (t, w) => arc.map(([cx, sy]) => {
-    const f = fwd + cx * r * w, s2 = sy * r * 0.95 * w;
+  const ring = (t, w) => arc.map((a) => {
+    const f = fwd + Math.cos(a) * r * w, s2 = Math.sin(a) * r * 0.95 * w;
     return project(cam, p.x + f * cs - s2 * sn, p.y + f * sn + s2 * cs, z + t);
   });
-  const lo = ring(-r * 0.52, 0.99), hi = ring(r * 0.5, 0.8);
+  const lo = ring(-r * 0.2, 0.995), hi = ring(r * 0.56, 0.74);
   for (let i = 0; i < arc.length - 1; i++) {
     const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
     if (q.some((v) => !v)) continue;
     out.push({ pts: q, fill: hair, stroke: hair, width: 1,
-               depth: q.reduce((a, v) => a + v.depth, 0) / 4 - 0.05 });
+               depth: q.reduce((t, v) => t + v.depth, 0) / 4 - 0.04 });
+  }
+  // A fringe across the brow, swept to one side — the thing that stops hair
+  // reading as a swimming cap.
+  blob(-r * 0.1, r * 0.58, r * 0.5, r * 0.13, hair, -0.14, 1.008, 16);
+
+  if (!up && straightOn < 0.16) return;      // nothing on the back of a head
+
+  // ---- eyes -------------------------------------------------------------
+  const U = r * 0.35, V = r * 0.03;
+  for (const s2 of [-1, 1]) {
+    blob(s2 * U, V + r * 0.25, r * 0.16, r * 0.05, tone(colour, 0.5),
+         s2 * 0.14);                                                        // brow
+    blob(s2 * U, V, r * 0.165, r * 0.13, "#fbfcfd", s2 * 0.06);              // white
+    blob(s2 * U, V - r * 0.012, r * 0.085, r * 0.095, "#2a2f36", 0, 1.02);   // iris
+    blob(s2 * U + r * 0.045, V + r * 0.05, r * 0.03, r * 0.032,
+         "#ffffff", 0, 1.03);                                                // catchlight
   }
 
-  if (up ? false : facingCam < 0.15) return;      // no eyes on the back of a head
-
-  // Eyes, laid on the curve of the face so they sit on it rather than float.
-  const eye = (side) => {
-    const pts = [];
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      // an almond: wider than it is tall, tilted a little
-      const u = Math.cos(a) * r * 0.17, v = Math.sin(a) * r * 0.2;
-      const across = side * r * 0.38 + u;
-      const up2 = r * 0.04 + v;
-      const d = Math.sqrt(Math.max(0, 1 - (across / (r * 1.02)) ** 2)) * r * 0.94;
-      pts.push(project(cam,
-        p.x + (fwd + d) * cs - across * sn,
-        p.y + (fwd + d) * sn + across * cs,
-        z + up2));
-    }
-    if (pts.some((v) => !v)) return;
-    out.push({ pts, fill: "#26292c", stroke: "#26292c", width: 1,
-               depth: pts.reduce((a, v) => a + v.depth, 0) / pts.length - 0.14 });
-  };
-  eye(-1); eye(1);
+  // ---- mouth ------------------------------------------------------------
+  blob(0, -r * 0.34, r * 0.13, r * 0.05, tone(colour, 0.5), 0, 1.014);
 }
 
 /** One outline round a head, rather than one round each slice of it. */
@@ -602,9 +632,12 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
   // difference the plan uses.
   if (female) slice(0.46, 0.94, 1.05, 0.92, crown, 1.06, r * 0.18);
 
-  faceOn(out, cam, p, facing, up
-    ? { at: fwd, z: z1, r: r * 0.9, up: true, colour }
-    : { at: fwd + r, z: (z0 + z1) / 2, r: r * 0.9, colour });
+  // The face works out the curve of the head for itself, so it wants the
+  // centre of the head — hand it the front and every feature ends up a whole
+  // head's width out in front, floating.
+  faceOn(out, cam, p, facing, {
+    at: fwd, z: z0 + (z1 - z0) * 0.55, r: r * 0.96, up, colour,
+  });
 }
 
 
