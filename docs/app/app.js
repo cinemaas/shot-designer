@@ -1,27 +1,27 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=fe610ba4";
-import * as H from "./hcw.js?v=fe610ba4";
-import * as R from "./render.js?v=fe610ba4";
-import { FXG } from "./assets.js?v=fe610ba4";
-import * as B from "./blocking.js?v=fe610ba4";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=fe610ba4";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=fe610ba4";
-import { HANDBOOK } from "./handbook.js?v=fe610ba4";
+import { BRAND, SLUG } from "./brand.js?v=fafa41d3";
+import * as H from "./hcw.js?v=fafa41d3";
+import * as R from "./render.js?v=fafa41d3";
+import { FXG } from "./assets.js?v=fafa41d3";
+import * as B from "./blocking.js?v=fafa41d3";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=fafa41d3";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=fafa41d3";
+import { HANDBOOK } from "./handbook.js?v=fafa41d3";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=fe610ba4";
-import * as V3 from "./view3d.js?v=fe610ba4";
-import * as TR from "./track.js?v=fe610ba4";
-import * as RIG from "./rigs.js?v=fe610ba4";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=fe610ba4";
-import { Library } from "./library.js?v=fe610ba4";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=fafa41d3";
+import * as V3 from "./view3d.js?v=fafa41d3";
+import * as TR from "./track.js?v=fafa41d3";
+import * as RIG from "./rigs.js?v=fafa41d3";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=fafa41d3";
+import { Library } from "./library.js?v=fafa41d3";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=fe610ba4";
+} from "./catalog.js?v=fafa41d3";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");

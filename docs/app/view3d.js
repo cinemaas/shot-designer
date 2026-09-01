@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=fe610ba4";
-import * as R from "./render.js?v=fe610ba4";
-import { UNITS_PER_FOOT } from "./catalog.js?v=fe610ba4";
-import { fieldOfView } from "./optics.js?v=fe610ba4";
+import * as H from "./hcw.js?v=fafa41d3";
+import * as R from "./render.js?v=fafa41d3";
+import { UNITS_PER_FOOT } from "./catalog.js?v=fafa41d3";
+import { fieldOfView } from "./optics.js?v=fafa41d3";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -525,7 +525,7 @@ function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
   const straightOn = Math.cos(facing - toCam);
 
   /** A point on the head's surface, u across and v up from the middle. */
-  const on = (u, v, out2 = 1.012) => {
+  const on = (u, v, out2 = 1.035) => {
     const d = Math.sqrt(Math.max(0.0001, r * r - u * u - v * v)) * out2;
     return project(cam,
       p.x + (fwd + d) * cs - u * sn,
@@ -534,7 +534,7 @@ function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
   };
 
   /** A blob laid on that surface: an ellipse, tilted if you like. */
-  const blob = (cu, cv, ru, rv, fill, tilt = 0, lift = 1.012, n = 14) => {
+  const blob = (cu, cv, ru, rv, fill, tilt = 0, lift = 1.035, n = 14) => {
     const pts = [];
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -543,34 +543,40 @@ function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
                   cv + x * Math.sin(tilt) + y * Math.cos(tilt), lift));
     }
     if (pts.some((q) => !q)) return;
-    out.push({ pts, fill, stroke: fill, width: 1,
-               depth: pts.reduce((t, q) => t + q.depth, 0) / pts.length
-                      - 0.1 - (lift - 1) * 8 });
+    // Nearer than the head by a fraction of its own distance, not by a fixed
+    // amount: a fixed nudge is plenty at twenty feet and nothing at two, which
+    // is why a face this close was being eaten by its own head.
+    const d = pts.reduce((t, q) => t + q.depth, 0) / pts.length;
+    out.push({ pts, fill, stroke: fill, width: 1, depth: d * (0.955 - (lift - 1)) });
   };
 
   // ---- hair -------------------------------------------------------------
   // Over the back and the top, dipping to a fringe at the front on one side.
   // Always drawn: the back of a head is a shape you should know from behind.
-  const hair = tone(colour, 0.62);
+  const hair = tone(colour, 0.6);
   const arc = [];
-  for (let i = 0; i <= 13; i++) {
-    const a = Math.PI * 0.52 + (i / 13) * Math.PI * 0.96;
-    arc.push(a);
-  }
-  const ring = (t, w) => arc.map((a) => {
-    const f = fwd + Math.cos(a) * r * w, s2 = Math.sin(a) * r * 0.95 * w;
+  for (let i = 0; i <= 15; i++) arc.push(Math.PI * 0.56 + (i / 15) * Math.PI * 0.88);
+  const ring = (t, w, back = 0) => arc.map((a) => {
+    const f = fwd + Math.cos(a) * r * w - back, s2 = Math.sin(a) * r * 0.96 * w;
     return project(cam, p.x + f * cs - s2 * sn, p.y + f * sn + s2 * cs, z + t);
   });
-  const lo = ring(-r * 0.2, 0.995), hi = ring(r * 0.56, 0.74);
-  for (let i = 0; i < arc.length - 1; i++) {
-    const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
-    if (q.some((v) => !v)) continue;
-    out.push({ pts: q, fill: hair, stroke: hair, width: 1,
-               depth: q.reduce((t, v) => t + v.depth, 0) / 4 - 0.04 });
+  // Two bands: the mass at the back of the head, then the crown over the top.
+  for (const [t0, w0, t1, w1] of [
+    [-r * 0.35, 1.02, r * 0.3, 1.06],
+    [r * 0.3, 1.06, r * 0.62, 0.66],
+  ]) {
+    const lo = ring(t0, w0), hi = ring(t1, w1);
+    for (let i = 0; i < arc.length - 1; i++) {
+      const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
+      if (q.some((v) => !v)) continue;
+      out.push({ pts: q, fill: hair, stroke: hair, width: 1,
+                 depth: q.reduce((t, v) => t + v.depth, 0) / 4 * 0.995 });
+    }
   }
-  // A fringe across the brow, swept to one side — the thing that stops hair
-  // reading as a swimming cap.
-  blob(-r * 0.1, r * 0.58, r * 0.5, r * 0.13, hair, -0.14, 1.008, 16);
+  // A fringe swept off the brow to one side, sitting on the front of the head
+  // rather than round it — which is what a haircut looks like and a cap doesn't.
+  blob(-r * 0.06, r * 0.6, r * 0.56, r * 0.17, hair, -0.2, 1.03, 18);
+  blob(r * 0.42, r * 0.46, r * 0.2, r * 0.24, hair, -0.5, 1.03, 14);
 
   if (!up && straightOn < 0.16) return;      // nothing on the back of a head
 
@@ -580,13 +586,16 @@ function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
     blob(s2 * U, V + r * 0.25, r * 0.16, r * 0.05, tone(colour, 0.5),
          s2 * 0.14);                                                        // brow
     blob(s2 * U, V, r * 0.165, r * 0.13, "#fbfcfd", s2 * 0.06);              // white
-    blob(s2 * U, V - r * 0.012, r * 0.085, r * 0.095, "#2a2f36", 0, 1.02);   // iris
+    blob(s2 * U, V - r * 0.012, r * 0.085, r * 0.095, "#2a2f36", 0, 1.05);   // iris
     blob(s2 * U + r * 0.045, V + r * 0.05, r * 0.03, r * 0.032,
-         "#ffffff", 0, 1.03);                                                // catchlight
+         "#ffffff", 0, 1.062);                                                // catchlight
   }
 
   // ---- mouth ------------------------------------------------------------
-  blob(0, -r * 0.34, r * 0.13, r * 0.05, tone(colour, 0.5), 0, 1.014);
+  // A mouth big enough to survive being small on screen: a soft shape rather
+  // than a hairline, with a hint of a smile to it.
+  blob(0, -r * 0.33, r * 0.19, r * 0.085, tone(colour, 0.42), 0, 1.04, 16);
+  blob(0, -r * 0.29, r * 0.13, r * 0.035, tone(colour, 0.62), 0, 1.045, 12);
 }
 
 /** One outline round a head, rather than one round each slice of it. */
