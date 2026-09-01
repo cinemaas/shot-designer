@@ -188,6 +188,18 @@ opening that isn't cut out is one you can't see through when you look down the
 lens. Drag one and it re-seats on whatever wall it lands near, and moving a
 wall brings everything on it along. Hold <kbd>⌥</kbd> while dragging to place
 one exactly where you want instead. Furniture and props are left alone.</p>
+<h4>Standing on something</h4>
+<p>A plan is flat, so the only way to say somebody is on a bed, on a step or on
+an apple box is to say it. <b>Height Off The Floor…</b> on a person does that,
+in feet — a bed is about 2, a step 8 inches, an apple box 1. The lens cares:
+eighteen inches of bed is the difference between an eyeline and the top of a
+head. Stairs draw as real treads and risers, so you can see which one somebody
+is on.</p>
+<h4>Keeping an eye on a frame</h4>
+<p>The <b>pin</b> beside a shot in the list holds that camera's viewfinder up
+whatever you click next — so you can drag a light, a chair or an actor around
+while watching what it does to the frame. Pin again, or <b>Unpin</b> on the
+panel, to let it follow the selection again.</p>
 <h4>Standing, sitting, on the floor</h4>
 <p>Men get one line across the face, women two. Shoulders are drawn at the real
 widths too, 18 inches against 14.</p>

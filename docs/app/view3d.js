@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=f4e59382";
-import * as R from "./render.js?v=f4e59382";
-import { UNITS_PER_FOOT } from "./catalog.js?v=f4e59382";
-import { fieldOfView } from "./optics.js?v=f4e59382";
+import * as H from "./hcw.js?v=4f894a9f";
+import * as R from "./render.js?v=4f894a9f";
+import { UNITS_PER_FOOT } from "./catalog.js?v=4f894a9f";
+import { fieldOfView } from "./optics.js?v=4f894a9f";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -89,6 +89,14 @@ export const POSTURES = {
   lie:   { label: "Lying Down", eye: ft(0.75), top: ft(1.15), lying: true,
            length: ft(6), width: ft(1.7) },
 };
+
+/**
+ * How far off the floor somebody is. Written on the character as `elevation`
+ * in feet, because a plan can't show it any other way — somebody on a bed,
+ * halfway up a flight, or on an apple box is at a different height and the
+ * lens knows the difference even when the overhead can't.
+ */
+export const elevationOf = (obj) => ft(H.getNum(obj, "elevation", 0));
 
 export const postureOf = (obj) =>
   POSTURES[H.get(obj, "posture") || "stand"] || POSTURES.stand;
@@ -258,7 +266,7 @@ export function build(cam, objects, scene, opts = {}) {
         .toString(16).padStart(6, "0");
       const face = opts.angleOf ? opts.angleOf(o) : null;
       figure(out, cam, p, colour, H.getBool(o, "female"), postureOf(o),
-             face != null ? face : (R.angleOf(o) || 0));
+             face != null ? face : (R.angleOf(o) || 0), elevationOf(o));
       continue;
     }
 
@@ -273,6 +281,41 @@ export function build(cam, objects, scene, opts = {}) {
         y: p.y + lx * Math.sin(a) + ly * Math.cos(a),
       }));
       const key = H.get(o, "objectKey");
+
+      // A flight of stairs is a flight of stairs. Drawing it as a box the
+      // height of the top step tells you nothing about where somebody can
+      // stand on it, which is the only reason it is on the plan.
+      if (key === "STAIRSSHORT" || key === "STAIRS_LONG") {
+        const steps = key === "STAIRS_LONG" ? 12 : 7;
+        const rise = ft(0.58), run = 1 / steps;
+        const along = (t0, t1) => [0, 1].map((e) => {
+          const t = e ? t1 : t0;
+          return [corners[0], corners[1]].map((c, i) => ({
+            x: c.x + (corners[3 - i * 3 === 3 ? 3 : 2].x - c.x) * t,
+            y: c.y + (corners[i ? 2 : 3].y - c.y) * t,
+          }));
+        });
+        for (let i = 0; i < steps; i++) {
+          const t0 = i * run, t1 = (i + 1) * run;
+          const edge = (t) => [
+            { x: corners[0].x + (corners[3].x - corners[0].x) * t,
+              y: corners[0].y + (corners[3].y - corners[0].y) * t },
+            { x: corners[1].x + (corners[2].x - corners[1].x) * t,
+              y: corners[1].y + (corners[2].y - corners[1].y) * t },
+          ];
+          const [a0, b0] = edge(t0), [a1, b1] = edge(t1);
+          const h = rise * (i + 1);
+          // the riser, then the tread on top of it
+          quad(a0, b0, h, "#dfe4e9", "#9aa3ab", rise * i);
+          const tread = [seen(a0.x, a0.y, h), seen(b0.x, b0.y, h),
+                         seen(b1.x, b1.y, h), seen(a1.x, a1.y, h)];
+          if (!tread.some((q) => !q)) {
+            out.push({ pts: tread, fill: "#eef2f5", stroke: "#9aa3ab",
+                       depth: Math.min(...tread.map((q) => q.depth)) - 0.01 });
+          }
+        }
+        continue;
+      }
 
       // A car is mostly glass above the waistline, and the whole reason to put
       // a camera near one is the people inside it. Draw the body solid and the
@@ -533,7 +576,8 @@ function outlineBall(out, cam, p, facing, fwd, r, z0, z1) {
 }
 
 function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
-                                              female = false }) {
+                                              female = false, lift = 0 }) {
+  z0 += lift; z1 += lift;
   const r = ft(0.35);
   const crown = tone(colour, 0.62);
 
@@ -574,11 +618,17 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
  * look machined. Heights are the real ones: an average adult is five foot
  * eight, so that is what they are built to.
  */
-function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0) {
+function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0,
+                lift = 0) {
   // No outline on any of it. A line round every limb is a line round every
   // limb — the shading is what gives a body its form, and a dozen strokes on
   // top only ever looked like a diagram of a person rather than a person.
-  const put = (o) => part(out, cam, p, facing, { sides: 12, outline: false, ...o });
+  // Everything is measured off the floor the person is standing on, which is
+  // not always the floor of the room: a bed, a step, a rostrum, a kerb.
+  const put = (o) => part(out, cam, p, facing, {
+    sides: 12, outline: false, ...o,
+    z0: (o.z0 || 0) + lift, z1: (o.z1 || 0) + lift,
+  });
   const limb = tone(colour, 0.88);
   const dark = tone(colour, 0.74);
 
@@ -591,22 +641,37 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
   const WAIST = female ? ft(0.4) : ft(0.47);
 
   if (posture.lying) {
+    // The same body, on its back. Everything that was height when they were
+    // standing is length along the floor now, and what is left off the floor
+    // is how thick a person is — which is what stops this looking like a set
+    // of planks. Head at the front, feet behind, arms tucked to the sides.
+    const T = z(0.46);                    // half the thickness of a body
+    const lie = (f0, f1, w0, w1, t0, t1, fill) => put({
+      fwd: (f0 + f1) / 2, len: Math.abs(f1 - f0),
+      wide: w0, wide1: w1, len1: Math.abs(f1 - f0),
+      z0: t0, z1: t1, fill, sides: 10,
+    });
+
     for (const s of [-1, 1]) {
-      put({ fwd: ft(-1.85), side: s * ft(0.27), len: ft(2.7), wide: ft(0.46),
-            len1: ft(2.7), wide1: ft(0.34), z0: 0, z1: ft(0.5), fill: dark, sides: 8 });
+      // shin then thigh, tapering to the ankle
+      lie(z(-2.85), z(-1.5), ft(0.34), ft(0.42), 0, T * 1.25, dark);
+      put({ fwd: z(-2.2), side: s * ft(0.2), len: z(1.35), wide: ft(0.38),
+            z0: 0, z1: T * 1.3, fill: dark, sides: 8 });
+      put({ fwd: z(-0.85), side: s * ft(0.22), len: z(1.4), wide: ft(0.46),
+            z0: 0, z1: T * 1.6, fill: dark, sides: 8 });
     }
-    if (female) {
-      put({ fwd: ft(-0.8), len: ft(1.7), wide: ft(2.1), len1: ft(1.4),
-            wide1: ft(1.2), z0: 0, z1: ft(0.72), fill: colour });
-    }
-    put({ fwd: ft(0.45), len: ft(2.1), wide: SH * 2, len1: ft(1.9),
-          wide1: WAIST * 2, z0: 0, z1: ft(0.9), fill: colour });
+    // hips, then the chest widening to the shoulders
+    put({ fwd: z(-0.1), len: z(0.8), wide: HIPW * 2, wide1: WAIST * 2,
+          z0: 0, z1: T * 1.8, fill: colour, sides: 10 });
+    put({ fwd: z(0.85), len: z(1.2), wide: WAIST * 2, wide1: SH * 1.9,
+          z0: 0, z1: T * 2, fill: colour, sides: 10 });
     for (const s of [-1, 1]) {
-      put({ fwd: ft(0.2), side: s * (SH + ft(0.16)), len: ft(1.9), wide: ft(0.3),
-            z0: 0, z1: ft(0.46), fill: limb, sides: 8 });
+      put({ fwd: z(0.5), side: s * (SH + ft(0.12)), len: z(1.9), wide: ft(0.32),
+            z0: 0, z1: T * 1.3, fill: limb, sides: 8 });
     }
+    // and the head, a ball resting on the floor rather than a slab
     headOn(out, cam, p, facing, colour,
-           { fwd: ft(1.85), z0: ft(0.18), z1: ft(1.02), up: true, female });
+           { fwd: z(2.15), z0: 0, z1: ft(0.78), up: true, female, lift });
     return;
   }
 
@@ -631,7 +696,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
             z0: SEAT + z(0.3), z1: SHOULDER - z(0.05), fill: limb, sides: 8 });
     }
     headOn(out, cam, p, facing, colour,
-           { z0: SHOULDER + z(0.12), z1: CROWN, female });
+           { z0: SHOULDER + z(0.12), z1: CROWN, female, lift });
     return;
   }
 
@@ -689,6 +754,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
           z0: z(2.3), z1: z(3.2), fill: limb, sides: 10 });
   }
 
-  headOn(out, cam, p, facing, colour, { z0: NECK - z(0.04), z1: CROWN, female });
+  headOn(out, cam, p, facing, colour,
+           { z0: NECK - z(0.04), z1: CROWN, female, lift });
 }
 

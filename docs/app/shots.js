@@ -5,9 +5,9 @@
 // MCU, M, W, MW, TWO, MASTER, INS. Subjects are either a name or its initial,
 // and an OTS is always "A To B". So the fast path is to type it.
 
-import * as H from "./hcw.js?v=f4e59382";
-import * as R from "./render.js?v=f4e59382";
-import { UNITS_PER_FOOT } from "./catalog.js?v=f4e59382";
+import * as H from "./hcw.js?v=4f894a9f";
+import * as R from "./render.js?v=4f894a9f";
+import { UNITS_PER_FOOT } from "./catalog.js?v=4f894a9f";
 
 /** Canonical form on the left, everything seen in the library on the right. */
 const SIZES = [
@@ -161,13 +161,17 @@ export function placeFor(shot, cast, side = 1) {
     const p = { x: mid.x + perp.x * ft(13) * side, y: mid.y + perp.y * ft(13) * side };
     return { ...p, angle: look(p, mid) };
   }
-  // A single on A is taken from just outside B's shoulder — past them, not on
-  // top of them, however close together the two actors happen to be standing.
+  // A single on A is taken from past B — not on top of them, however close the
+  // two happen to be standing. It sits tighter to the eyeline than the over
+  // does and further back, so a single and an over from the same side end up
+  // as two distinct marks on the plan rather than one camera on top of another.
   const gap = Math.hypot(partner.x - a.x, partner.y - a.y);
-  const dist = gap + ft(shot.size === "CU" || shot.size === "ECU" ? 2.5 : 4);
+  const tight = shot.size === "CU" || shot.size === "ECU" || shot.size === "MCU";
+  const dist = gap + ft(tight ? 4.5 : 6);
+  const off = ft(tight ? 0.7 : 1.9);
   const p = {
-    x: a.x + axis.x * dist + perp.x * ft(2.4) * side,
-    y: a.y + axis.y * dist + perp.y * ft(2.4) * side,
+    x: a.x + axis.x * dist + perp.x * off * side,
+    y: a.y + axis.y * dist + perp.y * off * side,
   };
   return { ...p, angle: look(p, a) };
 }

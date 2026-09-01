@@ -1,27 +1,27 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=f4e59382";
-import * as H from "./hcw.js?v=f4e59382";
-import * as R from "./render.js?v=f4e59382";
-import { FXG } from "./assets.js?v=f4e59382";
-import * as B from "./blocking.js?v=f4e59382";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=f4e59382";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f4e59382";
-import { HANDBOOK } from "./handbook.js?v=f4e59382";
+import { BRAND, SLUG } from "./brand.js?v=4f894a9f";
+import * as H from "./hcw.js?v=4f894a9f";
+import * as R from "./render.js?v=4f894a9f";
+import { FXG } from "./assets.js?v=4f894a9f";
+import * as B from "./blocking.js?v=4f894a9f";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=4f894a9f";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=4f894a9f";
+import { HANDBOOK } from "./handbook.js?v=4f894a9f";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=f4e59382";
-import * as V3 from "./view3d.js?v=f4e59382";
-import * as TR from "./track.js?v=f4e59382";
-import * as RIG from "./rigs.js?v=f4e59382";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=f4e59382";
-import { Library } from "./library.js?v=f4e59382";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=4f894a9f";
+import * as V3 from "./view3d.js?v=4f894a9f";
+import * as TR from "./track.js?v=4f894a9f";
+import * as RIG from "./rigs.js?v=4f894a9f";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=4f894a9f";
+import { Library } from "./library.js?v=4f894a9f";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=f4e59382";
+} from "./catalog.js?v=4f894a9f";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -47,6 +47,7 @@ const S = {
   coverage: false,       // draw what each lens actually sees
   lensView: false,
   timeline: false,       // the beat-by-beat strip along the bottom
+  pinnedCam: null,       // a camera whose viewfinder stays up whatever you click
   info: null,            // derived beat structure
   ghosts: true,
   compactLabels: false,
@@ -776,9 +777,14 @@ function liveCamera(cam) {
 function renderLensView() {
   const box = $("#lensview");
   if (!box) return;
+  // A pinned camera holds the viewfinder no matter what else you click, so you
+  // can watch the frame while you move a light or a chair into it. Pin one from
+  // the shot list; the selection drives it otherwise.
+  const pinned = S.pinnedCam && byID(S.pinnedCam);
   const sel = S.sel.size === 1 ? byID([...S.sel][0]) : null;
-  const cam = sel && sel.tag === "Camera" ? sel
+  const picked = sel && sel.tag === "Camera" ? sel
     : sel && sel.tag === "ShotVersion" ? byID(H.get(sel, "attachObjectID")) : null;
+  const cam = pinned && pinned.tag === "Camera" ? pinned : picked;
 
   if (!S.lensView || !cam || cam.tag !== "Camera") { box.hidden = true; return; }
   box.hidden = false;
@@ -868,7 +874,7 @@ function renderLensView() {
   // that the shot is empty, so say which and how far rather than nothing.
   const inFrame = objects().some((o) => o.tag === "Character" && (() => {
     const p = drawnPos(o);
-    const q = V3.project(view, p.x, p.y, V3.postureOf(o).eye);
+    const q = V3.project(view, p.x, p.y, V3.postureOf(o).eye + V3.elevationOf(o));
     return q && Math.abs(q.u) <= 1;
   })());
   if (!inFrame) {
@@ -976,6 +982,12 @@ function renderLensView() {
   // anything from the render that made them — the frame they captured would
   // be a stale, detached copy, which is exactly how a storyboard came out
   // empty. Everything is looked up fresh at the moment you click.
+  if (S.pinnedCam) {
+    btn("Unpin", "Let the viewfinder follow whatever you select again", () => {
+      S.pinnedCam = null; draw(); syncChrome();
+      toast("Viewfinder follows the selection again");
+    });
+  }
   btn("Storyboard", "Drop this frame on the plan as a storyboard",
       () => withLiveFrame((a) => frameToStoryboard(a.cam, a.svg, a.W, a.H, a.mm, a.fmt)));
   btn("Save PNG", "Save the frame as a picture",
@@ -1379,7 +1391,9 @@ function shotBrief(cam, view, mm, fmt, lensFt) {
       const side = Math.abs(off) < 0.08 ? "centre frame"
         : off < 0 ? "frame left" : "frame right";
       const posture = V3.postureOf(o).label.toLowerCase();
-      return `${nameOf(o)} — ${posture}, ${side}, ` +
+      const up = H.getNum(o, "elevation", 0);
+      const raised = up > 0 ? `, ${up} ft off the floor` : "";
+      return `${nameOf(o)} — ${posture}${raised}, ${side}, ` +
              `${feet(dist)} from lens, ${facing}`;
     })
     .filter(Boolean);
@@ -4555,6 +4569,7 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "female") ? "Make Male" : "Make Female", run: () => {
         mark("character"); H.set(obj, "female", !H.getBool(obj, "female")); draw();
       } },
+      { label: "Height Off The Floor…", run: () => setElevation(obj) },
       { head: "Posture" },
       ...Object.entries(V3.POSTURES).map(([key, spec]) => ({
         label: spec.label,
@@ -4763,6 +4778,32 @@ function addMove(obj) {
   }
   S.sel = new Set([idOf(obj)]);
   reindex(); draw(); syncChrome();
+}
+
+/**
+ * Somebody on a bed, on a step, on an apple box. A plan is flat, so the only
+ * way to say how high somebody is standing is to say it — and the lens cares,
+ * because a foot and a half of bed is the difference between an eyeline and
+ * the top of a head.
+ */
+function setElevation(obj) {
+  sheet({
+    title: "Height Off The Floor",
+    sub: "In feet. A bed is about 2, a step 8 inches, an apple box 1.",
+    fields: [{ name: "ft", label: "Standing on something", type: "text",
+               value: String(H.getNum(obj, "elevation", 0)) }],
+    onOK: ({ ft: v }) => {
+      const n = parseFloat(v);
+      if (!Number.isFinite(n)) return;
+      mark("elevation");
+      for (const id of (S.sel.has(idOf(obj)) ? S.sel : new Set([idOf(obj)]))) {
+        const o = byID(id);
+        if (o?.tag === "Character") H.set(o, "elevation", Math.max(0, n));
+      }
+      draw(); syncChrome();
+      toast(n > 0 ? `${n} ft off the floor` : "Back on the floor");
+    },
+  });
 }
 
 /**
@@ -5188,7 +5229,22 @@ function renderShotList() {
       b.onclick = (e) => { e.stopPropagation(); run(); };
       return b;
     };
+    // Pin holds this camera's viewfinder up whatever you click next, so you
+    // can drag a light or a chair around while watching the frame.
+    const pin = mk(S.pinnedCam === idOf(cam || v) ? "📌" : "◎",
+      S.pinnedCam === idOf(cam || v)
+        ? "Stop holding the viewfinder on this camera"
+        : "Hold the viewfinder on this camera while you work",
+      () => {
+        if (!cam) return;
+        S.pinnedCam = S.pinnedCam === idOf(cam) ? null : idOf(cam);
+        if (S.pinnedCam) S.lensView = true;
+        draw(); syncChrome();
+      });
+    if (S.pinnedCam === idOf(cam || v)) pin.className = "on";
+
     tools.append(
+      pin,
       mk("↑", "Move up", () => moveShot(v, -1)),
       mk("↓", "Move down", () => moveShot(v, 1)),
       mk("⧉", "Duplicate this setup", () => duplicateShot(v)),
