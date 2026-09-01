@@ -459,16 +459,32 @@ body.view-only #stage { cursor: grab; }
   position: absolute; top: 0; bottom: 0; width: 1px;
   background: color-mix(in srgb, var(--line) 45%, transparent);
 }
+#timeline .lane { height: 30px; }
+#timeline .track { height: 24px; }
 #timeline .bar {
-  position: absolute; top: 2px; height: 16px; border-radius: 4px;
+  position: absolute; top: 2px; height: 20px; border-radius: 5px;
   background: var(--sel); color: #fff; cursor: grab;
-  display: flex; align-items: center; padding: 0 6px; gap: 4px;
-  font-size: 10px; font-weight: 700; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 11px; font-size: 11px; font-weight: 700; overflow: hidden;
 }
+#timeline .bar:active { cursor: grabbing; }
+#timeline .bar .len { font-weight: 500; opacity: .8; }
 #timeline .bar .grip {
-  position: absolute; right: 0; top: 0; bottom: 0; width: 8px;
-  cursor: ew-resize; background: rgba(255,255,255,.35);
-  border-radius: 0 4px 4px 0;
+  position: absolute; top: 0; bottom: 0; width: 9px;
+  cursor: ew-resize; background: rgba(255,255,255,.4);
+}
+#timeline .bar .grip.l { left: 0; border-radius: 5px 0 0 5px; }
+#timeline .bar .grip.r { right: 0; border-radius: 0 5px 5px 0; }
+#timeline .bar .grip:hover { background: rgba(255,255,255,.75); }
+
+/* A hold: the stretch where somebody has arrived and is waiting. */
+#timeline .hold {
+  position: absolute; top: 7px; height: 10px; border-radius: 5px;
+  background: repeating-linear-gradient(90deg,
+    color-mix(in srgb, var(--line) 30%, transparent) 0 5px,
+    transparent 5px 10px);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--dim); font-weight: 600; overflow: hidden;
 }
 #timeline .play {
   position: absolute; top: -4px; bottom: -4px; width: 2px;

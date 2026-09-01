@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=cdc78e8d";
-import * as R from "./render.js?v=cdc78e8d";
-import { UNITS_PER_FOOT } from "./catalog.js?v=cdc78e8d";
-import { fieldOfView } from "./optics.js?v=cdc78e8d";
+import * as H from "./hcw.js?v=f4e59382";
+import * as R from "./render.js?v=f4e59382";
+import { UNITS_PER_FOOT } from "./catalog.js?v=f4e59382";
+import { fieldOfView } from "./optics.js?v=f4e59382";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -464,28 +464,56 @@ const DARK = "#2b2b2b";
  * where it belongs on somebody flat on their back.
  */
 function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
-  // Nothing is drawn on the face. Which way somebody is turned is said by the
-  // back of their head being darker — one shape, no strokes, and it reads from
-  // any angle including from behind, which a nose never did.
+  // A face the way the bodies are done: smooth shapes, no strokes, nothing
+  // outlined. Hair as a soft cap over the back and top of the head, and two
+  // eyes — large and simple, which is what makes a face read at this size
+  // without turning into a diagram of one.
   const cs = Math.cos(facing), sn = Math.sin(facing);
-  if (up) return;
-  const back = tone(colour, 0.72);
-  const pts = [];
-  for (let i = 0; i <= 9; i++) {
-    const a = Math.PI * 0.34 + (i / 9) * Math.PI * 1.32;   // the rear two-thirds
-    pts.push([Math.cos(a), Math.sin(a)]);
+  const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
+  const facingCam = Math.cos(facing - toCam);
+
+  // Hair. Always drawn, because the back of a head is a shape you should be
+  // able to recognise from behind.
+  const hair = tone(colour, 0.66);
+  const arc = [];
+  for (let i = 0; i <= 11; i++) {
+    const a = Math.PI * 0.44 + (i / 11) * Math.PI * 1.12;
+    arc.push([Math.cos(a), Math.sin(a)]);
   }
-  const ring = (t, w) => pts.map(([cx, sy]) => {
+  const ring = (t, w) => arc.map(([cx, sy]) => {
     const f = fwd + cx * r * w, s2 = sy * r * 0.95 * w;
     return project(cam, p.x + f * cs - s2 * sn, p.y + f * sn + s2 * cs, z + t);
   });
-  const lo = ring(-r * 0.5, 0.99), hi = ring(r * 0.42, 0.86);
-  for (let i = 0; i < pts.length - 1; i++) {
+  const lo = ring(-r * 0.52, 0.99), hi = ring(r * 0.5, 0.8);
+  for (let i = 0; i < arc.length - 1; i++) {
     const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
     if (q.some((v) => !v)) continue;
-    out.push({ pts: q, fill: back, stroke: back, width: 1,
+    out.push({ pts: q, fill: hair, stroke: hair, width: 1,
                depth: q.reduce((a, v) => a + v.depth, 0) / 4 - 0.05 });
   }
+
+  if (up ? false : facingCam < 0.15) return;      // no eyes on the back of a head
+
+  // Eyes, laid on the curve of the face so they sit on it rather than float.
+  const eye = (side) => {
+    const pts = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      // an almond: wider than it is tall, tilted a little
+      const u = Math.cos(a) * r * 0.17, v = Math.sin(a) * r * 0.2;
+      const across = side * r * 0.38 + u;
+      const up2 = r * 0.04 + v;
+      const d = Math.sqrt(Math.max(0, 1 - (across / (r * 1.02)) ** 2)) * r * 0.94;
+      pts.push(project(cam,
+        p.x + (fwd + d) * cs - across * sn,
+        p.y + (fwd + d) * sn + across * cs,
+        z + up2));
+    }
+    if (pts.some((v) => !v)) return;
+    out.push({ pts, fill: "#26292c", stroke: "#26292c", width: 1,
+               depth: pts.reduce((a, v) => a + v.depth, 0) / pts.length - 0.14 });
+  };
+  eye(-1); eye(1);
 }
 
 /** One outline round a head, rather than one round each slice of it. */

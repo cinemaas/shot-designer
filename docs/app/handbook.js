@@ -148,6 +148,14 @@ later, <b>pull its right edge</b> to make it take longer, and <b>line two bars
 up</b> to make them happen together. One person can cross while another waits;
 a camera can start its move halfway through somebody's walk. Click an empty
 part of a lane to scrub.</p>
+<p>The positions are the keyframes — 1, 2, 3, the same numbers as on the plan.
+Each is a bar on its lane. <b>Drag the bar</b> to move that beat, <b>pull
+either end</b> to stretch it, and the <b>gap between two bars is a hold</b>:
+somebody has arrived and is waiting. Holds draw as a hatched span with their
+length on them, so the waiting is as visible as the walking.</p>
+<p>Beats land on quarters as you drag; hold <kbd>⌥</kbd> for anything in
+between. If dragging isn't precise enough, <b>click a bar</b> and type the
+numbers.</p>
 <p>Nothing has to be set: a position numbered 2 starts at beat 1 and takes one
 beat unless you say otherwise, which is what everything did before.</p>
 <h4>Turning on the spot</h4>

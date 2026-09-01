@@ -1,27 +1,27 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=cdc78e8d";
-import * as H from "./hcw.js?v=cdc78e8d";
-import * as R from "./render.js?v=cdc78e8d";
-import { FXG } from "./assets.js?v=cdc78e8d";
-import * as B from "./blocking.js?v=cdc78e8d";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=cdc78e8d";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=cdc78e8d";
-import { HANDBOOK } from "./handbook.js?v=cdc78e8d";
+import { BRAND, SLUG } from "./brand.js?v=f4e59382";
+import * as H from "./hcw.js?v=f4e59382";
+import * as R from "./render.js?v=f4e59382";
+import { FXG } from "./assets.js?v=f4e59382";
+import * as B from "./blocking.js?v=f4e59382";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=f4e59382";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f4e59382";
+import { HANDBOOK } from "./handbook.js?v=f4e59382";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=cdc78e8d";
-import * as V3 from "./view3d.js?v=cdc78e8d";
-import * as TR from "./track.js?v=cdc78e8d";
-import * as RIG from "./rigs.js?v=cdc78e8d";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=cdc78e8d";
-import { Library } from "./library.js?v=cdc78e8d";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=f4e59382";
+import * as V3 from "./view3d.js?v=f4e59382";
+import * as TR from "./track.js?v=f4e59382";
+import * as RIG from "./rigs.js?v=f4e59382";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=f4e59382";
+import { Library } from "./library.js?v=f4e59382";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=cdc78e8d";
+} from "./catalog.js?v=f4e59382";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1013,8 +1013,9 @@ function renderTimeline() {
   box.replaceChildren();
   const head = document.createElement("div");
   head.className = "head";
-  head.innerHTML = `<b>Timeline</b><span class="hint">drag a move to delay it · ` +
-    `pull its edge to slow it down · line two up to run them together</span>`;
+  head.innerHTML = `<b>Timeline</b><span class="hint">drag a bar to move a beat · ` +
+    `pull either end to stretch it · the gap between two bars is a hold · ` +
+    `click one to type the numbers</span>`;
   const close = document.createElement("button");
   close.textContent = "Close";
   close.style.marginLeft = "auto";
@@ -1055,28 +1056,54 @@ function renderTimeline() {
       track.append(g);
     }
 
+    // Holds: the stretch between arriving somewhere and setting off again.
+    // Drawing them makes the waiting as visible as the walking, which is what
+    // makes a timeline worth having.
+    let prevEnd = 0;
+    for (const [i, leg] of lane.legs.entries()) {
+      const t = timingOf(leg.to);
+      if (t.start - prevEnd > 0.02) {
+        const hold = document.createElement("div");
+        hold.className = "hold";
+        hold.style.left = pct(prevEnd) + "%";
+        hold.style.width = pct(t.start - prevEnd) + "%";
+        hold.title = `Holds at position ${i + 1} for ` +
+                     `${(t.start - prevEnd).toFixed(2)} beats`;
+        hold.textContent = (t.start - prevEnd) >= 0.5
+          ? `hold ${(t.start - prevEnd).toFixed(1)}` : "";
+        track.append(hold);
+      }
+      prevEnd = t.start + t.span;
+    }
+
     for (const [i, leg] of lane.legs.entries()) {
       const t = timingOf(leg.to);
       const bar = document.createElement("div");
       bar.className = "bar";
       bar.style.left = pct(t.start) + "%";
-      bar.style.width = Math.max(2, pct(t.span)) + "%";
-      bar.title = `Position ${i + 2} — starts at beat ${(t.start + 1).toFixed(2)}, ` +
-                  `takes ${t.span} beat${t.span === 1 ? "" : "s"}`;
-      bar.textContent = String(i + 2);
-      const grip = document.createElement("div");
-      grip.className = "grip";
-      bar.append(grip);
-      dragBar(bar, grip, track, leg.to, end);
+      bar.style.width = Math.max(2.5, pct(t.span)) + "%";
+      bar.title = `To position ${i + 2} — starts at beat ${(t.start + 1).toFixed(2)}, ` +
+                  `over ${t.span} beat${t.span === 1 ? "" : "s"}`;
+      const num = document.createElement("span");
+      num.className = "n";
+      num.textContent = String(i + 2);
+      const len = document.createElement("span");
+      len.className = "len";
+      len.textContent = t.span.toFixed(t.span % 1 ? 2 : 0);
+      const left = document.createElement("div");
+      left.className = "grip l";
+      const right = document.createElement("div");
+      right.className = "grip r";
+      bar.append(left, num, len, right);
+      dragBar({ bar, left, right, track, obj: leg.to, end, at: i + 2 });
       track.append(bar);
     }
 
-    const head2 = document.createElement("div");
-    head2.className = "play";
-    head2.style.left = pct(Math.min(end, S.playing ? S.time : S.slice)) + "%";
-    track.append(head2);
+    const play = document.createElement("div");
+    play.className = "play";
+    play.style.left = pct(Math.min(end, S.playing ? S.time : S.slice)) + "%";
+    track.append(play);
 
-    // Scrub by clicking the empty part of a lane.
     track.onpointerdown = (ev) => {
       if (ev.target !== track) return;
       const r = track.getBoundingClientRect();
@@ -1104,31 +1131,74 @@ function renderTimeline() {
   box.append(ruler);
 }
 
-/** Drag a bar to delay a move; drag its edge to stretch it. */
-function dragBar(bar, grip, track, obj, end) {
+/** Beats land on quarters unless you hold ⌥, which is close enough to feel
+ *  deliberate without having to be exact. */
+const snapBeat = (v, free) => (free ? Math.round(v * 100) / 100
+                                    : Math.round(v * 4) / 4);
+
+/**
+ * Move a beat, or stretch it from either end. Dragging the left edge changes
+ * when it starts without changing when it arrives; the right edge changes how
+ * long it takes. A click that doesn't move opens the numbers.
+ */
+function dragBar({ bar, left, right, track, obj, end, at }) {
   const begin = (ev, mode) => {
     ev.preventDefault(); ev.stopPropagation();
     const r = track.getBoundingClientRect();
     const t0 = timingOf(obj);
     const x0 = ev.clientX;
+    let moved = false;
     mark("timing");
     const move = (e) => {
       const d = ((e.clientX - x0) / r.width) * end;
-      if (mode === "shift") setTiming(obj, t0.start + d, t0.span);
-      else setTiming(obj, t0.start, t0.span + d);
+      if (Math.abs(d) > 0.02) moved = true;
+      const free = e.altKey;
+      if (mode === "shift") {
+        setTiming(obj, snapBeat(t0.start + d, free), t0.span);
+      } else if (mode === "start") {
+        const s0 = Math.min(snapBeat(t0.start + d, free), t0.start + t0.span - 0.25);
+        setTiming(obj, s0, t0.start + t0.span - s0);
+      } else {
+        setTiming(obj, t0.start, Math.max(0.25, snapBeat(t0.span + d, free)));
+      }
       renderTimeline(); draw();
     };
     const up = () => {
       removeEventListener("pointermove", move);
       removeEventListener("pointerup", up);
+      if (!moved) { S.undo.pop(); beatNumbers(obj, at); }
       syncChrome();
     };
     addEventListener("pointermove", move);
     addEventListener("pointerup", up);
   };
   bar.onpointerdown = (ev) => begin(ev, "shift");
-  grip.onpointerdown = (ev) => begin(ev, "stretch");
+  left.onpointerdown = (ev) => begin(ev, "start");
+  right.onpointerdown = (ev) => begin(ev, "stretch");
 }
+
+/** The same thing in numbers, for when dragging isn't precise enough. */
+function beatNumbers(obj, at) {
+  const t = timingOf(obj);
+  sheet({
+    title: `Position ${at}`,
+    sub: "In beats. A hold is simply starting later than the one before ended.",
+    fields: [
+      { name: "start", label: "Starts at beat", type: "text",
+        value: (t.start + 1).toFixed(2).replace(/\.00$/, "") },
+      { name: "span", label: "Takes", type: "text",
+        value: String(t.span) },
+    ],
+    onOK: ({ start, span }) => {
+      const s0 = parseFloat(start), sp = parseFloat(span);
+      if (!Number.isFinite(s0) || !Number.isFinite(sp)) return;
+      mark("timing");
+      setTiming(obj, Math.max(0, s0 - 1), Math.max(0.1, sp));
+      renderTimeline(); draw(); syncChrome();
+    },
+  });
+}
+
 
 /**
  * A still of every beat: the overhead, and what each camera sees.
