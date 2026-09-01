@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=0c60231d";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=0c60231d";
-import { EXTRA_SVG } from "./props.js?v=0c60231d";
-import { GAUGE } from "./track.js?v=0c60231d";
-import * as H from "./hcw.js?v=0c60231d";
+import { FXG } from "./assets.js?v=7dcb3247";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=7dcb3247";
+import { EXTRA_SVG } from "./props.js?v=7dcb3247";
+import { GAUGE } from "./track.js?v=7dcb3247";
+import * as H from "./hcw.js?v=7dcb3247";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -197,6 +197,16 @@ const shoulderHalf = (female) => (female ? SHOULDER_F : SHOULDER_M);
 /** Shoulders: a wide, shallow curve behind the head — not a horseshoe. */
 const shoulderPath = (sh) => `M0,${-sh} Q${-sh * 0.75},0 0,${sh}`;
 
+/** A small mark at the hand, so a plan shows who is carrying something. */
+function handProp(color) {
+  const g = el("g");
+  g.append(el("circle", {
+    cx: 9, cy: 13, r: 4.4,
+    fill: shade(color, 0.36), stroke: INK, "stroke-width": 1.6,
+  }));
+  return g;
+}
+
 function nameTag(text, posture, angle) {
   // Always below them on the page and always the right way up, whichever way
   // they happen to be facing — a name you have to tilt your head to read is
@@ -230,6 +240,10 @@ function drawCharacter(obj) {
     : figureStyle === "figure" ? drawFigure(obj, color, female)
     : drawPlanFigure(obj, color, female);
   if (posture === "sit") g.prepend(seatBack(color));
+  // Anything in their hand, marked beside them: on a plan it matters where a
+  // prop is as much as who has it.
+  const held = (H.get(obj, "heldProp") || "").trim();
+  if (held) g.append(handProp(color));
   if (named) g.append(nameTag(named, posture, angleOf(obj) || 0));
   return g;
 }

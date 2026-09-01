@@ -1,27 +1,27 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=0c60231d";
-import * as H from "./hcw.js?v=0c60231d";
-import * as R from "./render.js?v=0c60231d";
-import { FXG } from "./assets.js?v=0c60231d";
-import * as B from "./blocking.js?v=0c60231d";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=0c60231d";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=0c60231d";
-import { HANDBOOK } from "./handbook.js?v=0c60231d";
+import { BRAND, SLUG } from "./brand.js?v=7dcb3247";
+import * as H from "./hcw.js?v=7dcb3247";
+import * as R from "./render.js?v=7dcb3247";
+import { FXG } from "./assets.js?v=7dcb3247";
+import * as B from "./blocking.js?v=7dcb3247";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=7dcb3247";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7dcb3247";
+import { HANDBOOK } from "./handbook.js?v=7dcb3247";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=0c60231d";
-import * as V3 from "./view3d.js?v=0c60231d";
-import * as TR from "./track.js?v=0c60231d";
-import * as RIG from "./rigs.js?v=0c60231d";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=0c60231d";
-import { Library } from "./library.js?v=0c60231d";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=7dcb3247";
+import * as V3 from "./view3d.js?v=7dcb3247";
+import * as TR from "./track.js?v=7dcb3247";
+import * as RIG from "./rigs.js?v=7dcb3247";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=7dcb3247";
+import { Library } from "./library.js?v=7dcb3247";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=0c60231d";
+} from "./catalog.js?v=7dcb3247";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1393,7 +1393,9 @@ function shotBrief(cam, view, mm, fmt, lensFt) {
       const posture = V3.postureOf(o).label.toLowerCase();
       const up = H.getNum(o, "elevation", 0);
       const raised = up > 0 ? `, ${up} ft off the floor` : "";
-      return `${nameOf(o)} — ${posture}${raised}, ${side}, ` +
+      const has = V3.heldOf(o);
+      const holding = has && has.w ? `, holding a ${has.label.toLowerCase()}` : "";
+      return `${nameOf(o)} — ${posture}${raised}${holding}, ${side}, ` +
              `${feet(dist)} from lens, ${facing}`;
     })
     .filter(Boolean);
@@ -4545,7 +4547,9 @@ function bakeLabelOffsets() {
 
 // ---------------------------------------------------------------- object menus
 
+let lastMenuAt = { x: 200, y: 200 };
 function objectMenu(obj, x, y) {
+  lastMenuAt = { x, y };
   const tag = obj.tag;
   const common = [
     "-",
@@ -4570,6 +4574,13 @@ function objectMenu(obj, x, y) {
         mark("character"); H.set(obj, "female", !H.getBool(obj, "female")); draw();
       } },
       { label: "Height Off The Floor…", run: () => setElevation(obj) },
+      { label: "Holding…", run: () => setHeld(obj) },
+      { head: "Arms" },
+      ...Object.entries(V3.ARM_POSES).map(([key, spec]) => ({
+        label: spec.label,
+        tick: (H.get(obj, "armPose") || "down") === key,
+        run: () => setArmPose(obj, key),
+      })),
       { head: "Posture" },
       ...Object.entries(V3.POSTURES).map(([key, spec]) => ({
         label: spec.label,
@@ -4778,6 +4789,50 @@ function addMove(obj) {
   }
   S.sel = new Set([idOf(obj)]);
   reindex(); draw(); syncChrome();
+}
+
+/** What their arms are doing — and where that leaves their hands. */
+function setArmPose(obj, key) {
+  mark("arms");
+  for (const id of (S.sel.has(idOf(obj)) ? S.sel : new Set([idOf(obj)]))) {
+    const o = byID(id);
+    if (o?.tag === "Character") H.set(o, "armPose", key);
+  }
+  draw(); syncChrome();
+  toast(V3.ARM_POSES[key].label);
+}
+
+/**
+ * Something in their hand. It rides the arm pose, so a phone held out in front
+ * and a phone at their side are two different frames — and the brief says what
+ * they've got, because "on the phone" changes the shot.
+ */
+function setHeld(obj) {
+  const items = Object.entries(V3.HAND_PROPS);
+  showPopover(lastMenuAt.x, lastMenuAt.y, [
+    { head: "In their hand" },
+    ...items.map(([key, spec]) => ({
+      label: spec.label,
+      tick: (H.get(obj, "heldProp") || "") === key,
+      run: () => {
+        mark("holding");
+        for (const id of (S.sel.has(idOf(obj)) ? S.sel : new Set([idOf(obj)]))) {
+          const o = byID(id);
+          if (o?.tag !== "Character") continue;
+          H.set(o, "heldProp", key);
+          // Something to look at wants a hand in front of you; something to
+          // carry doesn't. Only nudge the arms if they're still at default.
+          if (key && !H.get(o, "armPose")) {
+            H.set(o, "armPose",
+              ["PHONE", "LAPTOP", "PAPER", "BOOK", "CAMERA", "MUG", "GLASS"]
+                .includes(key) ? "front" : "down");
+          }
+        }
+        draw(); syncChrome();
+        toast(spec.label === "Nothing" ? "Empty handed" : "Holding a " + spec.label.toLowerCase());
+      },
+    })),
+  ]);
 }
 
 /**

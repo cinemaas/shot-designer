@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=0c60231d";
-import * as R from "./render.js?v=0c60231d";
-import { UNITS_PER_FOOT } from "./catalog.js?v=0c60231d";
-import { fieldOfView } from "./optics.js?v=0c60231d";
+import * as H from "./hcw.js?v=7dcb3247";
+import * as R from "./render.js?v=7dcb3247";
+import { UNITS_PER_FOOT } from "./catalog.js?v=7dcb3247";
+import { fieldOfView } from "./optics.js?v=7dcb3247";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -266,7 +266,7 @@ export function build(cam, objects, scene, opts = {}) {
         .toString(16).padStart(6, "0");
       const face = opts.angleOf ? opts.angleOf(o) : null;
       figure(out, cam, p, colour, H.getBool(o, "female"), postureOf(o),
-             face != null ? face : (R.angleOf(o) || 0), elevationOf(o));
+             face != null ? face : (R.angleOf(o) || 0), elevationOf(o), o);
       continue;
     }
 
@@ -489,6 +489,104 @@ function hull(out, pts, stroke) {
              depth: Math.min(...pts.map((q) => q.depth)) - 0.12 });
 }
 
+/**
+ * What somebody is doing with their arms, and where that puts their hands.
+ *
+ * Each is elbow and wrist as a fraction of the person: forward, across, and
+ * up, measured from the shoulder they hang off. The wrist is where anything
+ * they are holding goes, which is the whole reason these are worth having —
+ * a phone at your side and a phone at your ear are different shots.
+ */
+export const ARM_POSES = {
+  down:   { label: "At their sides",
+            elbow: [0.02, 0.16, -0.85], wrist: [0.06, 0.2, -1.7] },
+  out:    { label: "Held out",
+            elbow: [0.05, 0.55, -0.7], wrist: [0.12, 1.0, -1.15] },
+  front:  { label: "Out in front",
+            elbow: [0.05, 0.14, -0.85], wrist: [1.15, 0.24, -0.95] },
+  folded: { label: "Folded",
+            elbow: [0.1, 0.5, -0.8], wrist: [0.62, -0.42, -1.0] },
+  raised: { label: "Raised",
+            elbow: [0.02, 0.42, -0.5], wrist: [0.1, 0.62, 0.5] },
+  pocket: { label: "Hands in pockets",
+            elbow: [0.05, 0.36, -0.8], wrist: [0.22, 0.14, -1.5] },
+};
+
+export const armPoseOf = (obj) =>
+  (obj && ARM_POSES[H.get(obj, "armPose") || "down"]) || ARM_POSES.down;
+
+/** Things somebody can be holding, and roughly how big they are in feet. */
+export const HAND_PROPS = {
+  "": { label: "Nothing" },
+  PHONE: { label: "Phone", w: 0.25, d: 0.1, h: 0.5 },
+  BOTTLE: { label: "Bottle", w: 0.3, d: 0.3, h: 0.9 },
+  GLASS: { label: "Glass", w: 0.28, d: 0.28, h: 0.5 },
+  PAPER: { label: "Papers", w: 0.7, d: 0.05, h: 0.9 },
+  LAPTOP: { label: "Laptop", w: 1.1, d: 0.8, h: 0.15 },
+  GUN: { label: "Handgun", w: 0.9, d: 0.2, h: 0.45 },
+  RIFLE: { label: "Rifle", w: 3.2, d: 0.2, h: 0.4 },
+  TORCH: { label: "Torch", w: 0.9, d: 0.2, h: 0.2 },
+  BAG: { label: "Bag", w: 0.9, d: 0.5, h: 1.2 },
+  MUG: { label: "Mug", w: 0.35, d: 0.35, h: 0.4 },
+  BOOK: { label: "Book", w: 0.6, d: 0.15, h: 0.8 },
+  CAMERA: { label: "Stills camera", w: 0.5, d: 0.4, h: 0.35 },
+};
+
+export const heldOf = (obj) => (obj && HAND_PROPS[H.get(obj, "heldProp") || ""]) || null;
+
+/**
+ * A tapered tube between two points in the person's own frame, each given as
+ * [forward, across, up]. Everything before this could only draw something
+ * standing on end, which is fine for a leg and useless for an arm that is
+ * folded, reaching forward, or holding something up.
+ */
+function limb(out, cam, p, facing, a, b, r0, r1, fill, sides = 8) {
+  const cs = Math.cos(facing), sn = Math.sin(facing);
+  const world = ([f, s2, z]) => ({
+    x: p.x + f * cs - s2 * sn, y: p.y + f * sn + s2 * cs, z,
+  });
+  const A = world(a), B = world(b);
+  const ax = B.x - A.x, ay = B.y - A.y, az = B.z - A.z;
+  const len = Math.hypot(ax, ay, az) || 1;
+  const u = [ax / len, ay / len, az / len];
+  // any two directions across the limb
+  const helper = Math.abs(u[2]) > 0.9 ? [1, 0, 0] : [0, 0, 1];
+  const cross = (m, n) => [m[1] * n[2] - m[2] * n[1],
+                           m[2] * n[0] - m[0] * n[2],
+                           m[0] * n[1] - m[1] * n[0]];
+  const norm3 = (v) => { const L = Math.hypot(...v) || 1; return v.map((c) => c / L); };
+  const e1 = norm3(cross(u, helper)), e2 = norm3(cross(u, e1));
+
+  const ring = (at, rad) => {
+    const pts = [];
+    for (let i = 0; i < sides; i++) {
+      const t = (i / sides) * Math.PI * 2;
+      const c = Math.cos(t) * rad, d = Math.sin(t) * rad;
+      pts.push(project(cam,
+        at.x + e1[0] * c + e2[0] * d,
+        at.y + e1[1] * c + e2[1] * d,
+        at.z + e1[2] * c + e2[2] * d));
+    }
+    return pts;
+  };
+  const lo = ring(A, r0), hi = ring(B, r1);
+  const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
+  for (let i = 0; i < sides; i++) {
+    const j = (i + 1) % sides;
+    const q = [lo[i], lo[j], hi[j], hi[i]];
+    if (q.some((v) => !v)) continue;
+    const ang = ((i + 0.5) / sides) * Math.PI * 2 + facing;
+    const lit = 0.84 + 0.24 * Math.cos(ang - toCam);
+    out.push({ pts: q, fill: tone(fill, lit), stroke: tone(fill, lit), width: 1,
+               depth: q.reduce((t, v) => t + v.depth, 0) / 4 });
+  }
+  for (const cap of [lo, hi]) {
+    if (cap.some((v) => !v)) continue;
+    out.push({ pts: cap, fill, stroke: fill, width: 1,
+               depth: cap.reduce((t, v) => t + v.depth, 0) / cap.length });
+  }
+}
+
 const tone = (hex, k) => {
   const v = parseInt(hex.slice(1), 16);
   const f = (c) => Math.max(0, Math.min(255, Math.round(c * k)));
@@ -672,7 +770,7 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
  * eight, so that is what they are built to.
  */
 function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0,
-                lift = 0) {
+                lift = 0, who = null) {
   // No outline on any of it. A line round every limb is a line round every
   // limb — the shading is what gives a body its form, and a dozen strokes on
   // top only ever looked like a diagram of a person rather than a person.
@@ -682,7 +780,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
     sides: 12, outline: false, ...o,
     z0: (o.z0 || 0) + lift, z1: (o.z1 || 0) + lift,
   });
-  const limb = tone(colour, 0.88);
+  const limbTone = tone(colour, 0.88);
   const dark = tone(colour, 0.74);
 
   // Scale the whole body to this person's own height.
@@ -720,7 +818,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
           z0: 0, z1: T * 2, fill: colour, sides: 10 });
     for (const s of [-1, 1]) {
       put({ fwd: z(0.5), side: s * (SH + ft(0.12)), len: z(1.9), wide: ft(0.32),
-            z0: 0, z1: T * 1.3, fill: limb, sides: 8 });
+            z0: 0, z1: T * 1.3, fill: limbTone, sides: 8 });
     }
     // and the head, a ball resting on the floor rather than a slab
     headOn(out, cam, p, facing, colour,
@@ -735,7 +833,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
             len1: ft(0.4), wide1: ft(0.32), z0: 0, z1: KNEE, fill: dark, sides: 8 });
       put({ fwd: ft(0.72), side: s * ft(0.27), len: ft(1.75), wide: ft(0.46),
             len1: ft(1.75), wide1: ft(0.4), z0: KNEE, z1: SEAT,
-            fill: female ? colour : limb, sides: 8 });
+            fill: female ? colour : limbTone, sides: 8 });
     }
     put({ len: ft(0.78), wide: HIPW * 2.2, len1: ft(0.7), wide1: WAIST * 2,
           z0: SEAT - z(0.12), z1: SEAT + z(0.5), fill: colour });
@@ -746,7 +844,7 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
     for (const s of [-1, 1]) {
       put({ fwd: ft(0.08), side: s * (SH + ft(0.16)), len: ft(0.38), wide: ft(0.34),
             len1: ft(0.3), wide1: ft(0.26),
-            z0: SEAT + z(0.3), z1: SHOULDER - z(0.05), fill: limb, sides: 8 });
+            z0: SEAT + z(0.3), z1: SHOULDER - z(0.05), fill: limbTone, sides: 8 });
     }
     headOn(out, cam, p, facing, colour,
            { z0: SHOULDER + z(0.12), z1: CROWN, female, lift });
@@ -765,9 +863,9 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
     const HEM = z(2.1);
     for (const s of [-1, 1]) {
       put({ side: s * ft(0.17), len: ft(0.4), wide: ft(0.33), len1: ft(0.34),
-            wide1: ft(0.27), z0: 0, z1: KNEEZ, fill: limb, sides: 8 });
+            wide1: ft(0.27), z0: 0, z1: KNEEZ, fill: limbTone, sides: 8 });
       put({ side: s * ft(0.18), len: ft(0.44), wide: ft(0.37), len1: ft(0.4),
-            wide1: ft(0.31), z0: KNEEZ, z1: HEM + z(0.15), fill: limb, sides: 8 });
+            wide1: ft(0.31), z0: KNEEZ, z1: HEM + z(0.15), fill: limbTone, sides: 8 });
     }
     put({ len: ft(1.45), wide: ft(2.2), len1: ft(0.64), wide1: WAIST * 2,
           z0: HEM, z1: WAISTZ, fill: colour });
@@ -797,14 +895,32 @@ function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 
 
   // Arms. They start inside the shoulder rather than beside it, so there is
   // no gap where one should join the other, and they taper to a wrist.
+  // Arms hang off the shoulders and point wherever the pose says, and the
+  // wrist is where anything they are carrying goes.
+  const pose = armPoseOf(who);
+  const SHZ = armTop - z(0.05);
+  let hand = null;
   for (const s of [-1, 1]) {
-    const off = SH + ft(0.1);
-    put({ side: s * off, len: ft(0.42), wide: ft(0.38), len1: ft(0.36),
-          wide1: ft(0.31), z0: z(3.15), z1: armTop + z(0.06),
-          fill: colour, sides: 10 });
-    put({ side: s * (off + ft(0.02)), len: ft(0.36), wide: ft(0.31),
-          len1: ft(0.26), wide1: ft(0.23),
-          z0: z(2.3), z1: z(3.2), fill: limb, sides: 10 });
+    const at = ([f, a, u]) => [f * z(1), s * (SH + ft(0.08) + a * z(0.45)),
+                               SHZ + u * z(1)];
+    const shoulder = [0, s * (SH + ft(0.05)), SHZ];
+    const elbow = at(pose.elbow), wrist = at(pose.wrist);
+    limb(out, cam, p, facing, shoulder, elbow, ft(0.19), ft(0.15), colour, 10);
+    limb(out, cam, p, facing, elbow, wrist, ft(0.15), ft(0.11), limbTone, 10);
+    limb(out, cam, p, facing, wrist,
+         [wrist[0] + z(0.08), wrist[1], wrist[2] - z(0.12)],
+         ft(0.11), ft(0.085), limbTone, 8);
+    if (s === 1) hand = wrist;
+  }
+
+  const held = heldOf(who);
+  if (held && held.w && hand) {
+    part(out, cam, p, facing, {
+      fwd: hand[0] + ft(held.w) * 0.35, side: hand[1],
+      len: ft(held.w), wide: ft(held.d),
+      z0: hand[2] - ft(held.h) / 2, z1: hand[2] + ft(held.h) / 2,
+      fill: tone(colour, 0.5), sides: 8, outline: false,
+    });
   }
 
   headOn(out, cam, p, facing, colour,

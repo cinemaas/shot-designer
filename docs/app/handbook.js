@@ -188,6 +188,16 @@ opening that isn't cut out is one you can't see through when you look down the
 lens. Drag one and it re-seats on whatever wall it lands near, and moving a
 wall brings everything on it along. Hold <kbd>⌥</kbd> while dragging to place
 one exactly where you want instead. Furniture and props are left alone.</p>
+<h4>Arms, and what's in their hands</h4>
+<p>Right-click a person for <b>Arms</b>: at their sides, held out, out in
+front, folded, raised, or hands in pockets. The arms actually go there, and so
+do the hands — which is the point, because <b>Holding…</b> puts something in
+one of them: a phone, a bottle, papers, a laptop, a gun, a torch, a bag, a mug,
+a book, a stills camera.</p>
+<p>A prop rides whatever the arms are doing, so a phone at somebody's side and
+a phone out in front of them are two different frames. Picking something to
+look at puts the arms in front for you unless you've already set them. The plan
+marks who is carrying something, and the brief says what.</p>
 <h4>Standing on something</h4>
 <p>A plan is flat, so the only way to say somebody is on a bed, on a step or on
 an apple box is to say it. <b>Height Off The Floor…</b> on a person does that,
