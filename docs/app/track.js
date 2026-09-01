@@ -6,7 +6,7 @@
 // on every ride-on dolly. Laying track here means laying those pieces, so the
 // count at the bottom is what you'd actually ask the key grip for.
 
-import { UNITS_PER_FOOT } from "./catalog.js?v=ee372fb3";
+import { UNITS_PER_FOOT } from "./catalog.js?v=cdc78e8d";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 

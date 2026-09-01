@@ -122,6 +122,18 @@ position, so you can keep adjusting either end without starting over.
 position, in that camera's own colour, so the whole thing reads without pressing
 anything. <kbd>P</kbd> plays it, and the camera travels and turns between the
 marks rather than jumping. People work the same way.</p>
+<h4>Your camera package</h4>
+<p><b>Camera Package…</b> sets what the whole app measures against. Pick the
+<b>lenses</b> you have, in the order you reach for them — they become the chips
+in the shot list. Pick the <b>camera body</b> from the sensor sizes, then the
+<b>recording gate</b>: full sensor, 16:9, 17:9, 2.39, 4:3, and the rest. Then
+the <b>glass</b> — spherical, or 1.3x, 1.5x, 1.8x, 2x anamorphic.</p>
+<p>It tells you what that combination gives you as you set it, because on
+anamorphic the numbers on a sensor and the shape of the picture are two
+different things. A 4:3 gate on an Alexa through a 2x is 17.8×13.4mm of sensor
+and a 2.67:1 picture, and a 50mm covers 39 degrees across it rather than the 27
+it would cover spherical. The lens cones on the plan and the through-the-lens
+view both follow it.</p>
 <h4>Two ways to draw a light</h4>
 <p><b>Lights: Diagram Style</b> in the menu draws every fixture as a small
 symbol with its name beside it and the throw it covers, the way a lighting plan

@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=ee372fb3";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=ee372fb3";
-import { EXTRA_SVG } from "./props.js?v=ee372fb3";
-import { GAUGE } from "./track.js?v=ee372fb3";
-import * as H from "./hcw.js?v=ee372fb3";
+import { FXG } from "./assets.js?v=cdc78e8d";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=cdc78e8d";
+import { EXTRA_SVG } from "./props.js?v=cdc78e8d";
+import { GAUGE } from "./track.js?v=cdc78e8d";
+import * as H from "./hcw.js?v=cdc78e8d";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;

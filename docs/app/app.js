@@ -1,26 +1,27 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=ee372fb3";
-import * as H from "./hcw.js?v=ee372fb3";
-import * as R from "./render.js?v=ee372fb3";
-import { FXG } from "./assets.js?v=ee372fb3";
-import * as B from "./blocking.js?v=ee372fb3";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=ee372fb3";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ee372fb3";
-import { HANDBOOK } from "./handbook.js?v=ee372fb3";
-import { FORMATS, fieldOfView, formatKey, findFormat } from "./optics.js?v=ee372fb3";
-import * as V3 from "./view3d.js?v=ee372fb3";
-import * as TR from "./track.js?v=ee372fb3";
-import * as RIG from "./rigs.js?v=ee372fb3";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=ee372fb3";
-import { Library } from "./library.js?v=ee372fb3";
+import { BRAND, SLUG } from "./brand.js?v=cdc78e8d";
+import * as H from "./hcw.js?v=cdc78e8d";
+import * as R from "./render.js?v=cdc78e8d";
+import { FXG } from "./assets.js?v=cdc78e8d";
+import * as B from "./blocking.js?v=cdc78e8d";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=cdc78e8d";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=cdc78e8d";
+import { HANDBOOK } from "./handbook.js?v=cdc78e8d";
+import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=cdc78e8d";
+import * as V3 from "./view3d.js?v=cdc78e8d";
+import * as TR from "./track.js?v=cdc78e8d";
+import * as RIG from "./rigs.js?v=cdc78e8d";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=cdc78e8d";
+import { Library } from "./library.js?v=cdc78e8d";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=ee372fb3";
+} from "./catalog.js?v=cdc78e8d";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -814,7 +815,7 @@ function renderLensView() {
   // Mid-move the pan is between two positions, so take it from the move.
   if (moved?.a != null) view.yaw = moved.a;
 
-  const W = 320, HGT = Math.round(W * (fmt.h / fmt.w));
+  const W = 320, HGT = Math.round(W / projectedAspect(fmt, fmt.squeeze));
   const svg = R.el("svg", { viewBox: `0 0 ${W} ${HGT}`, width: W, height: HGT });
   const toPx = (q) => [(q.u * 0.5 + 0.5) * W, (q.v * 0.5 + 0.5) * HGT];
 
@@ -857,8 +858,10 @@ function renderLensView() {
   const cap = document.createElement("div");
   cap.className = "cap";
   const name = shot ? H.get(shot, "headerText") : "Camera";
+  const sq = fmt.squeeze > 1 ? ` · ${fmt.squeeze}x` : "";
+  const gate = fmt.gate && fmt.gate !== "Full sensor" ? ` · ${fmt.gate}` : "";
   cap.textContent = `${name}${mm ? ` · ${mm}mm` : " · no lens set"} · ` +
-    `${formatKey(fmt).replace(/^\S+ /, "")}`;
+    `${formatKey(fmt).replace(/^\S+ /, "")}${gate}${sq}`;
   frame.append(cap);
 
   // An empty frame usually means the plan isn't drawn to distance rather than
@@ -1283,7 +1286,7 @@ async function frameToStoryboard(cam, svg, W, HGT, mm, fmt) {
 function shotBrief(cam, view, mm, fmt, lensFt) {
   const p = drawnPos(cam);
   const a = R.angleOf(cam);
-  const fov = fieldOfView(mm > 0 ? mm : 32, fmt);
+  const fov = fieldOfView(mm > 0 ? mm : 32, fmt, fmt.squeeze);
 
   // Who's in it, by where they actually stand.
   const people = objects()
@@ -1388,7 +1391,7 @@ function drawCoverage() {
     const mm = shot ? parseFloat(H.get(shot, "versionLens")) : 0;
     if (!(mm > 0)) continue;
 
-    const half = fieldOfView(mm, fmt).h / 2;
+    const half = fieldOfView(mm, fmt, fmt.squeeze).h / 2;
     const p = drawnPos(cam);
     const a = R.angleOf(cam);
     const reach = UNITS_PER_FOOT * 34;
@@ -6196,6 +6199,8 @@ const DEFAULT_PACKAGE = {
       lenses: [14, 18, 21, 25, 32, 35, 40, 50, 65, 75, 100, 135],
       support: Object.keys(RIG.RIGS),
       format: "ARRI Alexa",
+      gate: "Full sensor",
+      squeeze: 1,
     },
   },
 };
@@ -6224,7 +6229,21 @@ const packageLenses = () => {
   return l && l.length ? l : LENSES;
 };
 
-const packageFormat = () => findFormat(activeSet().format);
+/**
+ * The format everything else measures against: the body's sensor, cropped to
+ * whatever gate you are recording, with the squeeze carried along so a field
+ * of view and the shape of the frame both come out right.
+ */
+function packageFormat() {
+  const set = activeSet();
+  const base = findFormat(set.format);
+  const cut = gateOf(base, set.gate || "Full sensor");
+  return {
+    ...base, w: cut.w, h: cut.h,
+    squeeze: set.squeeze > 0 ? set.squeeze : 1,
+    gate: set.gate || "Full sensor",
+  };
+}
 
 const packageSupport = () => {
   const sup = activeSet().support;
@@ -6269,6 +6288,45 @@ function packageDialog() {
     fmtPick.append(o);
   }
 
+  // What you're recording on that sensor, and what the glass does to it.
+  const gateLabel = document.createElement("label");
+  gateLabel.textContent = "Recording gate";
+  const gatePick = document.createElement("select");
+  for (const g of GATES) {
+    const o = document.createElement("option");
+    o.value = g.name;
+    o.textContent = g.name;
+    gatePick.append(o);
+  }
+
+  const sqLabel = document.createElement("label");
+  sqLabel.textContent = "Glass";
+  const sqPick = document.createElement("select");
+  for (const q of SQUEEZES) {
+    const o = document.createElement("option");
+    o.value = String(q.x);
+    o.textContent = q.name;
+    sqPick.append(o);
+  }
+
+  // Say what that combination actually gives you, because the numbers on a
+  // sensor and the shape of the picture are not the same thing on anamorphic.
+  const note = document.createElement("p");
+  note.className = "sub";
+  const describe = () => {
+    const base = findFormat(fmtPick.value);
+    const cut = gateOf(base, gatePick.value);
+    const x = parseFloat(sqPick.value) || 1;
+    const shot = projectedAspect(cut, x);
+    note.textContent =
+      `${cut.w.toFixed(1)}×${cut.h.toFixed(1)}mm on the sensor` +
+      `${x > 1 ? `, ${x}x squeezed` : ""} — a ${shot.toFixed(2)}:1 picture. ` +
+      `A 50mm covers ${Math.round(fieldOfView(50, cut, x).h * 180 / Math.PI)}° across.`;
+  };
+  fmtPick.onchange = describe;
+  gatePick.onchange = describe;
+  sqPick.onchange = describe;
+
   const supLabel = document.createElement("label");
   supLabel.textContent = "Support on the truck";
   const supWrap = document.createElement("div");
@@ -6290,9 +6348,12 @@ function packageDialog() {
     nameBox.value = name;
     lensBox.value = (set.lenses || []).join(", ");
     fmtPick.value = formatKey(findFormat(set.format));
+    gatePick.value = set.gate || "Full sensor";
+    sqPick.value = String(set.squeeze || 1);
     for (const [key, cb] of Object.entries(boxes)) {
       cb.checked = !set.support || !set.support.length || set.support.includes(key);
     }
+    describe();
   };
   load(pkg.active);
   picker.onchange = () => {
@@ -6300,14 +6361,18 @@ function packageDialog() {
       nameBox.value = "New package";
       lensBox.value = "";
       fmtPick.value = formatKey(findFormat(null));
+      gatePick.value = "Full sensor";
+      sqPick.value = "1";
       for (const cb of Object.values(boxes)) cb.checked = true;
+      describe();
       return;
     }
     load(picker.value);
   };
 
   body.append(setLabel, picker, nameLabel, nameBox, lensLabel, lensBox,
-              fmtLabel, fmtPick, supLabel, supWrap);
+              fmtLabel, fmtPick, gateLabel, gatePick, sqLabel, sqPick, note,
+              supLabel, supWrap);
 
   sheet({
     title: "Camera Package",
@@ -6321,11 +6386,17 @@ function packageDialog() {
       const next = readPackage();
       // Renaming replaces rather than leaving an orphan behind.
       if (picker.value !== "\u0000new" && picker.value !== name) delete next.sets[picker.value];
-      next.sets[name] = { lenses, support, format: fmtPick.value };
+      const squeeze = parseFloat(sqPick.value) || 1;
+      next.sets[name] = {
+        lenses, support, format: fmtPick.value,
+        gate: gatePick.value, squeeze,
+      };
       next.active = name;
       writePackage(next);
       draw(); syncChrome();
-      toast(`${name} — ${lenses.length} lenses on ${fmtPick.value}`);
+      const glass = squeeze > 1 ? `${squeeze}x` : "spherical";
+      toast(`${name} — ${lenses.length} lenses, ${glass}, ` +
+            `${gatePick.value} on ${fmtPick.value}`);
     },
   });
 }

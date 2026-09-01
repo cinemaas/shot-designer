@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=ee372fb3";
-import * as R from "./render.js?v=ee372fb3";
-import { UNITS_PER_FOOT } from "./catalog.js?v=ee372fb3";
-import { fieldOfView } from "./optics.js?v=ee372fb3";
+import * as H from "./hcw.js?v=cdc78e8d";
+import * as R from "./render.js?v=cdc78e8d";
+import { UNITS_PER_FOOT } from "./catalog.js?v=cdc78e8d";
+import { fieldOfView } from "./optics.js?v=cdc78e8d";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -177,7 +177,7 @@ export function cameraAt(cam, fmt, lensMM, pos, height, pitch) {
   // room, so this cannot stay a constant.
   const own = H.getNum(cam, "lensHeight", 0);
   const z = height != null ? height : (own > 0 ? ft(own) : HEIGHTS.lens);
-  const fov = fieldOfView(lensMM > 0 ? lensMM : 32, fmt);
+  const fov = fieldOfView(lensMM > 0 ? lensMM : 32, fmt, fmt.squeeze);
   return {
     x: p.x, y: p.y, z,
     yaw: R.angleOf(cam), pitch: pitch != null ? pitch : tiltOf(cam),
@@ -464,26 +464,28 @@ const DARK = "#2b2b2b";
  * where it belongs on somebody flat on their back.
  */
 function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
-  // No face. Looking down on a plan you see the top of somebody's head, and
-  // these should say the same thing: a shape, a colour, and which way it
-  // points. Eyes and a mouth at this size only ever read as a toy. What is
-  // left is a nose, because you still have to know where somebody is looking.
+  // Nothing is drawn on the face. Which way somebody is turned is said by the
+  // back of their head being darker — one shape, no strokes, and it reads from
+  // any angle including from behind, which a nose never did.
   const cs = Math.cos(facing), sn = Math.sin(facing);
-  if (!up) {
-    const toCam = Math.atan2(cam.y - p.y, cam.x - p.x);
-    if (Math.cos(facing - toCam) < 0.05) return;
+  if (up) return;
+  const back = tone(colour, 0.72);
+  const pts = [];
+  for (let i = 0; i <= 9; i++) {
+    const a = Math.PI * 0.34 + (i / 9) * Math.PI * 1.32;   // the rear two-thirds
+    pts.push([Math.cos(a), Math.sin(a)]);
   }
-  const nose = ft(0.13), w = r * 0.14;
-  const pt = (u, v, lift) => {
-    const f = up ? fwd + v : fwd + lift;
-    const hgt = up ? z + lift : z + v;
-    return project(cam, p.x + f * cs - u * sn, p.y + f * sn + u * cs, hgt);
-  };
-  const tri = [pt(-w, r * 0.18, 0.4), pt(w, r * 0.18, 0.4),
-               pt(0, -r * 0.12, 0.4 + nose)];
-  if (tri.some((v) => !v)) return;
-  out.push({ pts: tri, fill: tone(colour, 0.78), stroke: "none",
-             depth: tri.reduce((a, v) => a + v.depth, 0) / 3 - 0.1 });
+  const ring = (t, w) => pts.map(([cx, sy]) => {
+    const f = fwd + cx * r * w, s2 = sy * r * 0.95 * w;
+    return project(cam, p.x + f * cs - s2 * sn, p.y + f * sn + s2 * cs, z + t);
+  });
+  const lo = ring(-r * 0.5, 0.99), hi = ring(r * 0.42, 0.86);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
+    if (q.some((v) => !v)) continue;
+    out.push({ pts: q, fill: back, stroke: back, width: 1,
+               depth: q.reduce((a, v) => a + v.depth, 0) / 4 - 0.05 });
+  }
 }
 
 /** One outline round a head, rather than one round each slice of it. */
@@ -545,7 +547,10 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
  * eight, so that is what they are built to.
  */
 function figure(out, cam, p, colour, female, posture = POSTURES.stand, facing = 0) {
-  const put = (o) => part(out, cam, p, facing, { sides: 12, ...o });
+  // No outline on any of it. A line round every limb is a line round every
+  // limb — the shading is what gives a body its form, and a dozen strokes on
+  // top only ever looked like a diagram of a person rather than a person.
+  const put = (o) => part(out, cam, p, facing, { sides: 12, outline: false, ...o });
   const limb = tone(colour, 0.88);
   const dark = tone(colour, 0.74);
 

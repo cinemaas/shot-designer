@@ -323,13 +323,61 @@ export const FORMATS = [
 ];
 
 /** Horizontal and vertical field of view, in radians, for a lens on a format. */
-export function fieldOfView(mm, fmt) {
+/**
+ * The gates people actually record — the shape of the area used on the sensor,
+ * not the shape of the finished picture. On anamorphic those are two different
+ * things: a 4:3 gate through a 2x squeeze delivers 2.39.
+ */
+export const GATES = [
+  { name: "Full sensor", ratio: 0 },
+  { name: "Open Gate", ratio: 0 },
+  { name: "16:9", ratio: 16 / 9 },
+  { name: "17:9 (DCI)", ratio: 17 / 9 },
+  { name: "1.85:1", ratio: 1.85 },
+  { name: "2:1", ratio: 2 },
+  { name: "2.39:1", ratio: 2.39 },
+  { name: "4:3", ratio: 4 / 3 },
+  { name: "6:5", ratio: 6 / 5 },
+  { name: "1.66:1", ratio: 1.66 },
+  { name: "1:1", ratio: 1 },
+];
+
+/** Squeeze factors you can actually hire. */
+export const SQUEEZES = [
+  { name: "Spherical", x: 1 },
+  { name: "1.3x anamorphic", x: 1.3 },
+  { name: "1.5x anamorphic", x: 1.5 },
+  { name: "1.8x anamorphic", x: 1.8 },
+  { name: "2x anamorphic", x: 2 },
+];
+
+/** The area of the sensor a gate actually uses, in millimetres. */
+export function gateOf(fmt, gateName) {
+  const g = GATES.find((x) => x.name === gateName);
+  if (!g || !g.ratio) return { w: fmt.w, h: fmt.h };
+  const have = fmt.w / fmt.h;
+  return g.ratio > have
+    ? { w: fmt.w, h: fmt.w / g.ratio }        // limited by the sensor's width
+    : { w: fmt.h * g.ratio, h: fmt.h };       // limited by its height
+}
+
+/**
+ * How much a lens sees, given the gate it is covering and its squeeze. An
+ * anamorphic lens is its marked focal length vertically and that divided by
+ * the squeeze horizontally, which is exactly why a 40mm 2x is wide.
+ */
+export function fieldOfView(mm, fmt, squeeze = 1) {
   const f = Math.max(1, mm || 0);
+  const x = squeeze > 0 ? squeeze : 1;
   return {
-    h: 2 * Math.atan(fmt.w / (2 * f)),
+    h: 2 * Math.atan((fmt.w * x) / (2 * f)),
     v: 2 * Math.atan(fmt.h / (2 * f)),
   };
 }
+
+/** What the finished picture is shaped like, squeeze included. */
+export const projectedAspect = (fmt, squeeze = 1) =>
+  (fmt.w / fmt.h) * (squeeze > 0 ? squeeze : 1);
 
 export const formatKey = (f) => `${f.make} ${f.model}`;
 export const findFormat = (key) =>
