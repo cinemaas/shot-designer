@@ -196,6 +196,22 @@ export const makeImageProp = (x, y, pictureID, scale = 1) =>
     rotator("RotatorObject", 0),
   ]);
 
+/**
+ * A floorplan behind everything, on every page. Written exactly as the original
+ * writes one, so a scene that gains a background here still opens there.
+ */
+export const makeBackground = (pictureID, scale = 1) =>
+  wrap("Background", {
+    ...baseFields(0, 0),
+    objectScaleX: scale, objectScaleY: scale,
+    onPagesComma: "",
+    scalable: true,
+    pictureUniqueID: pictureID,
+  }, [
+    node("Scaler", { uniqueID: newID() }),
+    rotator("RotatorObject", 0),
+  ]);
+
 export const makeStoryboard = (x, y, pictureID, caption = "") =>
   wrap("Storyboard", {
     ...baseFields(x, y),

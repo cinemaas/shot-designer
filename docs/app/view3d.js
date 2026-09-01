@@ -7,13 +7,13 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=c715b394";
-import * as R from "./render.js?v=c715b394";
-import * as HU from "./human.js?v=c715b394";
-import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=c715b394";
+import * as H from "./hcw.js?v=6f6ea3b7";
+import * as R from "./render.js?v=6f6ea3b7";
+import * as HU from "./human.js?v=6f6ea3b7";
+import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=6f6ea3b7";
 
 export { HAND_PROPS, LOOKED_AT };
-import { fieldOfView } from "./optics.js?v=c715b394";
+import { fieldOfView } from "./optics.js?v=6f6ea3b7";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 

@@ -23,8 +23,8 @@
 // green face, and it is a mistake the data model here cannot express.
 
 import { UNITS_PER_FOOT, SKIN_TONES, HAIR_COLOURS, HAIR_STYLES,
-         BUILDS, HAND_PROPS } from "./catalog.js?v=c715b394";
-import { project } from "./view3d.js?v=c715b394";
+         BUILDS, HAND_PROPS } from "./catalog.js?v=6f6ea3b7";
+import { project } from "./view3d.js?v=6f6ea3b7";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -245,7 +245,7 @@ function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1,
   // step from one facet to the next is the whole of what makes you see facets,
   // and a wide range turns a cheek into a set of stripes. Softened, and with
   // enough of them, the same geometry reads as a curve.
-  const lit = (0.78 + 0.30 * lam) * ao;
+  const lit = (0.82 + 0.24 * lam) * ao;
 
   const pts = verts.map((v) => project(cam, v[0], v[1], v[2]));
   if (pts.some((v) => !v)) return;
@@ -986,10 +986,10 @@ export function drawHuman(out, cam, p, h, {
   // lot of polygons nobody can see.
   const dist = Math.hypot(cam.x - p.x, cam.y - p.y);
   const near = dist < m.H * 13, far = dist > m.H * 34;
-  const lod = far ? { lat: 7, lon: 10, sides: 6, face: false }
-    : near ? { lat: 18, lon: 28, sides: 14, face: true }
-    : { lat: 11, lon: 16, sides: 10, face: true };
-  if (detail < 1) { lod.lat = 7; lod.lon = 10; lod.sides = 6; }
+  const lod = far ? { lat: 7, lon: 10, sides: 7, face: false }
+    : near ? { lat: 18, lon: 28, sides: 22, face: true }
+    : { lat: 12, lon: 18, sides: 13, face: true };
+  if (detail < 1) { lod.lat = 7; lod.lon = 10; lod.sides = 7; }
 
   // The light: mostly from above, leaning towards whoever is looking, so a
   // face is never in silhouette and a body always has a lit side and a turned
@@ -1242,21 +1242,34 @@ export function drawHuman(out, cam, p, h, {
   } else {
     // Seated: thighs forward, shins down. Same limbs, different angles — which
     // is the point of having built it this way.
+    //
+    // Forward is a negative pitch on a leg, and it was positive here, so
+    // everybody sat with their knees behind them. The thigh is also fractionally
+    // above horizontal and the knee opens past a right angle, because nobody
+    // sits at exactly ninety degrees and a figure that does looks like a doll
+    // propped on a shelf.
     for (const s of [-1, 1]) {
       const hip = joint(pelvis,
-        [0, s * m.hipHalf * 0.5, m.crotch - m.hip + m.thigh * 0.3],
-        rotPitch(Math.PI / 2));
+        [0, s * m.hipHalf * 0.52, m.crotch - m.hip + m.thigh * 0.3],
+        rotPitch(-Math.PI / 2 + 0.14));
       const thighL = m.crotch - m.knee + m.thigh * 0.4;
+      // Small enough to stay inside the thigh: a filler you can see from
+      // behind is worse than the seam it was hiding.
+      jointBall(ctx, hip, [0, 0, 0], m.thigh * 0.86, h.trousers, S);
       sweep(ctx, hip, [
-        { p: [0, 0, m.thigh * 0.5], rx: m.thigh * 1.10, ry: m.thigh * 1.06 },
+        { p: [0, 0, m.thigh * 0.4], rx: m.thigh * 1.08, ry: m.thigh * 1.05 },
+        { p: [0, 0, -thighL * 0.5], rx: m.thigh * 0.96, ry: m.thigh * 0.95 },
         { p: [0, 0, -thighL], rx: m.calf * 1.16, ry: m.calf * 1.12 },
-      ], h.trousers, { sides: S });
-      const knee = joint(hip, [0, 0, -thighL], rotPitch(-Math.PI / 2));
-      const shinL = m.knee - m.ankle + seat * 0.0;
+      ], h.trousers, { sides: S, openLo: true });
+
+      const knee = joint(hip, [0, 0, -thighL], rotPitch(Math.PI / 2 - 0.22));
+      const shinL = m.knee - m.ankle;
+      jointBall(ctx, knee, [0, 0, 0], m.calf * 1.12, h.trousers, S);
       sweep(ctx, knee, [
-        { p: [0, 0, m.calf * 0.5], rx: m.calf * 1.14, ry: m.calf * 1.1 },
+        { p: [0, 0, m.calf * 0.45], rx: m.calf * 1.14, ry: m.calf * 1.1 },
+        { p: [0, 0, -shinL * 0.55], rx: m.calf * 0.9, ry: m.calf * 0.94 },
         { p: [0, 0, -shinL], rx: m.ankleR * 1.05, ry: m.ankleR * 1.08 },
-      ], h.trousers, { sides: S });
+      ], h.trousers, { sides: S, openLo: true });
       foot(ctx, joint(knee, [0, 0, -shinL - m.ankleR * 0.2]), m, h.shoes);
     }
   }

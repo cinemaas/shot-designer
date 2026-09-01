@@ -1,12 +1,12 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=c715b394";
+import { FXG } from "./assets.js?v=6f6ea3b7";
 import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS, SKIN_TONES, HAIR_COLOURS,
-  } from "./catalog.js?v=c715b394";
-import { EXTRA_SVG } from "./props.js?v=c715b394";
-import { GAUGE } from "./track.js?v=c715b394";
-import * as H from "./hcw.js?v=c715b394";
+  } from "./catalog.js?v=6f6ea3b7";
+import { EXTRA_SVG } from "./props.js?v=6f6ea3b7";
+import { GAUGE } from "./track.js?v=6f6ea3b7";
+import * as H from "./hcw.js?v=6f6ea3b7";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -395,11 +395,14 @@ export const cameraColour = (obj) => {
     .toString(16).padStart(6, "0");
 };
 
+// A shade under the original's, which sat heavy next to people this size.
+const CAM_SCALE = 0.86;
+
 function drawCamera(obj) {
-  const g = el("g");
+  const g = el("g", { transform: `scale(${CAM_SCALE})` });
   g.append(el("path", {
     d: CAM_PATH, fill: obj ? cameraColour(obj) : CAMERA_GREEN,
-    stroke: INK, "stroke-width": STROKE, "stroke-linejoin": "round",
+    stroke: INK, "stroke-width": STROKE / CAM_SCALE, "stroke-linejoin": "round",
   }));
   return g;
 }
@@ -973,7 +976,7 @@ export function radiusOf(obj) {
     if (figureStyle === "figure") return SHOULDER_ACROSS + STROKE / 2;
     return PLAN_SHOULDER + 3;
   }
-  if (obj.tag === "Camera") return 22;
+  if (obj.tag === "Camera") return 22 * CAM_SCALE;
   if (LABEL_TAGS.has(obj.tag)) return 34;
   if (GENERIC_TAGS.has(obj.tag)) {
     const b = artBounds(H.get(obj, "objectKey"));

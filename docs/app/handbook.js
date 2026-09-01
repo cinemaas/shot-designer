@@ -330,6 +330,14 @@ snap off entirely.</dd>
 you draw. Corners snap to corners already in the scene, so rooms join up.</p>
 <p>The wall tool stays armed because walls come in runs. Everything else is one
 shot. <kbd>Esc</kbd> always leaves you with nothing armed.</p>
+<h4>Getting a floorplan in</h4>
+<p><b>Drop the file on the plan.</b> Or paste a picture — <kbd>⌘V</kbd> — which
+is how one usually reaches you anyway: a screenshot, or something somebody
+sent. <b>Add ▸ Add Floorplan…</b> if you would rather go looking for it.</p>
+<p>However it arrives it goes in behind everything, on every page, and then
+offers you the scale, because a plan you cannot measure against is a picture.
+Say Later if you are in a hurry; <b>Set Scale…</b> on the background is there
+whenever you want it.</p>
 <h4>Tracing over a floorplan</h4>
 <p>Most plans arrive as a picture — a survey, a phone photo of a plan on a wall,
 something an agent sent. It reads fine to you and means nothing to the app:

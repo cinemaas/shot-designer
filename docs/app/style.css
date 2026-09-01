@@ -539,3 +539,14 @@ body.view-only #stage { cursor: grab; }
   color: var(--dim); opacity: .8; cursor: pointer; font-size: 14px; line-height: 1;
 }
 #charpanel .close:hover { opacity: 1; }
+
+/* A plan you can drop a floorplan onto. */
+#stage.dropping::after {
+  content: "Drop to use as the floorplan";
+  position: absolute; inset: 8px; z-index: 20;
+  border: 2px dashed var(--sel); border-radius: 8px;
+  background: color-mix(in srgb, var(--sel) 7%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 600; color: var(--sel);
+  pointer-events: none;
+}

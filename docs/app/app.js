@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=c715b394";
-import * as H from "./hcw.js?v=c715b394";
-import * as R from "./render.js?v=c715b394";
-import { FXG } from "./assets.js?v=c715b394";
-import * as B from "./blocking.js?v=c715b394";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=c715b394";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=c715b394";
-import { HANDBOOK } from "./handbook.js?v=c715b394";
+import { BRAND, SLUG } from "./brand.js?v=6f6ea3b7";
+import * as H from "./hcw.js?v=6f6ea3b7";
+import * as R from "./render.js?v=6f6ea3b7";
+import { FXG } from "./assets.js?v=6f6ea3b7";
+import * as B from "./blocking.js?v=6f6ea3b7";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=6f6ea3b7";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6f6ea3b7";
+import { HANDBOOK } from "./handbook.js?v=6f6ea3b7";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=c715b394";
-import * as V3 from "./view3d.js?v=c715b394";
-import * as HU from "./human.js?v=c715b394";
-import { findWalls } from "./trace.js?v=c715b394";
-import { blenderScript } from "./blender.js?v=c715b394";
-import * as TR from "./track.js?v=c715b394";
-import * as RIG from "./rigs.js?v=c715b394";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=c715b394";
-import { Library } from "./library.js?v=c715b394";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=6f6ea3b7";
+import * as V3 from "./view3d.js?v=6f6ea3b7";
+import * as HU from "./human.js?v=6f6ea3b7";
+import { findWalls } from "./trace.js?v=6f6ea3b7";
+import { blenderScript } from "./blender.js?v=6f6ea3b7";
+import * as TR from "./track.js?v=6f6ea3b7";
+import * as RIG from "./rigs.js?v=6f6ea3b7";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=6f6ea3b7";
+import { Library } from "./library.js?v=6f6ea3b7";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=c715b394";
+} from "./catalog.js?v=6f6ea3b7";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -4774,6 +4774,7 @@ function addMenu(x, y, at) {
                 "GenericProp", at, x, y) },
     { label: "Lay Dolly Track…", run: () => layTrack(at) },
     { label: "Add Rigged Camera…", run: () => rigMenu(x, y, at) },
+    { label: "Add Floorplan…", run: importBackground },
     { label: "Add Image Prop…", run: () => importImageProp(at) },
     { label: "Add Annotation…", run: () => addCaption(at) },
     "-",
@@ -5005,6 +5006,77 @@ function addCamera(at) {
  * Anything the built-in kit doesn't cover: bring in a PNG (transparent is
  * best) and it behaves like any other prop — rotate it, stretch it, move it.
  */
+/**
+ * Getting a floorplan into a scene.
+ *
+ * This wanted to be the easiest thing in the app and was one of the hardest:
+ * there was no way to add a background at all, only an image prop, and that
+ * meant a menu, a submenu and a file dialog. A floorplan arrives as a file on
+ * a desktop or a picture on a clipboard, so those are the two ways in — drop
+ * it on the plan, or paste it. The menu item stays for anybody who would
+ * rather go looking.
+ *
+ * Whatever the route, the same three things happen: it goes in behind
+ * everything on every page, it is offered a scale, and it is offered to have
+ * its walls read off it. A plan you cannot measure against is a picture.
+ */
+function addBackgroundFromFile(file) {
+  if (!file || !/^image\//.test(file.type)) {
+    return toast("That isn't an image", 5000);
+  }
+  if (file.size > 12 * 1024 * 1024) {
+    return toast("That image is over 12 MB — shrink it first", 6000);
+  }
+  const reader = new FileReader();
+  reader.onload = () => addBackgroundFromDataURL(String(reader.result), file.name);
+  reader.onerror = () => toast("Could not read that file", 5000);
+  reader.readAsDataURL(file);
+}
+
+function addBackgroundFromDataURL(dataURL, name = "") {
+  mark("add background");
+  const pic = H.makePicture(dataURL);
+  let pics = H.child(S.doc, "Pictures");
+  if (!pics) {
+    pics = H.node("Pictures", {});
+    S.doc.children.splice(S.doc.children.length - 1, 0, pics);
+  }
+  pics.children.push(pic);
+  pics.text = null;
+  S.scene.pictures[H.get(pic, "uniqueID")] = H.get(pic, "base64Data");
+
+  const bg = H.makeBackground(H.get(pic, "uniqueID"));
+  // Behind everything, which is what a background is.
+  canvas().children.unshift(bg);
+  reindex();
+  S.sel = new Set([idOf(bg)]);
+  fitToContent();
+  draw(); syncChrome();
+
+  sheet({
+    title: name ? `Added ${name}` : "Background added",
+    sub: "Next: tell it how big the room is, by dragging a line along something " +
+         "whose length you know — a door is three feet. Everything downstream " +
+         "needs that: the 3D, lens heights against a real wall, the size of the " +
+         "room in a brief. Without it the plan is a picture.",
+    okLabel: "Set the scale",
+    onOK: () => { S.afterCalibrate = () => autoTrace(bg); calibrateBackground(bg); },
+  });
+  const row = $("#modal").querySelector(".row");
+  const later = document.createElement("button");
+  later.textContent = "Later";
+  later.onclick = () => { $("#modal").hidden = true; };
+  row.prepend(later);
+}
+
+function importBackground() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
+  input.onchange = () => addBackgroundFromFile(input.files?.[0]);
+  input.click();
+}
+
 function importImageProp(at) {
   const input = document.createElement("input");
   input.type = "file";
@@ -7397,6 +7469,38 @@ function themeMenu(x, y) {
 }
 
 // ---------------------------------------------------------------- boot
+
+// Drop a picture on the plan and it is the plan's background. Paste one and
+// the same. Both are how a floorplan actually reaches you — as a file on a
+// desktop or a screenshot on a clipboard — and neither of them used to work.
+stage.addEventListener("dragover", (e) => {
+  if (![...e.dataTransfer.types].includes("Files")) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  stage.classList.add("dropping");
+});
+stage.addEventListener("dragleave", (e) => {
+  if (e.target === stage) stage.classList.remove("dropping");
+});
+stage.addEventListener("drop", (e) => {
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  e.preventDefault();
+  stage.classList.remove("dropping");
+  if (S.readOnly) return toast("This scene is open read-only", 5000);
+  addBackgroundFromFile(file);
+});
+
+window.addEventListener("paste", (e) => {
+  if (isTyping() || S.readOnly) return;
+  for (const item of e.clipboardData?.items || []) {
+    if (item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) { e.preventDefault(); addBackgroundFromFile(file); }
+      return;
+    }
+  }
+});
 
 window.addEventListener("beforeunload", (e) => {
   if (S.dirty) { e.preventDefault(); e.returnValue = ""; }
