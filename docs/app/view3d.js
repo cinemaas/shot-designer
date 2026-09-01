@@ -7,10 +7,10 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=870760ca";
-import * as R from "./render.js?v=870760ca";
-import { UNITS_PER_FOOT } from "./catalog.js?v=870760ca";
-import { fieldOfView } from "./optics.js?v=870760ca";
+import * as H from "./hcw.js?v=0c60231d";
+import * as R from "./render.js?v=0c60231d";
+import { UNITS_PER_FOOT } from "./catalog.js?v=0c60231d";
+import { fieldOfView } from "./optics.js?v=0c60231d";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -553,51 +553,55 @@ function faceOn(out, cam, p, facing, { at: fwd, z, r, up = false, colour }) {
   // ---- hair -------------------------------------------------------------
   // Over the back and the top, dipping to a fringe at the front on one side.
   // Always drawn: the back of a head is a shape you should know from behind.
-  const hair = tone(colour, 0.6);
+  const hair = tone(colour, 0.55);
   const arc = [];
-  for (let i = 0; i <= 15; i++) arc.push(Math.PI * 0.56 + (i / 15) * Math.PI * 0.88);
-  const ring = (t, w, back = 0) => arc.map((a) => {
-    const f = fwd + Math.cos(a) * r * w - back, s2 = Math.sin(a) * r * 0.96 * w;
+  for (let i = 0; i <= 15; i++) arc.push(Math.PI * 0.33 + (i / 15) * Math.PI * 1.34);
+  const ring = (t, w) => arc.map((a) => {
+    const f = fwd + Math.cos(a) * r * w, s2 = Math.sin(a) * r * 0.96 * w;
     return project(cam, p.x + f * cs - s2 * sn, p.y + f * sn + s2 * cs, z + t);
   });
-  // Two bands: the mass at the back of the head, then the crown over the top.
+  // One cap: from the back of the head up over the crown, its front edge
+  // sitting above the brow. A haircut is a shape, not a series of patches.
   for (const [t0, w0, t1, w1] of [
-    [-r * 0.35, 1.02, r * 0.3, 1.06],
-    [r * 0.3, 1.06, r * 0.62, 0.66],
+    [-r * 0.1, 1.03, r * 0.36, 1.05],
+    [r * 0.36, 1.05, r * 0.8, 0.46],
   ]) {
     const lo = ring(t0, w0), hi = ring(t1, w1);
     for (let i = 0; i < arc.length - 1; i++) {
       const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
       if (q.some((v) => !v)) continue;
       out.push({ pts: q, fill: hair, stroke: hair, width: 1,
-                 depth: q.reduce((t, v) => t + v.depth, 0) / 4 * 0.995 });
+                 depth: q.reduce((t, v) => t + v.depth, 0) / 4 * 0.994 });
     }
   }
-  // A fringe swept off the brow to one side, sitting on the front of the head
-  // rather than round it — which is what a haircut looks like and a cap doesn't.
-  blob(-r * 0.06, r * 0.6, r * 0.56, r * 0.17, hair, -0.2, 1.03, 18);
-  blob(r * 0.42, r * 0.46, r * 0.2, r * 0.24, hair, -0.5, 1.03, 14);
 
   if (!up && straightOn < 0.16) return;      // nothing on the back of a head
 
-  // ---- eyes -------------------------------------------------------------
-  const U = r * 0.35, V = r * 0.03;
+  // ---- ears -------------------------------------------------------------
+  // Right on the side of the head, where the surface has turned away — which
+  // is why they read in profile and all but disappear straight on, exactly as
+  // ears do.
   for (const s2 of [-1, 1]) {
-    blob(s2 * U, V + r * 0.25, r * 0.16, r * 0.05, tone(colour, 0.5),
-         s2 * 0.14);                                                        // brow
-    blob(s2 * U, V, r * 0.165, r * 0.13, "#fbfcfd", s2 * 0.06);              // white
-    blob(s2 * U, V - r * 0.012, r * 0.085, r * 0.095, "#2a2f36", 0, 1.05);   // iris
-    blob(s2 * U + r * 0.045, V + r * 0.05, r * 0.03, r * 0.032,
-         "#ffffff", 0, 1.062);                                                // catchlight
+    blob(s2 * r * 0.9, r * 0.06, r * 0.1, r * 0.17, tone(colour, 0.9), 0, 1.03, 12);
   }
 
-  // ---- mouth ------------------------------------------------------------
-  // A nose: barely there, just enough that a face has something between the
-  // eyes and the mouth.
-  blob(0, -r * 0.1, r * 0.045, r * 0.075, tone(colour, 0.78), 0, 1.04, 10);
+  // ---- the face ---------------------------------------------------------
+  // Spread over the whole of it. Everything used to sit in one band across the
+  // middle, which is what made a face look squashed however good the parts of
+  // it were.
+  const U = r * 0.33;
+  for (const s2 of [-1, 1]) {
+    blob(s2 * U, r * 0.35, r * 0.17, r * 0.045, tone(colour, 0.5), s2 * 0.14);
+    blob(s2 * U, r * 0.14, r * 0.165, r * 0.13, "#fbfcfd", s2 * 0.05);
+    blob(s2 * U, r * 0.125, r * 0.085, r * 0.095, "#2a2f36", 0, 1.05);
+    blob(s2 * U + r * 0.045, r * 0.18, r * 0.03, r * 0.032, "#ffffff", 0, 1.062);
+  }
 
-  // And a closed mouth — a line, not an opening.
-  blob(0, -r * 0.33, r * 0.16, r * 0.028, tone(colour, 0.46), 0, 1.042, 12);
+  // A nose, barely there.
+  blob(0, -r * 0.13, r * 0.045, r * 0.09, tone(colour, 0.8), 0, 1.04, 10);
+
+  // A closed mouth: a line and nothing more.
+  blob(0, -r * 0.44, r * 0.15, r * 0.016, tone(colour, 0.4), 0, 1.042, 12);
 }
 
 /** One outline round a head, rather than one round each slice of it. */
@@ -632,9 +636,14 @@ function headOn(out, cam, p, facing, colour, { z0, z1, fwd = 0, up = false,
       len1: r * 2 * w1 * grow, wide1: r * 1.9 * w1 * grow,
       z0: z0 + h * a, z1: z0 + h * b, fill, sides: 16, outline: false,
     });
-  slice(0, 0.22, 0.72, 0.94, crown);
-  slice(0.22, 0.62, 0.94, 1, crown);
-  slice(0.62, 1, 1, 0.42, crown);
+  // An egg rather than a barrel: a jaw that narrows to the chin, the width at
+  // the cheekbones, temples holding that width, and a crown that rounds off.
+  // Four slices instead of three, which is what gives a face somewhere to sit
+  // instead of everything crowding into one band.
+  slice(0, 0.16, 0.62, 0.88, crown);
+  slice(0.16, 0.46, 0.88, 1, crown);
+  slice(0.46, 0.78, 1, 0.97, crown);
+  slice(0.78, 1, 0.97, 0.44, crown);
   outlineBall(out, cam, p, facing, fwd, r * 1.02, z0, z1);
 
   // One solid colour: the head is a darker tone of the body and that is all,

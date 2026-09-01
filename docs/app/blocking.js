@@ -6,8 +6,8 @@
 // people type into labels say which beat each position belongs to. This reads
 // both and turns a static tangle into something you can step through.
 
-import * as H from "./hcw.js?v=870760ca";
-import * as R from "./render.js?v=870760ca";
+import * as H from "./hcw.js?v=0c60231d";
+import * as R from "./render.js?v=0c60231d";
 
 /** "1,4" / "5/6" / "2 & 3" -> [1,4] / [5,6] / [2,3] */
 export function parseBeatLabel(text) {
