@@ -411,6 +411,23 @@ It can't leave the arm and it can't take the track itself; the faint circle is
 the sweep it can reach. A Fisher Jib 21 is 5'10", which is shorter than most
 people draw it. <b>Arm Reach…</b> sets it to something else for a 23.</dd>
 </dl>
+<h4>Moving a dolly, and moving the camera on it</h4>
+<p>These are two separate moves and you set them separately.</p>
+<dl>
+<dt>The dolly</dt><dd><b>Add a Move…</b> on the base. Position 1 is where it
+already stands; run it to where it lands next and pin that. On track it stays
+on the rails the whole way — what runs between the marks is how far along the
+track it is, so it takes a corner rather than cutting across it.</dd>
+<dt>The camera on it</dt><dd><b>Add a Swing / Rise…</b> on the camera. Its
+positions are not places on the floor — that is the dolly's business. They are
+where it sits on the arm, how high the lens is and how far it is tilted. So a
+jib can be rising and swinging while the base is still running.</dd>
+</dl>
+<p>Then the camera goes where both of them put it. It animates because it is
+attached, not because it was told to, which means you can set either one
+without touching the other. Both menus offer the other one too — <b>Move The
+Dolly…</b> from the camera, <b>Move The Camera On It…</b> from the base — so
+you never have to go hunting for the half you did not select.</p>
 <p>Track is for dollies. A camera on its own doesn't need any — give it
 <b>Add a Move…</b> instead. Lay track with <kbd>T</kbd> and drop a dolly near it
 and the dolly takes it.</p>

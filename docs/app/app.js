@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=6f6ea3b7";
-import * as H from "./hcw.js?v=6f6ea3b7";
-import * as R from "./render.js?v=6f6ea3b7";
-import { FXG } from "./assets.js?v=6f6ea3b7";
-import * as B from "./blocking.js?v=6f6ea3b7";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=6f6ea3b7";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=6f6ea3b7";
-import { HANDBOOK } from "./handbook.js?v=6f6ea3b7";
+import { BRAND, SLUG } from "./brand.js?v=1edf8033";
+import * as H from "./hcw.js?v=1edf8033";
+import * as R from "./render.js?v=1edf8033";
+import { FXG } from "./assets.js?v=1edf8033";
+import * as B from "./blocking.js?v=1edf8033";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=1edf8033";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1edf8033";
+import { HANDBOOK } from "./handbook.js?v=1edf8033";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=6f6ea3b7";
-import * as V3 from "./view3d.js?v=6f6ea3b7";
-import * as HU from "./human.js?v=6f6ea3b7";
-import { findWalls } from "./trace.js?v=6f6ea3b7";
-import { blenderScript } from "./blender.js?v=6f6ea3b7";
-import * as TR from "./track.js?v=6f6ea3b7";
-import * as RIG from "./rigs.js?v=6f6ea3b7";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=6f6ea3b7";
-import { Library } from "./library.js?v=6f6ea3b7";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=1edf8033";
+import * as V3 from "./view3d.js?v=1edf8033";
+import * as HU from "./human.js?v=1edf8033";
+import { findWalls } from "./trace.js?v=1edf8033";
+import { blenderScript } from "./blender.js?v=1edf8033";
+import * as TR from "./track.js?v=1edf8033";
+import * as RIG from "./rigs.js?v=1edf8033";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=1edf8033";
+import { Library } from "./library.js?v=1edf8033";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=6f6ea3b7";
+} from "./catalog.js?v=1edf8033";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -142,12 +142,15 @@ function marksOf(o) {
   return raw.split(";").map((seg) => {
     const [slice, rest] = seg.split(":");
     // Older marks carry three numbers; height and tilt came later.
-    const [x, y, a, h, tilt] = (rest || "").split(",").map(Number);
+    // Older marks carry three numbers; height and tilt came later, and the
+    // sixth — where the camera sits on its rig — later still.
+    const [x, y, a, h, tilt, arm] = (rest || "").split(",").map(Number);
     return {
       slice: parseInt(slice, 10), x, y,
       a: Number.isFinite(a) ? a : 0,
       h: Number.isFinite(h) ? h : null,
       tilt: Number.isFinite(tilt) ? tilt : null,
+      arm: Number.isFinite(arm) ? arm : null,
     };
   }).filter((m) => Number.isFinite(m.slice) && Number.isFinite(m.x) && Number.isFinite(m.y))
     .sort((p, q) => p.slice - q.slice);
@@ -196,12 +199,39 @@ function movePoints(marks, bends) {
   return out;
 }
 
+/**
+ * Where a camera is sitting on its rig, if it is on one.
+ *
+ * A jib is an angle round the pivot and a slider is a distance along it, and
+ * either way it is one number — which is the number a rigged camera's move is
+ * actually made of. Its x and y are not its own: they belong to the dolly.
+ */
+function armSeatOf(o) {
+  if (o.tag !== "Camera") return null;
+  const rig = byID(RIG.rigParentID(o));
+  if (!rig) return null;
+  const spec = RIG.rigSpec(rig);
+  if (spec?.arm) return H.getNum(o, "rigArmAngle", 0);
+  if (spec?.travel) return H.getNum(o, "rigSlide", 0);
+  return null;
+}
+
+/** Put a camera back on its rig at a given seat. */
+function seatCamera(cam, arm) {
+  const rig = byID(RIG.rigParentID(cam));
+  if (!rig || arm == null) return;
+  const spec = RIG.rigSpec(rig);
+  if (spec?.arm) H.set(cam, "rigArmAngle", +arm.toFixed(4));
+  else if (spec?.travel) H.set(cam, "rigSlide", Math.max(-0.5, Math.min(0.5, arm)));
+}
+
 function writeMarks(o, list) {
   const clean = [...list].sort((p, q) => p.slice - q.slice);
   H.set(o, "posMarks", clean.length < 2 ? "" :
     clean.map((m) => `${m.slice}:${round(m.x)},${round(m.y)},${(m.a || 0).toFixed(4)}` +
-      (m.h != null || m.tilt != null
-        ? `,${(m.h ?? 0).toFixed(2)},${(m.tilt ?? 0).toFixed(4)}` : "")).join(";"));
+      (m.h != null || m.tilt != null || m.arm != null
+        ? `,${(m.h ?? 0).toFixed(2)},${(m.tilt ?? 0).toFixed(4)}` : "") +
+      (m.arm != null ? `,${m.arm.toFixed(4)}` : "")).join(";"));
 }
 
 /** Pin this object where it currently stands, at the slice given. */
@@ -215,6 +245,10 @@ function setMark(o, slice) {
     // on a jib those are the whole point of the move.
     h: o.tag === "Camera" ? lensFtOf(o) : null,
     tilt: o.tag === "Camera" ? V3.tiltOf(o) : null,
+    // Where the camera is sitting on its rig. A rigged camera's x and y belong
+    // to the rig, so pinning one has to record the thing the camera actually
+    // controls: how far round the arm it has swung, or how far along a slider.
+    arm: armSeatOf(o),
   });
   // A move needs somewhere to have come from: the first mark you set on an
   // object anchors slice 1 wherever it already is.
@@ -229,6 +263,7 @@ function setMark(o, slice) {
       // has nothing to rise from and the whole move plays flat.
       h: home ? home.h : (o.tag === "Camera" ? lensFtOf(o) : null),
       tilt: home ? home.tilt : (o.tag === "Camera" ? V3.tiltOf(o) : null),
+      arm: home && home.arm != null ? home.arm : armSeatOf(o),
     });
   }
   writeMarks(o, list);
@@ -268,6 +303,8 @@ function poseAt(marks, t, bends = new Map()) {
     return {
       x: at.x, y: at.y, a: lerpAngle(a.a, b.a, f),
       h: mix(a.h, b.h), tilt: mix(a.tilt, b.tilt),
+      arm: a.arm == null || b.arm == null ? (a.arm ?? b.arm)
+                                          : lerpAngle(a.arm, b.arm, f),
     };
   }
   return last;
@@ -285,14 +322,97 @@ function parkMarked(slice) {
     const marks = marksOf(o);
     if (marks.length < 2) continue;
     const pose = poseAt(marks, slice, bendsOf(o));
-    H.set(o, "x", round(pose.x));
-    H.set(o, "y", round(pose.y));
+    const onRig = o.tag === "Camera" && byID(RIG.rigParentID(o));
+
+    // A camera on a rig does not own where it is. The dolly owns that, and
+    // writing an x and y here would only be overwritten a moment later by the
+    // rig — or worse, would fight it. What the camera owns is its seat on the
+    // arm, its height and its tilt, so those are what its move sets.
+    if (!onRig) {
+      H.set(o, "x", round(pose.x));
+      H.set(o, "y", round(pose.y));
+    } else if (pose.arm != null) {
+      seatCamera(o, pose.arm);
+    }
     if (R.hasRotator(o)) R.setAngle(o, pose.a);
     if (o.tag === "Camera") {
       if (pose.h != null) H.set(o, "lensHeight", +pose.h.toFixed(3));
       if (pose.tilt != null) H.set(o, "tiltAngle", +(pose.tilt * 180 / Math.PI).toFixed(2));
     }
+    // A dolly that has been moved to a mark has to end up on its rails: the
+    // mark says where along the track it is, and the track says the rest.
+    if (RIG.ridesTrack(o)) {
+      const track = byID(H.get(o, "snapPath"));
+      if (track) {
+        H.set(o, "snapPercent",
+              RIG.percentOnTrack(R.pointsOf(track), { x: pose.x, y: pose.y }));
+      }
+    }
   }
+}
+
+/**
+ * Where a rigged camera sits, given where its rig is and where it is on it.
+ *
+ * The same arithmetic as `cameraSeat`, but taking plain numbers rather than
+ * reading them off the objects — because during playback neither the rig nor
+ * the camera is standing where its own fields say it is.
+ */
+function seatAt(rig, cam, rigAt, camAt) {
+  const spec = RIG.rigSpec(rig);
+  const x = rigAt ? rigAt.x : H.getNum(rig, "x");
+  const y = rigAt ? rigAt.y : H.getNum(rig, "y");
+  if (!spec) return { x, y };
+  const arm = camAt && camAt.arm != null ? camAt.arm : (armSeatOf(cam) ?? 0);
+  if (spec.arm) {
+    const reach = H.getNum(rig, "rigArm", spec.arm);
+    return { x: x + Math.cos(arm) * reach, y: y + Math.sin(arm) * reach };
+  }
+  const facing = rigAt && Number.isFinite(rigAt.a) ? rigAt.a : R.angleOf(rig);
+  if (spec.travel) {
+    const t = Math.max(-0.5, Math.min(0.5, arm));
+    return { x: x + Math.cos(facing) * spec.travel * t,
+             y: y + Math.sin(facing) * spec.travel * t };
+  }
+  return { x: x + Math.cos(facing) * spec.riser,
+           y: y + Math.sin(facing) * spec.riser };
+}
+
+/**
+ * A dolly between two marks, kept on its rails.
+ *
+ * Interpolating the two positions would run it in a straight line from one to
+ * the other, which on a curved track means leaving the track and cutting the
+ * corner — the one thing a dolly cannot do. So what gets interpolated is how
+ * far along the track each mark is, and the track says the rest.
+ */
+function railed(rig, pose, t) {
+  if (!RIG.ridesTrack(rig)) return pose;
+  const track = byID(H.get(rig, "snapPath"));
+  if (!track) return pose;
+  const pts = R.pointsOf(track);
+  if (pts.length < 2) return pose;
+
+  const marks = marksOf(rig);
+  const pct = marks.map((m) => ({
+    slice: m.slice, p: RIG.percentOnTrack(pts, { x: m.x, y: m.y }),
+  }));
+  const slice = t + 1;
+  let p = pct[0].p;
+  if (slice >= pct[pct.length - 1].slice) p = pct[pct.length - 1].p;
+  else {
+    for (let i = 1; i < pct.length; i++) {
+      if (slice > pct[i].slice) continue;
+      const a = pct[i - 1], b = pct[i];
+      const span = b.slice - a.slice;
+      const f = span ? (slice - a.slice) / span : 1;
+      p = a.p + (b.p - a.p) * f;
+      break;
+    }
+  }
+  const on = RIG.alongTrack(pts, p);
+  return { ...pose, x: on.x, y: on.y,
+           a: Number.isFinite(on.angle) ? on.angle : pose.a };
 }
 
 /** The last beat anything in the scene actually uses. */
@@ -321,8 +441,36 @@ function slicePositions() {
         a: R.hasRotator(o) ? R.angleOf(o) : 0,
         h: o.tag === "Camera" ? lensFtOf(o) : null,
         tilt: o.tag === "Camera" ? V3.tiltOf(o) : null,
+        arm: armSeatOf(o),
       });
     moves.set(idOf(o), poseAt(marks, t, bendsOf(o)));
+  }
+
+  // Then put every rigged camera back on its rig.
+  //
+  // This is the bit that makes a dolly move a dolly move. The base has its own
+  // positions and runs between them; the camera has its own seat on the arm
+  // and its own height and tilt, and may be running between those at the same
+  // time. Where the camera ends up is the one worked out from the other — it
+  // is not a second thing to keep lined up by hand, which is what a rig is
+  // for. Both can be animating, and the arithmetic is the same either way.
+  for (const cam of objects()) {
+    if (cam.tag !== "Camera") continue;
+    const rig = byID(RIG.rigParentID(cam));
+    if (!rig) continue;
+    const rigAt = moves.get(idOf(rig));
+    const camAt = moves.get(idOf(cam));
+    if (!rigAt && !camAt) continue;
+
+    const at = rigAt ? railed(rig, rigAt, t) : null;
+    if (at) moves.set(idOf(rig), { ...rigAt, x: at.x, y: at.y, a: at.a });
+    const seat = seatAt(rig, cam, at, camAt);
+    moves.set(idOf(cam), {
+      ...(camAt || {}),
+      x: seat.x, y: seat.y,
+      a: camAt && Number.isFinite(camAt.a) ? camAt.a
+         : (R.hasRotator(cam) ? R.angleOf(cam) : 0),
+    });
   }
 
   // Walk chains. On the page every position shows at once, numbered — that's
@@ -545,10 +693,11 @@ function draw() {
   if (!S.doc) return;
   // A rig's position is derived from the track it rides, so it's recomputed
   // rather than remembered — move the track and the dolly goes with it.
-  reflowRigs();
-  // Off playback, a marked object really sits at the beat you're parked on, so
-  // every tool that edits it edits the right position.
+  // Park first, reflow second. A dolly with a move on it is somewhere new by
+  // the time the camera is seated on it, which is the whole point: the camera
+  // animates because it is attached, not because it was told to.
   if (!S.playing) parkMarked(S.slice);
+  reflowRigs();
   drawGrid();
 
   const ls = layerStates();
@@ -5364,9 +5513,26 @@ function objectMenu(obj, x, y) {
     return showPopover(x, y, [
       { head: "Edit Camera" },
       { label: shot ? "Edit Shot Description…" : "Shot Description…", run: () => shotDescription(obj) },
-      { label: "Move To…", run: () => startFromHere("move", obj) },
+      // A camera on a rig cannot be moved to somewhere else: it is bolted to
+      // the arm, and where the arm is is the dolly's business. What it can do
+      // is swing, rise and tilt — so that is what its move records, and the
+      // menu says which of the two you are actually setting.
+      ...(byID(RIG.rigParentID(obj)) ? [
+        { label: "Move The Dolly…", run: () => {
+          const rig = byID(RIG.rigParentID(obj));
+          S.sel = new Set([idOf(rig)]);
+          addMove(rig);
+        } },
+        ...moveItems(obj).map((it) => ({
+          ...it,
+          label: it.label === "Add a Move…" ? "Add a Swing / Rise…" : it.label,
+        })),
+      ] : [
+        { label: "Move To…", run: () => startFromHere("move", obj) },
+        ...(marksOf(obj).length >= 2
+            ? [{ label: "Clear Move", run: () => dropMove(obj) }] : []),
+      ]),
       { label: "Turn To…", run: () => turnInPlace(obj) },
-      ...(marksOf(obj).length >= 2 ? [{ label: "Clear Move", run: () => dropMove(obj) }] : []),
       { label: "Add Label…", run: () => attachLabel(obj) },
       "-",
       { label: "Height & Tilt…", run: () => cameraRig3D(obj) },
@@ -5391,6 +5557,22 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "mirror") ? "Unflip Horizontally" : "Flip Horizontally", run: () => {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
+      // A dolly gets its own move. It is the base that travels — the camera
+      // on it goes along because it is attached, and keeps its own swing, its
+      // own height and its own tilt while it does. Two things moving, set
+      // independently, which is what a rig is.
+      ...(RIG.isRig(obj) ? [
+        ...moveItems(obj),
+        ...(RIG.rigCameraID(obj) && byID(RIG.rigCameraID(obj)) ? [{
+          label: "Move The Camera On It…",
+          run: () => {
+            const cam = byID(RIG.rigCameraID(obj));
+            S.sel = new Set([idOf(cam)]);
+            addMove(cam);
+          },
+        }] : []),
+        "-",
+      ] : []),
       ...(RIG.isRig(obj) && RIG.rigSpec(obj).ride ? [{
         label: "Lay New Track From Here",
         run: () => layTrackFrom(obj),
