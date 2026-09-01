@@ -1,11 +1,11 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=7dcb3247";
-import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=7dcb3247";
-import { EXTRA_SVG } from "./props.js?v=7dcb3247";
-import { GAUGE } from "./track.js?v=7dcb3247";
-import * as H from "./hcw.js?v=7dcb3247";
+import { FXG } from "./assets.js?v=5a428ade";
+import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS } from "./catalog.js?v=5a428ade";
+import { EXTRA_SVG } from "./props.js?v=5a428ade";
+import { GAUGE } from "./track.js?v=5a428ade";
+import * as H from "./hcw.js?v=5a428ade";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -263,38 +263,56 @@ function drawPlanFigure(obj, color, female) {
   const headR = female ? 6.9 : 6.4;
   const hx = 1.5;                        // where the head sits
 
-  // Feet, just in front of the body.
+  // Same language as the 3D: no black round anything, and hair doing the work
+  // of saying who somebody is. A line round every shape reads as a diagram of
+  // a person; a shape in their own colour reads as the person.
+  const edge = shade(color, 0.52);
+  const hair = shade(color, 0.62);
+
+  // Long hair first, behind everything — over the shoulders, which is exactly
+  // where it is and exactly what makes it read from across a room.
+  if (female) {
+    g.append(el("ellipse", {
+      cx: hx - headR * 0.6, cy: 0, rx: headR * 1.32, ry: headR * 1.68,
+      fill: hair, stroke: "none",
+    }));
+  }
+
+  // Feet, just in front of the body, so which way somebody is pointed survives
+  // even when they are the size of a full stop.
   for (const s2 of [-1, 1]) {
     g.append(el("circle", {
-      cx: deep * 1.08, cy: s2 * across * 0.28, r: 3.9,
-      fill: shade(color, 0.45), stroke: "none",
+      cx: deep * 1.08, cy: s2 * across * 0.28, r: 3.7,
+      fill: shade(color, 0.5), stroke: "none",
     }));
   }
 
   // Shoulders.
   g.append(el("ellipse", {
     cx: -1, cy: 0, rx: deep, ry: across,
-    fill: color, stroke: INK, "stroke-width": 2.2,
+    fill: color, stroke: edge, "stroke-width": 1.6,
   }));
 
-  // No nose. A wedge off the front of a head reads as a snout, and the feet in
-  // front already say which way somebody is pointed.
-
-  // The top of the head, darker so it separates from the shoulders.
+  // The head, seen from directly above — which means mostly hair, with a
+  // crescent of forehead at the front. That crescent is the cheapest facing
+  // cue there is: you know which way somebody faces without reading anything.
   g.append(el("circle", {
-    cx: hx, cy: 0, r: headR,
-    fill: shade(color, 0.58), stroke: INK, "stroke-width": 2,
+    cx: hx, cy: 0, r: headR, fill: hair, stroke: edge, "stroke-width": 1.4,
+  }));
+  // The face is simply a smaller circle set forward on the head, which leaves
+  // hair round the back and sides and none at the front — which is what the
+  // top of somebody's head actually looks like, and settles which way they are
+  // pointed in one shape rather than in a legend.
+  const faceR = female ? headR * 0.72 : headR * 0.78;
+  const fx = hx + headR - faceR;
+  g.append(el("circle", { cx: fx, cy: 0, r: faceR, fill: color, stroke: "none" }));
+
+  // And a nose. Small enough not to be a snout, there enough to point.
+  g.append(el("circle", {
+    cx: fx + faceR * 0.72, cy: 0, r: headR * 0.19,
+    fill: color, stroke: "none",
   }));
 
-  // And the original's own mark: one line for a man, two for a woman. Every
-  // scene in the library reads that way and it costs one stroke.
-  for (const d of female ? [-headR * 0.3, headR * 0.3] : [0]) {
-    const h = Math.sqrt(Math.max(0, headR * headR - d * d)) * 0.82;
-    g.append(el("line", {
-      x1: hx + d, y1: -h, x2: hx + d, y2: h,
-      stroke: shade(color, 0.3), "stroke-width": 1.8, "stroke-linecap": "round",
-    }));
-  }
   return g;
 }
 

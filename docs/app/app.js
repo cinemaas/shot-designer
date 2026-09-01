@@ -1,27 +1,28 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=7dcb3247";
-import * as H from "./hcw.js?v=7dcb3247";
-import * as R from "./render.js?v=7dcb3247";
-import { FXG } from "./assets.js?v=7dcb3247";
-import * as B from "./blocking.js?v=7dcb3247";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=7dcb3247";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7dcb3247";
-import { HANDBOOK } from "./handbook.js?v=7dcb3247";
+import { BRAND, SLUG } from "./brand.js?v=5a428ade";
+import * as H from "./hcw.js?v=5a428ade";
+import * as R from "./render.js?v=5a428ade";
+import { FXG } from "./assets.js?v=5a428ade";
+import * as B from "./blocking.js?v=5a428ade";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=5a428ade";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=5a428ade";
+import { HANDBOOK } from "./handbook.js?v=5a428ade";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=7dcb3247";
-import * as V3 from "./view3d.js?v=7dcb3247";
-import * as TR from "./track.js?v=7dcb3247";
-import * as RIG from "./rigs.js?v=7dcb3247";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=7dcb3247";
-import { Library } from "./library.js?v=7dcb3247";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=5a428ade";
+import * as V3 from "./view3d.js?v=5a428ade";
+import { blenderScript } from "./blender.js?v=5a428ade";
+import * as TR from "./track.js?v=5a428ade";
+import * as RIG from "./rigs.js?v=5a428ade";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=5a428ade";
+import { Library } from "./library.js?v=5a428ade";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=7dcb3247";
+} from "./catalog.js?v=5a428ade";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -45,6 +46,9 @@ const S = {
   beat: 1,
   page: 1,               // scenes can hold several pages of the same set
   coverage: false,       // draw what each lens actually sees
+  showHeights: true,     // lens height on the plan, where a grip can read it
+  afterCalibrate: null,  // tracing waits for the scale to be set first
+  ws: "",                // which workspace — blank is the first one
   lensView: false,
   timeline: false,       // the beat-by-beat strip along the bottom
   pinnedCam: null,       // a camera whose viewfinder stays up whatever you click
@@ -601,6 +605,7 @@ function draw() {
   drawRigArms();
   drawMoves();
   drawCoverage();
+  drawLensHeights();
   renderLensView();
   renderTimeline();
   if (!S.blocking) drawPositionBadges();
@@ -994,6 +999,8 @@ function renderLensView() {
       () => withLiveFrame((a) => frameToFile(a.cam, a.svg, a.W, a.H, a.mm, a.fmt)));
   btn("AI Brief", "Copy a written brief of this exact shot, to go with the frame",
       () => withLiveFrame((a) => copyBrief(a.cam, a.view, a.mm, a.fmt, a.lensFt)));
+  btn("Make Still", "Turn this frame into a photoreal still and put it on the plan",
+      () => withLiveFrame((a) => makeStill(a)));
   box.append(row);
 }
 
@@ -1454,6 +1461,222 @@ async function copyBrief(cam, view, mm, fmt, lensFt) {
   }
 }
 
+/**
+ * The frame, made real.
+ *
+ * The wireframe goes up as a reference picture, not as a description of one.
+ * That distinction is the whole feature: the geometry in the viewfinder is
+ * already correct — the camera is where it is, the lens is what it is, the
+ * people are standing where they stand — and asking a model to reconstruct
+ * all that from prose is how you get a good-looking still of a different room.
+ *
+ * Nothing comes back into the scene except a picture. It lands as a storyboard
+ * card beside its camera, so a beat sheet ends up with the plan and the look
+ * of the shot on the same page.
+ */
+async function makeStill(a) {
+  const { cam, svg, W, H: HGT, mm, fmt, lensFt, view } = a;
+  let have = {};
+  try { ({ keys: have } = await api("/api/keys")); } catch { /* offline or cloud */ }
+  if (!have.openai) return offerKey(a);
+
+  toast("Making the still — this takes a minute…", 180000);
+  try {
+    const c = await lensPNG(svg, W, HGT, 2);
+    const { b64 } = await post("/api/image", {
+      prompt: shotBrief(cam, view, mm, fmt, lensFt),
+      png: c.toDataURL("image/png"),
+      size: projectedAspect(fmt, fmt.squeeze) > 1.2 ? "1536x1024" : "1024x1024",
+    });
+    mark("still");
+    const pic = H.makePicture("data:image/png;base64," + b64);
+    H.child(S.doc, "Pictures").children.push(pic);
+    const p = drawnPos(cam);
+    const board = H.makeStoryboard(round(p.x), round(p.y) - 230,
+      H.get(pic, "uniqueID"),
+      [shotName(cam), mm ? mm + "mm" : ""].filter(Boolean).join(" · "));
+    canvas().children.push(board);
+    S.scene.pictures[H.get(pic, "uniqueID")] = H.get(pic, "base64Data");
+    reindex(); S.sel = new Set([idOf(board)]); draw(); syncChrome();
+    toast("Still made — drag it where you want it");
+  } catch (e) {
+    toast("Still failed: " + e.message, 6000);
+  }
+}
+
+/** No key yet: offer to add one, or do it the way you already do it by hand. */
+function offerKey(a) {
+  const { close, box } = sheet({
+    title: "Make a still from this frame",
+    sub: "The frame goes up as a reference and comes back as a photoreal picture, " +
+         "landing on the plan beside its camera. That needs an OpenAI key, which " +
+         "stays on this machine — it is never sent to the page, a share link or " +
+         "a published scene.",
+    fields: [{ name: "key", label: "OpenAI API key (sk-…)", type: "text", value: "" }],
+    okLabel: "Save the key and make it",
+    onOK: async ({ key }) => {
+      if (!key.trim()) return;
+      try {
+        await post("/api/keys", { name: "openai", value: key.trim() });
+        makeStill(a);
+      } catch (e) { toast("Could not save the key: " + e.message, 6000); }
+    },
+  });
+  const hand = document.createElement("button");
+  hand.textContent = "No key — do it by hand";
+  hand.title = "Save the frame and copy the brief, to paste wherever you like";
+  hand.onclick = () => { close(); byHand(a); };
+  box.querySelector(".row").prepend(hand);
+}
+
+// ---------------------------------------------------------------- workspaces
+//
+// A workspace is a name and a folder of scenes. There is always one, and out
+// of the box it is the folder Shot Designer itself uses — so the arrangement
+// this was built around keeps working: edit a scene there, open it here, and
+// the file on disk is the same file, written back in the same format, with the
+// version it replaced kept beside it.
+//
+// A second workspace is a second folder and nothing more. It cannot see the
+// first, and taking it off the list leaves every scene in it where it was.
+
+let WORKSPACES = [];
+
+async function loadWorkspaces() {
+  try { ({ spaces: WORKSPACES } = await api("/api/workspaces")); }
+  catch { WORKSPACES = []; }
+  // A workspace we remembered may have been removed since.
+  if (S.ws && !WORKSPACES.some((w) => w.id === S.ws)) setWorkspace("");
+  return WORKSPACES;
+}
+
+const currentWorkspace = () =>
+  WORKSPACES.find((w) => w.id === S.ws) || WORKSPACES[0] || null;
+
+function setWorkspace(id) {
+  S.ws = id || "";
+  try { localStorage.setItem("sd.ws", S.ws); } catch { /* private window */ }
+}
+
+async function workspaceMenu(x, y) {
+  await loadWorkspaces();
+  const here = currentWorkspace();
+  showPopover(x, y, [
+    { head: "Workspaces — a folder of scenes each" },
+    ...WORKSPACES.map((w) => ({
+      label: (w.id === (here?.id) ? "◉  " : "○  ") + w.name +
+             (w.readOnly ? "  (read-only)" : "") + (w.missing ? "  (folder missing)" : ""),
+      run: () => switchWorkspace(w),
+    })),
+    "-",
+    { label: "Add A Workspace…", run: addWorkspace },
+    ...(here && WORKSPACES[0] && here.id !== WORKSPACES[0].id ? [
+      { label: here.readOnly ? "Allow Writing Here" : "Open This One Read-Only",
+        run: async () => {
+          await post("/api/workspaces",
+            { action: "update", id: here.id, readOnly: !here.readOnly });
+          toast(here.readOnly ? "Writing allowed again"
+                              : "Read-only — scenes here open but are never written");
+        } },
+      { label: "Remove From The List", run: () => removeWorkspace(here) },
+    ] : []),
+  ]);
+}
+
+function switchWorkspace(w) {
+  if (w.id === (currentWorkspace()?.id)) return;
+  if (S.dirty && !confirm("Discard unsaved changes and switch workspace?")) return;
+  if (w.missing) return toast("That folder isn't there any more", 5000);
+  setWorkspace(w.id);
+  // A workspace change means every listing, every id and every stored setting
+  // belongs to somewhere else. Starting clean is the only honest way to do it.
+  S.dirty = false;
+  location.reload();
+}
+
+function addWorkspace() {
+  sheet({
+    title: "Add a workspace",
+    sub: "Point it at a folder of scenes. Nothing in the folder is touched " +
+         "until you save something into it, and nothing in the workspace you " +
+         "are in now changes at all.",
+    fields: [
+      { name: "path", label: "Folder (drag it into a Terminal to get its path)",
+        type: "text", value: "" },
+      { name: "name", label: "Call it", type: "text", value: "" },
+      { name: "readOnly", label: "Open it read-only — never write to this folder",
+        type: "check", value: false },
+    ],
+    okLabel: "Add",
+    onOK: async ({ path, name, readOnly }) => {
+      if (!path.trim()) return;
+      try {
+        const { spaces } = await post("/api/workspaces", {
+          action: "add", path: path.trim().replace(/^["\u0027]|["\u0027]$/g, ""),
+          name: name.trim(), readOnly,
+        });
+        WORKSPACES = spaces;
+        const made = spaces[spaces.length - 1];
+        toast(`Added "${made.name}" — switching to it`);
+        switchWorkspace({ ...made, missing: false });
+      } catch (e) { toast(e.message, 6000); }
+    },
+  });
+}
+
+function removeWorkspace(w) {
+  if (!confirm(`Take "${w.name}" off the list?\n\n` +
+               `Nothing in ${w.path} is deleted — this only stops Sightline ` +
+               `showing it.`)) return;
+  post("/api/workspaces", { action: "remove", id: w.id })
+    .then(() => { setWorkspace(""); location.reload(); })
+    .catch((e) => toast(e.message, 6000));
+}
+
+/** Manage the key on its own, so it can be replaced or taken away again. */
+async function imageKeyDialog() {
+  let have = {};
+  try { ({ keys: have } = await api("/api/keys")); } catch { /* not on the Mac */ }
+  const { close, box } = sheet({
+    title: "Image generation",
+    sub: have.openai
+      ? "A key is set. It is held on this machine only — the page has never seen it " +
+        "and cannot read it back. Type a new one to replace it."
+      : "Make Still sends the viewfinder frame up as a reference and brings a " +
+        "photoreal picture back onto the plan. It needs an OpenAI key, which stays " +
+        "on this machine.",
+    fields: [{ name: "key", label: have.openai ? "Replace the key" : "OpenAI API key (sk-…)",
+               type: "text", value: "" }],
+    okLabel: "Save",
+    onOK: async ({ key }) => {
+      if (!key.trim()) return;
+      try {
+        await post("/api/keys", { name: "openai", value: key.trim() });
+        toast("Key saved");
+      } catch (e) { toast("Could not save the key: " + e.message, 6000); }
+    },
+  });
+  if (have.openai) {
+    const drop = document.createElement("button");
+    drop.textContent = "Forget the key";
+    drop.onclick = async () => {
+      close();
+      try {
+        await post("/api/keys", { name: "openai", value: "" });
+        toast("Key forgotten");
+      } catch (e) { toast(e.message, 6000); }
+    };
+    box.querySelector(".row").prepend(drop);
+  }
+}
+
+/** The frame and the brief, ready to paste somewhere yourself. */
+async function byHand(a) {
+  await frameToFile(a.cam, a.svg, a.W, a.H, a.mm, a.fmt);
+  await copyBrief(a.cam, a.view, a.mm, a.fmt, a.lensFt);
+  toast("Frame saved and brief copied — paste the brief, attach the frame");
+}
+
 async function frameToFile(cam, svg, W, HGT, mm, fmt) {
   try {
     const c = await lensPNG(svg, W, HGT, 4);
@@ -1497,6 +1720,56 @@ function drawCoverage() {
       }));
     }
   }
+}
+
+/**
+ * How high the lens is, on the plan, where a grip can read it without opening
+ * anything. It is the number that decides whether a shot needs a hi-hat or an
+ * apple box, and until now it only existed inside the viewfinder.
+ *
+ * Sits behind the camera so it never lands inside its own frame, and turns
+ * with nothing — a number you have to read upside down is no use on set.
+ */
+function drawLensHeights() {
+  if (!S.showHeights) return;
+  const g = LAYER_G.overlay;
+
+  for (const cam of objects()) {
+    if (cam.tag !== "Camera" || !onPage(cam, S.page)) continue;
+    if (S.hidden?.has(idOf(cam))) continue;
+
+    const rig = byID(RIG.rigParentID(cam));
+    const ft = RIG.lensHeightOn(cam, rig);
+    const tilt = Math.round(H.getNum(cam, "tiltAngle", 0));
+    const text = feetInches(ft) + (tilt ? `  ${tilt > 0 ? "\u2191" : "\u2193"}${Math.abs(tilt)}\u00b0` : "");
+
+    const p = drawnPos(cam);
+    const a = R.angleOf(cam);
+    const back = 26;                      // clear of the camera body, behind it
+    const cx = p.x - Math.cos(a) * back, cy = p.y - Math.sin(a) * back;
+    const w = text.length * 6.2 + 10, h = 15;
+    const tone = R.cameraColour(cam);
+
+    g.append(R.el("rect", {
+      x: cx - w / 2, y: cy - h / 2, width: w, height: h, rx: 4,
+      fill: "#fff", stroke: tone, "stroke-width": 1, opacity: .92,
+    }));
+    const t = R.el("text", {
+      x: cx, y: cy + 4, "text-anchor": "middle", fill: "#4a5157",
+      "font-size": 10.5, "font-weight": "600",
+      "font-family": "Helvetica, Arial, sans-serif",
+    });
+    t.textContent = text;
+    g.append(t);
+  }
+}
+
+/** 4.5 -> 4'6". Set heights get called in feet and inches, never decimals. */
+function feetInches(ft) {
+  let whole = Math.floor(ft + 1e-6);
+  let inches = Math.round((ft - whole) * 12);
+  if (inches === 12) { whole += 1; inches = 0; }
+  return `${whole}'${inches}"`;
 }
 
 function drawRigArms() {
@@ -2570,15 +2843,19 @@ const round = (v) => Math.round(v * 20) / 20;
 // than a preview that might or might not survive. The last point tracks the
 // cursor until you commit it.
 
-const TOOL_TAG = { wall: "Wall", track: "Track", walk: "WalkArrow", axis: "AxisLine" };
-const TOOL_NAME = { wall: "Wall", track: "Camera track", walk: "Walk arrow",
-                    axis: "Axis line", calibrate: "Set scale" };
+const TOOL_TAG = { wall: "Wall", trace: "Wall", track: "Track", walk: "WalkArrow",
+                   axis: "AxisLine" };
+const TOOL_NAME = { wall: "Wall", trace: "Trace walls", track: "Camera track",
+                    walk: "Walk arrow", axis: "Axis line", calibrate: "Set scale" };
+
+/** Wall runs and traced runs both keep going until you say stop. */
+const RUNS_ON = new Set(["wall", "trace"]);
 
 function startTool(name, owner = null) {
   if (S.tool === name && !owner) return cancelTool();
   finishTool();
   S.tool = name;
-  S.showGrid = name === "wall";
+  S.showGrid = name === "wall";   // a traced plan brings its own geometry
   S.pendingOwner = owner;
   stage.classList.add("drawing");
   draw(); syncChrome();
@@ -2596,6 +2873,7 @@ function cancelTool() {
   }
   S.tool = null; S.showGrid = false; S.pendingOwner = null;
   S.replaceTrack = null;
+  S.afterCalibrate = null;
   stage.classList.remove("drawing");
   draw(); syncChrome();
 }
@@ -2691,6 +2969,27 @@ function toolClick(pt, ev) {
     }
     return draw();
   }
+  // Coming back round to where the run started closes the room, which is
+  // what you want on a floorplan: four clicks and the walls meet.
+  if (S.tool === "trace" && S.draft && S.draft.committed.length >= 3) {
+    const first = S.draft.committed[0];
+    if (Math.hypot(pt.x - first.x, pt.y - first.y) < 14 / S.view.k) {
+      // The last corner can't be both square to the one before it and square
+      // to the start, so on the way round the loop it drifts. Pull it onto
+      // the start's axis: the alternative is a room whose walls don't meet,
+      // which reads fine on the plan and falls apart the moment it's 3D.
+      const last = S.draft.committed[S.draft.committed.length - 1];
+      const SQUARE = 16;
+      if (Math.abs(last.x - first.x) < SQUARE) last.x = first.x;
+      if (Math.abs(last.y - first.y) < SQUARE) last.y = first.y;
+      S.draft.committed.push({ x: first.x, y: first.y });
+      R.setPoints(S.draft.obj, S.draft.committed);
+      finishTool();
+      toast("Room closed — trace the next one, or Esc when you're done");
+      return;
+    }
+  }
+
   const snap = snapPoint(pt, ev);
 
   if (!S.draft) {
@@ -2718,7 +3017,7 @@ function toolClick(pt, ev) {
   R.setPoints(obj, [...committed, snap]);
 
   // Two-point objects (walk arrows, axis lines, tracks) are done at two.
-  if (S.tool !== "wall" && committed.length >= 2) return finishTool();
+  if (!RUNS_ON.has(S.tool) && committed.length >= 2) return finishTool();
   if (ev.detail >= 2) return finishTool();
   draw(); syncChrome();
 }
@@ -2737,6 +3036,12 @@ function undoLastPoint() {
 /**
  * Snap order: an existing wall corner wins, then a held-Shift angle lock,
  * then the 40-unit grid. Alt suspends the grid for a free-hand point.
+ *
+ * Tracing is the exception, and deliberately the other way round: a floorplan
+ * is square, so square is what you get unless you hold Alt to say otherwise.
+ * The point rides along the axis under the cursor rather than out at the
+ * cursor's own distance, which is what makes following a wall feel like
+ * following it rather than aiming at it.
  */
 function snapPoint(pt, ev) {
   const tol = 13 / S.view.k;
@@ -2757,6 +3062,15 @@ function snapPoint(pt, ev) {
     }
   }
   if (best) return { x: best.x, y: best.y };
+
+  if (S.tool === "trace") {
+    if (!anchor || ev?.altKey) return { x: round(pt.x), y: round(pt.y) };
+    const step = Math.PI / 4;                        // square, and the diagonals
+    const a = Math.round(Math.atan2(pt.y - anchor.y, pt.x - anchor.x) / step) * step;
+    const along = Math.max(0, (pt.x - anchor.x) * Math.cos(a) + (pt.y - anchor.y) * Math.sin(a));
+    return { x: round(anchor.x + Math.cos(a) * along),
+             y: round(anchor.y + Math.sin(a) * along) };
+  }
 
   if (ev?.shiftKey && anchor) {
     const d = Math.hypot(pt.x - anchor.x, pt.y - anchor.y);
@@ -2788,10 +3102,13 @@ function draftReadout() {
   let total = 0;
   for (let i = 1; i < c.length; i++) total += Math.hypot(c[i].x - c[i - 1].x, c[i].y - c[i - 1].y);
   const deg = ((Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI) + 360) % 360;
+  const help = S.tool === "trace"
+    ? "click to add, ⏎ to finish, ⌫ undo point  ·  ⌥ off-square  ·  close the loop to finish the room"
+    : "click to add, ⏎ to finish, ⌫ undo point" +
+      (S.snapGrid ? "  ·  ⌥ free  ⇧ angle" : "  ·  ⇧ angle");
   return `${feet(seg)}  ∠${Math.round(deg)}°` +
          (total ? `   run ${feet(total + seg)}` : "") +
-         `   ·  click to add, ⏎ to finish, ⌫ undo point` +
-         (S.snapGrid ? "  ·  ⌥ free  ⇧ angle" : "  ·  ⇧ angle");
+         `   ·  ${help}`;
 }
 
 function drawGrid() {
@@ -2853,12 +3170,64 @@ function calibrateBackground(bg) {
   draw(); syncChrome();
 }
 
+/**
+ * Put walls on a floorplan that only exists as a picture.
+ *
+ * Most of a working library is like this: somebody's survey, a location scout's
+ * phone photo of a plan on a wall, an estate agent's floorplan. It reads fine
+ * to a person and means nothing to the machine, so there is no 3D, no lens
+ * height against a real wall, and no brief worth reading.
+ *
+ * Scale first, because a wall traced at the wrong size is worse than no wall —
+ * it looks right and lies about every distance in the scene.
+ */
+/** Trace over whatever plan this scene already has. */
+function traceHere() {
+  const on = (o) => onPage(o, S.page);
+  const bg = objects().find((o) => o.tag === "Background" && on(o)) ||
+             objects().find((o) => o.tag === "ImageProp" && on(o));
+  if (!bg) {
+    startTool("trace");
+    return toast("Tracing — square by default, ⌥ for off-square");
+  }
+  traceBackground(bg);
+}
+
+function traceBackground(bg) {
+  const done = () => {
+    startTool("trace", null);
+    toast("Trace the walls — square by default, ⌥ for off-square, close the loop to finish a room");
+  };
+  sheet({
+    title: "Trace the walls",
+    sub: "Click the corners and the room becomes real geometry — 3D, lens heights " +
+         "against a wall, a brief that knows the size of the place. First: is this " +
+         "plan already to scale?",
+    okLabel: "Continue",
+    body: (() => {
+      const p = document.createElement("p");
+      p.className = "sub";
+      p.textContent = "Drag a line along something you know the length of — a door " +
+                      "is 3 feet, a scale bar is whatever it says.";
+      return p;
+    })(),
+    fields: [{ name: "skip", label: "It's already to scale — go straight to tracing",
+               type: "check", value: false }],
+    onOK: ({ skip }) => {
+      if (skip) return done();
+      S.afterCalibrate = done;
+      calibrateBackground(bg);
+    },
+  });
+}
+
 function finishCalibration(a, b) {
   const bg = byID(S.calibrate.bg);
   const drawn = Math.hypot(b.x - a.x, b.y - a.y);
   S.tool = null; S.calibrate = null;
   stage.classList.remove("drawing");
-  if (!bg || drawn < 4) { draw(); syncChrome(); return; }
+  const next = S.afterCalibrate; S.afterCalibrate = null;
+  if (!bg || drawn < 4) { draw(); syncChrome(); next?.(); return; }
 
   sheet({
     title: "Set the scale",
@@ -2873,6 +3242,7 @@ function finishCalibration(a, b) {
       H.set(bg, "objectScaleY", H.getNum(bg, "objectScaleY", 1) * k);
       draw(); syncChrome();
       toast(`Scaled ${k > 1 ? "up" : "down"} ${Math.abs(k).toFixed(2)}× — the plan is to size now`);
+      next?.();
     },
   });
 }
@@ -3573,7 +3943,7 @@ window.addEventListener("keydown", (ev) => {
     if (i < timeSlices().length) { S.slice = i; draw(); syncChrome(); }
     return;
   }
-  if (k === "w") return startTool("wall");
+  if (k === "w") return ev.shiftKey ? traceHere() : startTool("wall");
   if (k === "t") return startTool("track");
   if (k === "p") return (S.playing ? stopPlay() : startPlay());
   if (k === "m" && S.sel.size) {
@@ -3766,11 +4136,15 @@ function syncChrome() {
     }));
   }
 
-  const name = S.path ? S.path.replace(/\.hcw$/i, "") : "Untitled Scene";
+  const here = currentWorkspace();
+  const place = here && WORKSPACES[0] && here.id !== WORKSPACES[0].id
+    ? `${here.name}${here.readOnly ? " (read-only)" : ""} · ` : "";
+  const name = place + (S.path ? S.path.replace(/\.hcw$/i, "") : "Untitled Scene");
   const readout = draftReadout();
   $("#status").textContent = readout ||
     (S.tool ? `${TOOL_NAME[S.tool]} — click to start` +
-              (S.snapGrid ? "   ·   grid snap on (G)" : "   ·   grid snap off (G)")
+              (S.tool === "trace" ? "   ·   square by default, ⌥ for off-square"
+               : S.snapGrid ? "   ·   grid snap on (G)" : "   ·   grid snap off (G)")
             : `${name}${S.dirty ? " •" : ""}   ${Math.round(S.view.k * 100)}%` +
               (S.sel.size ? `   ${S.sel.size} selected` : ""));
   $("#status").classList.toggle("live", !!(readout || S.tool));
@@ -4068,6 +4442,7 @@ function mainMenu(x, y) {
       } },
     { label: "Export As SVG", run: exportSVG },
     { label: "Export As Scene File", run: exportHCW },
+    { label: "Export To Blender…", run: exportBlender },
     "-",
     { label: "Fit To Scene", key: "⌘0", run: () => fitToContent() },
     { label: "Zoom In", key: "⌘+", run: () => zoomStep(1.25) },
@@ -4076,6 +4451,8 @@ function mainMenu(x, y) {
     "-",
     { label: Cloud.connected ? "Cloud…" : "Connect to Cloud…", run: () => cloudMenu(x, y) },
     { label: "Camera Package…", run: packageDialog },
+    { label: "Image Generation…", run: imageKeyDialog },
+    { label: "Workspaces…", run: () => workspaceMenu(x, y) },
     { label: "Appearance…", run: () => themeMenu(x, y) },
     { label: "Handbook", key: "?", run: openHandbook },
     { label: "Keyboard Shortcuts", run: shortcutsSheet },
@@ -4105,6 +4482,7 @@ function addMenu(x, y, at) {
     "-",
     { head: "Draw" },
     { label: "Wall Tool", key: "W", run: () => startTool("wall") },
+    { label: "Trace Walls Over A Plan", key: "⇧W", run: () => traceHere() },
     { label: "Dolly Track", key: "T", run: () => startTool("track") },
     { label: "Walk Arrow", run: () => startTool("walk") },
     { label: "Axis Line", run: () => startTool("axis") },
@@ -4458,6 +4836,12 @@ function layersMenu(x, y) {
         try { localStorage.setItem("sd.coverage", S.coverage ? "1" : ""); } catch { /* ok */ }
         draw(); layersMenu(x, y);
       } },
+    { label: (S.showHeights ? "◉  " : "○  ") + "Lens heights",
+      run: () => {
+        S.showHeights = !S.showHeights;
+        try { localStorage.setItem("sd.heights", S.showHeights ? "1" : "0"); } catch { /* ok */ }
+        draw(); layersMenu(x, y);
+      } },
     "-",
     { label: sceneryLocked ? "Unlock Set, Props & Backgrounds"
                            : "Lock Set, Props & Backgrounds",
@@ -4713,6 +5097,7 @@ function objectMenu(obj, x, y) {
   if (tag === "Background") {
     return showPopover(x, y, [
       { head: "Background Image" },
+      { label: "Trace Walls…", run: () => traceBackground(obj) },
       { label: "Set Scale…", run: () => calibrateBackground(obj) },
       { label: "Reset Size", run: () => {
         mark("size");
@@ -5845,13 +6230,13 @@ function shortcutsSheet() {
   sheet({ title: "Keyboard Shortcuts", body, okLabel: "Done" });
 }
 
-function toast(msg) {
+function toast(msg, ms = 2400) {
   const t = $("#toast");
   if (!msg) { t.hidden = true; return; }
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(t._h);
-  t._h = setTimeout(() => { t.hidden = true; }, 2400);
+  t._h = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 // ---------------------------------------------------------------- files
@@ -5861,8 +6246,25 @@ const isLocal = () => /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 /** The read-anywhere copy on GitHub Pages: encrypted library, no server. */
 const isPages = () => /\.github\.io$/.test(location.hostname);
 
+/** A JSON POST, which is what nearly every call here is. */
+const post = (url, body) => api(url, {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+/**
+ * Which folder of scenes we are working in. One line, because every call goes
+ * through here — a workspace that had to be remembered at each call site would
+ * be forgotten at one of them, and forgetting it means writing somebody's
+ * scene into somebody else's folder.
+ */
+const withWorkspace = (url) => {
+  if (!S.ws || !url.startsWith("/api/")) return url;
+  return url + (url.includes("?") ? "&" : "?") + "ws=" + encodeURIComponent(S.ws);
+};
+
 const api = async (url, opts) => {
-  const r = await fetch(url, opts);
+  const r = await fetch(withWorkspace(url), opts);
   const j = await r.json();
   if (j.error) throw new Error(j.error);
   return j;
@@ -6321,6 +6723,50 @@ function exportHCW() {
   download(baseName() + ".hcw", new Blob([H.serialize(S.doc)], { type: "application/xml" }));
 }
 
+/**
+ * Hand the scene to Blender. One way, deliberately: this writes a script that
+ * builds the room, and nothing reads anything back, so a render pass can never
+ * quietly rewrite the plan it came from.
+ */
+function blenderForScene() {
+  const beats = Math.max(1, timeSlices().length);
+  const wasPlaying = S.playing, wasTime = S.time;
+  const samples = [];
+  try {
+    S.playing = true;
+    for (let b = 0; b < beats; b++) { S.time = b; samples.push(slicePositions()); }
+  } finally {
+    S.playing = wasPlaying; S.time = wasTime;
+    draw();
+  }
+
+  const py = blenderScript({
+    name: baseName(),
+    objects: objects().filter((o) => onPage(o, S.page)),
+    fmt: packageFormat(),
+    lensOf: (cam) => {
+      const shot = objects().find((o) => o.tag === "ShotVersion" &&
+        H.get(o, "attachObjectID") === idOf(cam));
+      return shot ? parseFloat(H.get(shot, "versionLens")) || 32 : 32;
+    },
+    heightOf: lensFtOf,
+    beats,
+    sampleAt: (b) => samples[b] || new Map(),
+  });
+
+  return py;
+}
+
+function exportBlender() {
+  const py = blenderForScene();
+  const walls = objects().filter((o) => o.tag === "Wall").length;
+  download(baseName().replace(/[^\w -]/g, "") + ".blender.py",
+           new Blob([py], { type: "text/x-python" }));
+  toast(walls
+    ? "Blender script saved — open it in Blender's Scripting tab and Run"
+    : "Saved, but this scene has no walls yet — trace them first (⇧W) or you'll get an empty room");
+}
+
 // ---------------------------------------------------------------- handbook
 
 function openHandbook(section) {
@@ -6645,12 +7091,18 @@ window.addEventListener("resize", () => draw());
   R.setFigureStyle(currentFigureStyle());
   try {
     S.coverage = !!localStorage.getItem("sd.coverage");
+    S.showHeights = (localStorage.getItem("sd.heights") ?? "1") !== "0";
+    S.ws = localStorage.getItem("sd.ws") || "";
     S.lensView = !!localStorage.getItem("sd.lensview");
   } catch { /* ok */ }
   // Following the system means following it as it changes, too.
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (currentTheme() === "system") { draw(); syncChrome(); }
   });
+
+  // Which folder of scenes we're in has to be settled before anything asks
+  // the server for one, including a remembered workspace that has since gone.
+  if (isLocal()) await loadWorkspaces();
 
   const q = new URLSearchParams(location.search);
 
@@ -6781,4 +7233,4 @@ async function openShared(shareId) {
 
 // Exposed for quick console poking while iterating.
 loadCast();
-window.SD = { S, H, R, snapToWall, reseatWallKit, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };
+window.SD = { S, H, R, blenderForScene, snapToWall, reseatWallKit, draw, reindex, sceneSVG, exportPNG, exportSVG, loadScene, hitTest, toScene };

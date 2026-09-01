@@ -188,6 +188,16 @@ opening that isn't cut out is one you can't see through when you look down the
 lens. Drag one and it re-seats on whatever wall it lands near, and moving a
 wall brings everything on it along. Hold <kbd>⌥</kbd> while dragging to place
 one exactly where you want instead. Furniture and props are left alone.</p>
+<h4>Making a still of the frame</h4>
+<p><b>Make Still</b> in the viewfinder sends the frame up as a reference picture
+and brings a photoreal one back, which lands on the plan as a storyboard card
+beside its camera. The frame goes as a <i>picture</i>, not as a description of
+one — the geometry is already right, and asking a model to rebuild it from prose
+is how you get a handsome still of a different room.</p>
+<p>It needs an OpenAI key, set once in <b>Image Generation…</b>. The key stays on
+this machine: the page never sees it, and it cannot reach a share link or a
+published library. Without one you are offered the other route — the frame saved
+and the brief copied, ready to paste wherever you like.</p>
 <h4>Arms, and what's in their hands</h4>
 <p>Right-click a person for <b>Arms</b>: at their sides, held out, out in
 front, folded, raised, or hands in pockets. The arms actually go there, and so
@@ -287,7 +297,26 @@ snap off entirely.</dd>
 <p>The bar along the bottom shows the length of the run in feet and its angle as
 you draw. Corners snap to corners already in the scene, so rooms join up.</p>
 <p>The wall tool stays armed because walls come in runs. Everything else is one
-shot. <kbd>Esc</kbd> always leaves you with nothing armed.</p>`,
+shot. <kbd>Esc</kbd> always leaves you with nothing armed.</p>
+<h4>Tracing over a floorplan</h4>
+<p>Most plans arrive as a picture — a survey, a phone photo of a plan on a wall,
+something an agent sent. It reads fine to you and means nothing to the app:
+no 3D, no lens height against a real wall, no brief that knows the size of the
+room. Tracing turns the picture into geometry.</p>
+<p>Right-click the background and pick <b>Trace Walls…</b>, or press
+<kbd>⇧W</kbd>. It offers to set the scale first — drag a line along something
+whose length you know, a door is three feet — because a wall traced at the
+wrong size is worse than no wall at all: it looks right and lies about every
+distance in the scene.</p>
+<dl>
+<dt>Square by default</dt><dd>The opposite of the wall tool, because plans are
+square. Hold <kbd>⌥</kbd> for anything that isn't.</dd>
+<dt>Close a room</dt><dd>Click back on the corner you started from. The last
+corner is pulled square as it closes, so the walls actually meet — a room whose
+corners nearly touch looks fine on the plan and falls apart in 3D.</dd>
+<dt>Keep going</dt><dd>It stays armed room after room. <kbd>Esc</kbd> when
+you're done.</dd>
+</dl>`,
   },
   {
     id: "kit",
@@ -512,7 +541,25 @@ Editing there hands you the file back to drop in your folder.</p>
 <h4>Live</h4>
 <p>Connect to the cloud and everyone in a scene sees everyone else's cursor and
 selection, with moves landing as they happen. <b>Get Share Link…</b> gives the
-director a read-only URL that needs no app and no account.</p>`,
+director a read-only URL that needs no app and no account.</p>
+<h4>Workspaces</h4>
+<p>A workspace is a name and a folder of scenes. There is always one, and out of
+the box it is the folder Shot Designer itself uses — so if you never open this
+menu, nothing about how you work changes.</p>
+<p><b>Workspaces…</b> adds another. A second workspace is a second folder and
+nothing more: it cannot see the first, adding one puts no file inside the one
+you are in, and taking one off the list leaves every scene in it where it was.
+Mark one <b>read-only</b> and scenes there open and plan normally but are never
+written — which is the setting for a folder another program owns.</p>
+<h4>To Blender</h4>
+<p><b>Export To Blender…</b> writes a script that builds the scene: walls at
+their real length with the openings cut, blocks where the furniture is,
+stand-ins where the people are, and the cameras with the actual sensor, focal
+length and squeeze — keyframed across the beats, so a move you built plays
+there too. Open it in Blender's Scripting tab and press Run.</p>
+<p>It goes one way on purpose. Nothing reads anything back, so a render pass
+can never quietly rewrite the plan it came from. Everything lands in its own
+collection; delete the collection to take it all out again.</p>`,
   },
   {
     id: "keys",
