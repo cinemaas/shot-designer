@@ -1,29 +1,30 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=f5fff69f";
-import * as H from "./hcw.js?v=f5fff69f";
-import * as R from "./render.js?v=f5fff69f";
-import { FXG } from "./assets.js?v=f5fff69f";
-import * as B from "./blocking.js?v=f5fff69f";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=f5fff69f";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=f5fff69f";
-import { HANDBOOK } from "./handbook.js?v=f5fff69f";
+import { BRAND, SLUG } from "./brand.js?v=64492301";
+import * as H from "./hcw.js?v=64492301";
+import * as R from "./render.js?v=64492301";
+import { FXG } from "./assets.js?v=64492301";
+import * as B from "./blocking.js?v=64492301";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=64492301";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=64492301";
+import { HANDBOOK } from "./handbook.js?v=64492301";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=f5fff69f";
-import * as V3 from "./view3d.js?v=f5fff69f";
-import * as HU from "./human.js?v=f5fff69f";
-import { blenderScript } from "./blender.js?v=f5fff69f";
-import * as TR from "./track.js?v=f5fff69f";
-import * as RIG from "./rigs.js?v=f5fff69f";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=f5fff69f";
-import { Library } from "./library.js?v=f5fff69f";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=64492301";
+import * as V3 from "./view3d.js?v=64492301";
+import * as HU from "./human.js?v=64492301";
+import { findWalls } from "./trace.js?v=64492301";
+import { blenderScript } from "./blender.js?v=64492301";
+import * as TR from "./track.js?v=64492301";
+import * as RIG from "./rigs.js?v=64492301";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=64492301";
+import { Library } from "./library.js?v=64492301";
 import {
   PROPS, LIGHTING, SETPIECES, EXTRAS, KEY_TO_FXG, KEY_TO_LABEL,
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=f5fff69f";
+} from "./catalog.js?v=64492301";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -50,6 +51,7 @@ const S = {
   showHeights: true,     // lens height on the plan, where a grip can read it
   afterCalibrate: null,  // tracing waits for the scale to be set first
   ws: "",                // which workspace — blank is the first one
+  proposed: null,        // walls read off a background, awaiting a yes
   lensView: false,
   timeline: false,       // the beat-by-beat strip along the bottom
   pinnedCam: null,       // a camera whose viewfinder stays up whatever you click
@@ -607,6 +609,7 @@ function draw() {
   drawMoves();
   drawCoverage();
   drawLensHeights();
+  drawProposed();
   renderLensView();
   renderCharPanel();
   renderTimeline();
@@ -1041,10 +1044,25 @@ function renderCharPanel() {
   close.onclick = () => { box.hidden = true; box.dataset.for = "hidden"; };
   box.append(close);
 
-  const who = document.createElement("div");
+  // A name, typed here rather than hunted for in a menu. It is what the plan
+  // labels them, what the brief calls them, and what the cast list remembers,
+  // so it belongs at the top of the panel with everything else about them.
+  const who = document.createElement("input");
   who.className = "who";
-  who.textContent = (H.get(obj, "castName") || "").trim() ||
-    (H.get(obj, "colorName") || "Character");
+  who.type = "text";
+  who.placeholder = H.get(obj, "colorName") || "Name this character";
+  who.value = (H.get(obj, "castName") || "").trim();
+  let named = false;
+  who.oninput = () => {
+    if (!named) { mark("name"); named = true; }
+    H.set(obj, "castName", who.value.trim());
+    draw();
+  };
+  who.onchange = () => {
+    named = false;
+    if (who.value.trim()) rememberCast(castOfObj(obj));
+    syncChrome();
+  };
   box.append(who);
 
   const head = (t) => { const h = document.createElement("h4"); h.textContent = t; box.append(h); };
@@ -1938,6 +1956,19 @@ function feetInches(ft) {
   let inches = Math.round((ft - whole) * 12);
   if (inches === 12) { whole += 1; inches = 0; }
   return `${whole}'${inches}"`;
+}
+
+/** Walls the app thinks it can see, until somebody says yes or no. */
+function drawProposed() {
+  if (!S.proposed?.length) return;
+  const g = LAYER_G.overlay;
+  for (const r of S.proposed) {
+    g.append(R.el("line", {
+      x1: r.a.x, y1: r.a.y, x2: r.b.x, y2: r.b.y,
+      stroke: "#1f8cff", "stroke-width": 5 / S.view.k, opacity: .55,
+      "stroke-linecap": "round",
+    }));
+  }
 }
 
 function drawRigArms() {
@@ -3349,6 +3380,75 @@ function calibrateBackground(bg) {
  * Scale first, because a wall traced at the wrong size is worse than no wall —
  * it looks right and lies about every distance in the scene.
  */
+/**
+ * Read the walls off the picture, instead of clicking them.
+ *
+ * A floorplan is not a photograph: it is mostly paper, its walls are the
+ * darkest thing on it, and they run square. That is enough to find them, and
+ * finding them takes a second where tracing a scene by hand takes a few
+ * minutes — across a library of hundreds, that is the difference between a
+ * job somebody does and a job nobody does.
+ *
+ * Nothing it finds is applied on its own. It puts what it found on the plan to
+ * look at, and you keep it or you throw it away — because it will also happily
+ * offer you a dimension line, the border of the drawing, or the edge of the
+ * table somebody photographed the plan on.
+ */
+async function autoTrace(bg) {
+  const data = S.scene.pictures[H.get(bg, "pictureUniqueID")];
+  if (!data) return toast("That background has no picture in it");
+  const href = data.startsWith("data:") ? data : "data:image/png;base64," + data;
+
+  toast("Reading the plan…", 30000);
+  let found;
+  try { found = await findWalls(href); }
+  catch (e) { return toast("Could not read it: " + e.message, 6000); }
+  if (!found.runs.length) {
+    return toast("Nothing that looked like a wall — trace it by hand (⇧W)", 6000);
+  }
+
+  // The picture is drawn centred on the background object at its own natural
+  // size, scaled by whatever the object is scaled to. Put the runs back into
+  // scene coordinates through the same transform.
+  const sx = H.getNum(bg, "objectScaleX", 1), sy = H.getNum(bg, "objectScaleY", 1);
+  const ox = H.getNum(bg, "x"), oy = H.getNum(bg, "y");
+  const k = 1 / (found.scale || 1);
+  const toScene = (px, py) => ({
+    x: round(ox + (px * k - (found.w * k) / 2) * sx),
+    y: round(oy + (py * k - (found.h * k) / 2) * sy),
+  });
+
+  const runs = found.runs.slice(0, 60).map((r) => ({
+    a: toScene(r.x0, r.y0), b: toScene(r.x1, r.y1),
+  })).filter((r) => Math.hypot(r.b.x - r.a.x, r.b.y - r.a.y) > UNITS_PER_FOOT * 1.5);
+
+  S.proposed = runs;
+  draw(); syncChrome();
+
+  sheet({
+    title: `Found ${runs.length} wall${runs.length === 1 ? "" : "s"}`,
+    sub: "They're drawn over the plan in blue. Keep them and they become real " +
+         "walls you can edit like any other; some will be dimension lines or " +
+         "the edge of the drawing, and those are quicker to delete than the " +
+         "rest were to draw. Set the scale first if you haven't — these come " +
+         "in at whatever size the picture is.",
+    okLabel: "Keep them",
+    onOK: () => {
+      mark("found walls");
+      for (const r of S.proposed) {
+        canvas().children.push(H.makePath("Wall", [r.a, r.b]));
+      }
+      S.proposed = null;
+      reindex(); draw(); syncChrome();
+      toast(`${runs.length} walls laid in — delete the ones that aren't walls`);
+    },
+  });
+  // Backing out leaves the plan as it was.
+  const cancel = $("#modal").querySelector(".row button");
+  const was = cancel.onclick;
+  cancel.onclick = () => { S.proposed = null; draw(); was?.(); };
+}
+
 /** Trace over whatever plan this scene already has. */
 function traceHere() {
   const on = (o) => onPage(o, S.page);
@@ -5270,6 +5370,7 @@ function objectMenu(obj, x, y) {
   if (tag === "Background") {
     return showPopover(x, y, [
       { head: "Background Image" },
+      { label: "Find The Walls…", run: () => autoTrace(obj) },
       { label: "Trace Walls…", run: () => traceBackground(obj) },
       { label: "Set Scale…", run: () => calibrateBackground(obj) },
       { label: "Reset Size", run: () => {
@@ -6525,6 +6626,7 @@ async function openFromCloud() {
 }
 
 async function loadScene(path) {
+  R.forgetPictures();      // a different scene has different pictures
   try {
     const { xml } = await api("/api/scene?path=" + encodeURIComponent(path));
     S.doc = H.parseXML(xml);

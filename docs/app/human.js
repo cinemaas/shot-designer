@@ -23,8 +23,8 @@
 // green face, and it is a mistake the data model here cannot express.
 
 import { UNITS_PER_FOOT, SKIN_TONES, HAIR_COLOURS, HAIR_STYLES,
-         BUILDS } from "./catalog.js?v=f5fff69f";
-import { project } from "./view3d.js?v=f5fff69f";
+         BUILDS } from "./catalog.js?v=64492301";
+import { project } from "./view3d.js?v=64492301";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -194,7 +194,8 @@ const joint = (parent, offset, rot) =>
  * of a limb out of the depth sort entirely, so it can never surface through
  * the near side.
  */
-function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1 } = {}) {
+function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1,
+                                       outward = null, inward = null } = {}) {
   const { cam, out, light } = ctx;
   const [a, b, c] = verts;
   const d = verts[3] || verts[2];
@@ -212,6 +213,24 @@ function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1 } = {}
   // Which way is the camera from here?
   const mid = [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2, (a[2] + c[2]) / 2];
   const toCam = [cam.x - mid[0], cam.y - mid[1], cam.z - mid[2]];
+
+  // Which way is *out*?
+  //
+  // Winding is the usual answer and it is not good enough on a surface that
+  // turns over on itself — a hair cap follows a skull that is narrowing above
+  // the temples while thickening towards the crown, and its facets wind both
+  // ways. Given a point inside the shape instead, out is simply away from that
+  // point, and then culling the back is reliable everywhere. Which matters
+  // twice over here: an unculled hair cap shows you its underside, and the
+  // underside of a fringe is a dark bar exactly where a lowered brow goes.
+  const orient = outward || inward;
+  if (orient) {
+    const away = [mid[0] - orient[0], mid[1] - orient[1], mid[2] - orient[2]];
+    let dot = n[0] * away[0] + n[1] * away[1] + n[2] * away[2];
+    if (inward) dot = -dot;                // the lining of a shell faces in
+    if (dot < 0) n = [-n[0], -n[1], -n[2]];
+  }
+
   const facing = n[0] * toCam[0] + n[1] * toCam[1] + n[2] * toCam[2];
   if (facing < 0) {
     if (!twoSided) return;                 // the back of a closed shape
@@ -221,7 +240,12 @@ function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1 } = {}
   const lam = Math.max(0, n[0] * light[0] + n[1] * light[1] + n[2] * light[2]);
   // Ambient keeps a turned-away surface readable in a dark room; the ceiling
   // keeps a lit one off white. Neither end is ever allowed to go flat.
-  const lit = (0.66 + 0.52 * lam) * ao;
+  //
+  // The band between them is deliberately narrow. On a flat-shaded surface the
+  // step from one facet to the next is the whole of what makes you see facets,
+  // and a wide range turns a cheek into a set of stripes. Softened, and with
+  // enough of them, the same geometry reads as a curve.
+  const lit = (0.78 + 0.30 * lam) * ao;
 
   const pts = verts.map((v) => project(cam, v[0], v[1], v[2]));
   if (pts.some((v) => !v)) return;
@@ -244,6 +268,7 @@ function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1 } = {}
 function sweep(ctx, fr, stations, colour, opts = {}) {
   const sides = opts.sides || 10;
   const rings = [];
+  let carried = null;
 
   for (let i = 0; i < stations.length; i++) {
     const st = stations[i];
@@ -255,14 +280,32 @@ function sweep(ctx, fr, stations, colour, opts = {}) {
     if (dl < 1e-6) { dir = [0, 0, 1]; dl = 1; }
     dir = dir.map((v) => v / dl);
 
-    // Two axes across it. Keep them as close to the body's own as possible so
-    // a section does not spin about the spine between one station and the next.
-    const ref = Math.abs(dir[2]) > 0.94 ? [1, 0, 0] : [0, 0, 1];
+    // Two axes across it, carried along the spine rather than worked out afresh
+    // at each station.
+    //
+    // Recomputing them means choosing a reference direction, and the choice
+    // has to change when the spine turns past vertical. At that moment the
+    // whole cross-section flips a quarter turn, and a tube that bends — a
+    // ponytail, an arm coming forward — twists itself into a knot with a
+    // visible X down the side of it. Carrying the previous frame forward and
+    // squaring it up against the new direction cannot do that.
     const cross = (m, n2) => [m[1] * n2[2] - m[2] * n2[1],
                               m[2] * n2[0] - m[0] * n2[2],
                               m[0] * n2[1] - m[1] * n2[0]];
     const norm = (v) => { const L = Math.hypot(...v) || 1; return v.map((c) => c / L); };
-    const e1 = norm(cross(dir, ref));       // across
+    let e1;
+    if (!carried) {
+      const ref = Math.abs(dir[2]) > 0.94 ? [1, 0, 0] : [0, 0, 1];
+      e1 = norm(cross(dir, ref));
+    } else {
+      // the last one, with any component along the new direction taken out
+      const d = carried[0] * dir[0] + carried[1] * dir[1] + carried[2] * dir[2];
+      const proj = [carried[0] - dir[0] * d, carried[1] - dir[1] * d,
+                    carried[2] - dir[2] * d];
+      e1 = Math.hypot(...proj) > 1e-6 ? norm(proj)
+         : norm(cross(dir, Math.abs(dir[2]) > 0.94 ? [1, 0, 0] : [0, 0, 1]));
+    }
+    carried = e1;
     const e2 = norm(cross(dir, e1));        // through
 
     const rx = st.rx, ry = st.ry == null ? st.rx : st.ry;
@@ -348,10 +391,22 @@ function skullPoint(m, t, a, grow = 1) {
   const off = Math.abs(((a + Math.PI) % (Math.PI * 2)) - Math.PI);
   const face = 1 - 0.11 * Math.exp(-Math.pow(off / 0.95, 2));   // flatter front
   const occiput = 1 + 0.05 * Math.exp(-Math.pow((Math.PI - off) / 1.1, 2));
-  // A chin, rather than a taper that runs out to nothing.
-  const chin = t < 0.16 ? (1 - t / 0.16) * 0.10 * Math.exp(-Math.pow(off / 0.7, 2)) : 0;
+  // A profile, rather than the front of an egg.
+  //
+  // Seen from the side a face is not one curve: there is a brow that stands
+  // proud, a dip under it at the bridge of the nose, cheekbones, and a chin
+  // that comes forward again under the jaw. None of it is much — a few per
+  // cent of the depth of a head each — but it is the difference between
+  // somebody's profile and the end of an ellipsoid.
+  const front = Math.exp(-Math.pow(off / 0.8, 2));       // only at the face
+  const brow = 0.055 * Math.exp(-Math.pow((t - 0.60) / 0.075, 2)) * front;
+  const bridge = -0.035 * Math.exp(-Math.pow((t - 0.515) / 0.055, 2)) * front;
+  const cheek = 0.022 * Math.exp(-Math.pow((t - 0.44) / 0.13, 2)) *
+                Math.exp(-Math.pow((off - 0.85) / 0.5, 2));
+  const jaw = -0.030 * Math.exp(-Math.pow((t - 0.20) / 0.10, 2)) * front;
+  const chin = (t < 0.24 ? (1 - t / 0.24) * 0.085 * front : 0) + brow + bridge + jaw;
 
-  const rx = m.headHalf * w * grow;
+  const rx = m.headHalf * w * (1 + cheek) * grow;
   const ry = m.headDeep * d * face * occiput * grow;
   return [
     Math.cos(a) * ry + chin * m.headDeep,          // forward
@@ -363,6 +418,7 @@ function skullPoint(m, t, a, grow = 1) {
 function head(ctx, fr, m, h, lod) {
   const LAT = lod.lat, LON = lod.lon;
   const skin = h.skin;
+  const core = apply(fr, [0, 0, 0]);
 
   for (let i = 0; i < LAT; i++) {
     const t0 = i / LAT, t1 = (i + 1) / LAT;
@@ -371,7 +427,7 @@ function head(ctx, fr, m, h, lod) {
       surface(ctx, [
         apply(fr, skullPoint(m, t0, a0)), apply(fr, skullPoint(m, t0, a1)),
         apply(fr, skullPoint(m, t1, a1)), apply(fr, skullPoint(m, t1, a0)),
-      ], skin);
+      ], skin, { outward: core });
     }
   }
 
@@ -510,11 +566,49 @@ function face(ctx, fr, m, h) {
  * exactly where a lowered brow goes, and a lowered brow is a scowl. So the line
  * curves, and it stops well above the eyes.
  */
+/**
+ * Where the hair stops, all the way round the head — which is most of what
+ * makes one cut different from another.
+ *
+ * A short back and sides is high at the nape and tight at the temples. A bob
+ * comes forward over the ears. A ponytail is pulled back off the face, so its
+ * hairline is higher at the front and swept flat at the sides. These are the
+ * shapes people actually recognise, and they cost three numbers each.
+ */
+const CUTS = {
+  short:    { front: 0.80, temple: 0.60, nape: 0.15, crown: 0.055, quiff: 0.075 },
+  ponytail: { front: 0.82, temple: 0.66, nape: 0.30, crown: 0.045, quiff: 0.010 },
+  medium:   { front: 0.78, temple: 0.50, nape: 0.10, crown: 0.070, quiff: 0.030 },
+  long:     { front: 0.77, temple: 0.46, nape: 0.06, crown: 0.075, quiff: 0.025 },
+  bun:      { front: 0.83, temple: 0.68, nape: 0.34, crown: 0.040, quiff: 0.008 },
+  // Hair that grows in a coil stands away from the head instead of falling
+  // down it, so what changes is bulk and where that bulk sits — not the
+  // colour, and not a darker version of a cut that hangs.
+  afro:     { front: 0.76, temple: 0.52, nape: 0.10, crown: 0.30, quiff: 0,
+              even: 0.26 },
+  coils:    { front: 0.79, temple: 0.58, nape: 0.13, crown: 0.085, quiff: 0,
+              even: 0.06 },
+  braids:   { front: 0.81, temple: 0.62, nape: 0.20, crown: 0.035, quiff: 0,
+              strands: 14, strandR: 0.085, fall: 1.25 },
+  locs:     { front: 0.80, temple: 0.58, nape: 0.16, crown: 0.045, quiff: 0,
+              strands: 9, strandR: 0.13, fall: 1.5 },
+  cornrows: { front: 0.82, temple: 0.64, nape: 0.24, crown: 0.030, quiff: 0,
+              rows: 7 },
+  bald:     { front: 1.00, temple: 1.00, nape: 1.00, crown: 0, quiff: 0 },
+};
+const cutOf = (style) => CUTS[style] || CUTS.short;
+
 function hairline(a, style) {
+  const c = cutOf(style);
   const off = Math.abs(((a + Math.PI) % (Math.PI * 2)) - Math.PI);
-  const front = style === "short" ? 0.80 : 0.78;
-  const nape = style === "short" ? 0.15 : 0.12;
-  return nape + (front - nape) * Math.pow(0.5 + 0.5 * Math.cos(off), 0.62);
+  // front to temple over the first quarter, temple to nape over the rest —
+  // two runs rather than one curve, which is what lets a cut have a shape.
+  if (off <= Math.PI / 2) {
+    const f = Math.pow(off / (Math.PI / 2), 0.9);
+    return c.front + (c.temple - c.front) * f;
+  }
+  const f = Math.pow((off - Math.PI / 2) / (Math.PI / 2), 0.75);
+  return c.temple + (c.nape - c.temple) * f;
 }
 
 function hair(ctx, fr, m, h, lod) {
@@ -527,15 +621,17 @@ function hair(ctx, fr, m, h, lod) {
   // The cap: from the hairline up over the crown, all the way round. Thicker
   // at the crown and over the temples, which is what gives a short cut some
   // volume instead of looking painted on.
+  const cut = cutOf(style);
   const thick = (t, a) => {
     const off = Math.abs(((a + Math.PI) % (Math.PI * 2)) - Math.PI);
-    const crown = 0.055 + 0.055 * clamp((t - 0.6) / 0.35, 0, 1);
+    // Bulk that sits evenly all round rather than gathering at the crown is
+    // what makes a coil pattern read as one, so it is its own term.
+    const crown = (cut.even || 0) +
+                  cut.crown + cut.crown * clamp((t - 0.6) / 0.35, 0, 1);
     // A tuft at the front, off centre, so a head has a parting rather than a
     // helmet — and so a silhouette has something to catch on.
-    const quiff = style === "short"
-      ? 0.075 * Math.exp(-Math.pow((off - 0.45) / 0.55, 2)) *
-        clamp((t - 0.72) / 0.22, 0, 1)
-      : 0;
+    const quiff = cut.quiff * Math.exp(-Math.pow((off - 0.45) / 0.55, 2)) *
+                  clamp((t - 0.72) / 0.22, 0, 1);
     return 1 + crown + quiff;
   };
 
@@ -551,80 +647,168 @@ function hair(ctx, fr, m, h, lod) {
   // It stands off the head in all three directions, height included. Flat in
   // z it sat at exactly the skull's own crown height, the depth sort had
   // nothing to separate them, and the scalp won about half the time.
+  // Out is away from the middle of the head, which is a fact about the shape
+  // rather than a fact about the order its corners happen to be listed in.
+  const core = apply(fr, [0, 0, 0]);
   for (let k = 0; k < LON; k++) {
     const a0 = (k / LON) * Math.PI * 2, a1 = ((k + 1) / LON) * Math.PI * 2;
     const b0 = hairline(a0, style), b1 = hairline(a1, style);
-    const N = 5;
+    const N = 7;
     for (let i = 0; i < N; i++) {
       const f0 = i / N, f1 = (i + 1) / N;
       const t00 = b0 + (1 - b0) * f0, t01 = b0 + (1 - b0) * f1;
       const t10 = b1 + (1 - b1) * f0, t11 = b1 + (1 - b1) * f1;
+      // Over the crown the surface turns across the line of sight and a
+      // single-sided facet there is a coin toss — which is a slit of scalp at
+      // the top of the head. Up there it is drawn both ways: you can never be
+      // under the crown of a head to see its underside anyway.
       surface(ctx, [
         apply(fr, skullPoint(m, t00, a0, thick(t00, a0))),
         apply(fr, skullPoint(m, t10, a1, thick(t10, a1))),
         apply(fr, skullPoint(m, t11, a1, thick(t11, a1))),
         apply(fr, skullPoint(m, t01, a0, thick(t01, a0))),
-      ], col, { twoSided: true });
+      ], col, t00 > 0.86 ? { twoSided: true } : { outward: core });
+      // The lining, hugging the skull. It faces inward, so it is drawn only
+      // where you are looking up under the hair and the outside has turned
+      // away — which is the one place a shell with no lining shows a hole.
+      surface(ctx, [
+        apply(fr, skullPoint(m, t00, a0, 1.005)),
+        apply(fr, skullPoint(m, t10, a1, 1.005)),
+        apply(fr, skullPoint(m, t11, a1, 1.005)),
+        apply(fr, skullPoint(m, t01, a0, 1.005)),
+      ], scalp, { inward: core });
     }
-    // The edge of the fringe, in scalp rather than hair: from below this is
-    // the underside of somebody's hairline, and a dark bar there lands exactly
-    // where a lowered brow goes.
+    // the apex, closing the cap over the crown
     surface(ctx, [
-      apply(fr, skullPoint(m, b0, a0, 1.004)),
-      apply(fr, skullPoint(m, b1, a1, 1.004)),
+      apply(fr, skullPoint(m, 1, a0, thick(1, a0))),
+      apply(fr, skullPoint(m, 1, a1, thick(1, a1))),
+      apply(fr, [0, 0, 0.5 * m.headH * (thick(1, 0) + 0.02)]),
+    ], col, { twoSided: true });
+    // and the cut edge round the hairline, closing the two together
+    surface(ctx, [
+      apply(fr, skullPoint(m, b0, a0, 1.005)),
+      apply(fr, skullPoint(m, b1, a1, 1.005)),
       apply(fr, skullPoint(m, b1, a1, thick(b1, a1))),
       apply(fr, skullPoint(m, b0, a0, thick(b0, a0))),
-    ], scalp, { twoSided: true });
+    ], shade(col, 0.9), { twoSided: true });
   }
 
   if (style === "short") return;
 
-  // Everything longer falls down the sides and the back. Not across the face:
-  // the angle either side of straight ahead that hair is allowed to reach is
-  // the difference between a hairstyle and a hood.
-  const drop = { ponytail: 0.30, medium: 0.85, long: 1.5, bun: 0.22 }[style] ?? 0.6;
-  for (let k = 0; k < LON; k++) {
+  // Everything longer falls down the sides and the back.
+  //
+  // Not across the face: how far round from straight ahead hair is allowed to
+  // reach is the difference between a hairstyle and a hood. And not as one
+  // tall quad per column either — that was a flat sheet standing off the head
+  // at an angle, which is what was tearing open and showing scalp through it.
+  // It falls in bands, so it curves away from the jaw the way hair does, and
+  // it is closed front and back so nothing can look through it.
+  const drop = { ponytail: 0.44, medium: 1.05, long: 1.85, bun: 0,
+                 afro: 0, coils: 0, braids: 0, locs: 0, cornrows: 0 }[style] ?? 0.7;
+  const BANDS = 6;
+
+  // Where a strand sits at a given height: out at the hairline, easing away
+  // from the head as it passes the jaw, then hanging.
+  const strand = (a, f, ease) => {
+    const t = hairline(a, style) - (hairline(a, style) + drop * ease) * f;
+    const flare = 1.05 + 0.10 * Math.sin(Math.min(1, f * 1.6) * Math.PI * 0.5);
+    const p = skullPoint(m, Math.max(t, 0.30), a, flare);
+    return [p[0], p[1], (t - 0.5) * m.headH];      // in the head's own axes
+  };
+
+  for (let k = 0; k < LON && drop > 0; k++) {
     const a0 = (k / LON) * Math.PI * 2, a1 = ((k + 1) / LON) * Math.PI * 2;
     const mid = (a0 + a1) / 2;
     const off = Math.abs(((mid + Math.PI) % (Math.PI * 2)) - Math.PI);
-    if (off < 1.15) continue;
-    const ease = clamp((off - 1.15) / 0.6, 0, 1);
-    const t0 = hairline(a0, style), t1 = hairline(a1, style);
-    const bottom = -drop * ease;
-    // Below the chin the head has run out but the hair has not, so it keeps
-    // the width it had rather than following the jaw in to a point.
-    const hold = (a, t) => {
-      const p = skullPoint(m, Math.max(t, 0.34), a, 1.055);
-      return [p[0], p[1], (t - 0.5) * m.headH];
-    };
-    surface(ctx, [
-      apply(fr, skullPoint(m, t0, a0, 1.055)),
-      apply(fr, skullPoint(m, t1, a1, 1.055)),
-      apply(fr, hold(a1, bottom)), apply(fr, hold(a0, bottom)),
-    ], shade(col, 0.94), { twoSided: true });
+    if (off < 1.12) continue;
+    const e0 = clamp((Math.abs(((a0 + Math.PI) % (Math.PI * 2)) - Math.PI) - 1.12) / 0.55, 0, 1);
+    const e1 = clamp((Math.abs(((a1 + Math.PI) % (Math.PI * 2)) - Math.PI) - 1.12) / 0.55, 0, 1);
+    if (e0 <= 0 && e1 <= 0) continue;
+
+    for (let i = 0; i < BANDS; i++) {
+      const f0 = i / BANDS, f1 = (i + 1) / BANDS;
+      const q = [strand(a0, f0, e0), strand(a1, f0, e1),
+                 strand(a1, f1, e1), strand(a0, f1, e0)];
+      // Out, for something hanging past the jaw, is away from the head's axis
+      // at that height — not away from the middle of the head. Measured from
+      // the middle, "away" for anything below the chin points mostly
+      // downwards, every normal gets turned to face the floor, and the whole
+      // fall culls itself and shows scalp through the gap.
+      const axis = apply(fr, [0, 0, (q[0][2] + q[2][2]) / 2]);
+      surface(ctx, q.map((v) => apply(fr, v)), shade(col, 0.96),
+              { outward: axis });
+      surface(ctx, [
+        strand(a0, f0, e0 * 0.84), strand(a1, f0, e1 * 0.84),
+        strand(a1, f1, e1 * 0.84), strand(a0, f1, e0 * 0.84),
+      ].map((v) => apply(fr, v)), shade(col, 0.8), { inward: axis });
+    }
   }
 
-  // The ponytail itself: gathered at the back of the crown, then falling in
-  // sections that narrow and swing, rather than one cylinder pointing down.
+  // Braids and locs: discrete strands, gathered at the scalp and hanging.
+  // Drawn as separate tapered runs rather than as a curtain, because that is
+  // what they are, and because the gaps between them are half of what makes
+  // the silhouette recognisable.
+  if (cut.strands) {
+    const N = cut.strands;
+    for (let i = 0; i < N; i++) {
+      // spread across the back and sides, none across the face
+      const a = Math.PI + (i / (N - 1) - 0.5) * Math.PI * 1.5;
+      const top = skullPoint(m, hairline(a, style) + 0.05, a, 1.03);
+      const L = m.headH * cut.fall;
+      const r = m.headHalf * cut.strandR;
+      const swing = 0.10 + 0.05 * Math.sin(i * 2.1);
+      sweep(ctx, fr, [
+        { p: [top[0], top[1], top[2]], rx: r * 0.8 },
+        { p: [top[0] * 1.05, top[1] * 1.05, top[2] - L * 0.3], rx: r },
+        { p: [top[0] * (1 + swing), top[1] * 1.08, top[2] - L * 0.7], rx: r * 0.95 },
+        { p: [top[0] * (1 + swing * 1.4), top[1] * 1.05, top[2] - L], rx: r * 0.6 },
+      ], shade(col, 0.94 + 0.06 * ((i % 3) - 1)), { sides: 6 });
+    }
+  }
+
+  // Cornrows: rows laid flat along the scalp, front to back. They barely stand
+  // off the head at all — the pattern is the point, not the volume.
+  if (cut.rows) {
+    for (let i = 0; i < cut.rows; i++) {
+      const off = (i / (cut.rows - 1) - 0.5) * 2.1;    // across the head
+      const stations = [];
+      for (let j = 0; j <= 5; j++) {
+        const t = hairline(0, style) - (hairline(0, style) - 0.30) * (j / 5);
+        const a = off * (0.35 + 0.65 * (j / 5));
+        const p = skullPoint(m, Math.max(t, 0.30), a + Math.PI * (j / 5), 1.05);
+        stations.push({ p, rx: m.headHalf * (j === 5 ? 0.03 : 0.055) });
+      }
+      sweep(ctx, fr, stations, shade(col, 0.95), { sides: 5 });
+    }
+  }
+
+  // The ponytail: gathered high at the back of the head, then falling in
+  // sections that narrow and swing. It starts clear of the fall behind it, or
+  // the two grow through one another.
   if (style === "ponytail" || style === "bun") {
-    const tie = skullPoint(m, 0.74, Math.PI, 1.06);
+    const tie = skullPoint(m, 0.66, Math.PI, 1.06);
     if (style === "bun") {
-      const stations = [0, 0.35, 0.7, 1].map((f) => ({
-        p: [tie[0] - m.headDeep * 0.20 * f, 0,
-            tie[2] + m.headH * 0.10 * f],
-        rx: m.headHalf * [0.30, 0.52, 0.50, 0.16][Math.round(f * 3)],
-      }));
-      sweep(ctx, fr, stations, col, { sides: 8 });
-    } else {
-      const L = m.headH * 1.55;
+      const knot = skullPoint(m, 0.82, Math.PI, 1.02);
       const stations = [
-        { p: [tie[0], 0, tie[2]], rx: m.headHalf * 0.30 },
-        { p: [tie[0] - L * 0.16, 0, tie[2] - L * 0.20], rx: m.headHalf * 0.40 },
-        { p: [tie[0] - L * 0.24, 0, tie[2] - L * 0.52], rx: m.headHalf * 0.36 },
-        { p: [tie[0] - L * 0.22, 0, tie[2] - L * 0.82], rx: m.headHalf * 0.26 },
-        { p: [tie[0] - L * 0.12, 0, tie[2] - L * 1.02], rx: m.headHalf * 0.11 },
+        { p: [knot[0] * 0.92, 0, knot[2] - m.headH * 0.02], rx: m.headHalf * 0.20 },
+        { p: [knot[0] * 1.16, 0, knot[2] + m.headH * 0.03], rx: m.headHalf * 0.46 },
+        { p: [knot[0] * 1.34, 0, knot[2] + m.headH * 0.08], rx: m.headHalf * 0.42 },
+        { p: [knot[0] * 1.40, 0, knot[2] + m.headH * 0.11], rx: m.headHalf * 0.14 },
       ];
-      sweep(ctx, fr, stations, col, { sides: 8 });
+      sweep(ctx, fr, stations, col, { sides: 12 });
+    } else {
+      const L = m.headH * 1.7;
+      const stations = [
+        { p: [tie[0] * 0.86, 0, tie[2] + m.headH * 0.04],
+          rx: m.headHalf * 0.34, ry: m.headHalf * 0.34 },
+        { p: [tie[0], 0, tie[2]], rx: m.headHalf * 0.28, ry: m.headHalf * 0.28 },
+        { p: [tie[0] - L * 0.10, 0, tie[2] - L * 0.16], rx: m.headHalf * 0.36 },
+        { p: [tie[0] - L * 0.15, 0, tie[2] - L * 0.44], rx: m.headHalf * 0.34 },
+        { p: [tie[0] - L * 0.15, 0, tie[2] - L * 0.72], rx: m.headHalf * 0.26 },
+        { p: [tie[0] - L * 0.10, 0, tie[2] - L * 0.94], rx: m.headHalf * 0.15 },
+        { p: [tie[0] - L * 0.04, 0, tie[2] - L * 1.04], rx: m.headHalf * 0.05 },
+      ];
+      sweep(ctx, fr, stations, col, { sides: 12 });
     }
   }
 }
@@ -692,19 +876,31 @@ export const RELAXED = {
 
 export const POSES = {
   relaxed: { label: "Relaxed", ...RELAXED },
-  held_out: { label: "Arms Out", ...RELAXED, armRoll: 0.55, elbow: 0.12 },
-  pockets: { label: "Hands In Pockets", ...RELAXED, armRoll: 0.16, elbow: 0.5 },
-  hips: { label: "Hands On Hips", ...RELAXED, armRoll: 0.72, elbow: 1.5 },
-  crossed: { label: "Arms Crossed", ...RELAXED, armPitch: 0.9, armRoll: 0.34,
-             elbow: 2.0 },
-  pointing: { label: "Pointing", ...RELAXED, armPitch: 1.45, armRoll: 0.12,
-              elbow: 0.06, asym: true },
-  raised: { label: "Hand Raised", ...RELAXED, armPitch: -2.3, armRoll: 0.3,
-            elbow: 0.35, asym: true },
-  holding: { label: "Holding Something", ...RELAXED, armPitch: 1.25,
-             armRoll: 0.22, elbow: 1.25 },
-  walking: { label: "Walking", ...RELAXED, armPitch: 0.55, elbow: 0.5,
-             hipPitch: 0.42, knee: 0.28, stride: true },
+  held_out: { label: "Arms Out", ...RELAXED, armRoll: 0.62, elbow: 0.10 },
+
+  // The rest are not guessed. Each one names where the hand has to end up — on
+  // the hip, across the chest, out in front — and the joint angles were solved
+  // for backwards from that, preferring the solution that does not have the
+  // arm screwed round its own axis to get there. Several sets of angles put a
+  // hand in the same place and only some of them look like a person.
+  //
+  // Every one of these lands its hand within a quarter of an inch of the mark,
+  // which is why they now read as the thing they are named after. Tuning them
+  // by eye is what had somebody pointing at the floor.
+  pockets: { label: "Hands In Pockets", ...RELAXED,
+             armPitch: -0.88, armRoll: 0.06, elbow: 1.28 },
+  hips: { label: "Hands On Hips", ...RELAXED,
+          armPitch: -0.67, armRoll: 0.13, elbow: 1.41 },
+  crossed: { label: "Arms Crossed", ...RELAXED,
+             armPitch: -1.63, armRoll: -1.06, elbow: 1.97 },
+  pointing: { label: "Pointing", ...RELAXED,
+              armPitch: -1.54, armRoll: -0.01, elbow: 0.02, asym: true },
+  raised: { label: "Hand Raised", ...RELAXED,
+            armPitch: 2.35, armRoll: -0.20, elbow: 1.63, asym: true },
+  holding: { label: "Holding Something", ...RELAXED,
+             armPitch: -1.70, armRoll: -0.09, elbow: 1.52 },
+  walking: { label: "Walking", ...RELAXED, armPitch: 0.5, elbow: 0.42,
+             hipPitch: 0.38, knee: 0.34, stride: true },
 };
 
 /**
@@ -725,11 +921,11 @@ export function drawHuman(out, cam, p, h, {
   // face; from across a room you want a silhouette, and the difference is a
   // lot of polygons nobody can see.
   const dist = Math.hypot(cam.x - p.x, cam.y - p.y);
-  const near = dist < m.H * 9, far = dist > m.H * 30;
-  const lod = far ? { lat: 6, lon: 8, sides: 6, face: false }
-    : near ? { lat: 11, lon: 16, sides: 10, face: true }
-    : { lat: 8, lon: 12, sides: 8, face: true };
-  if (detail < 1) { lod.lat = 6; lod.lon = 8; lod.sides = 6; }
+  const near = dist < m.H * 13, far = dist > m.H * 34;
+  const lod = far ? { lat: 7, lon: 10, sides: 6, face: false }
+    : near ? { lat: 18, lon: 28, sides: 14, face: true }
+    : { lat: 11, lon: 16, sides: 10, face: true };
+  if (detail < 1) { lod.lat = 7; lod.lon = 10; lod.sides = 6; }
 
   // The light: mostly from above, leaning towards whoever is looking, so a
   // face is never in silhouette and a body always has a lit side and a turned
@@ -806,19 +1002,49 @@ export function drawHuman(out, cam, p, h, {
     { p: [m.chestDeep * 0.05, 0, m.shoulder - m.hip + m.H * 0.018],
       rx: m.neckR * 1.26, ry: m.neckR * 1.32, square: 0,
       colour: shade(h.top, 1.07) },
-    { p: [m.chestDeep * 0.05, 0, m.shoulder - m.hip + m.H * 0.030],
-      rx: m.neckR * 0.84, ry: m.neckR * 0.87, square: 0,
+    { p: [m.chestDeep * 0.05, 0, m.shoulder - m.hip + m.H * 0.032],
+      rx: m.neckR * 1.02, ry: m.neckR * 1.06, square: 0,
       colour: shade(h.top, 1.07) },
   ];
   sweep(ctx, torso, body, h.top, { sides: S + 2, openHi: true });
 
   const collarZ = m.shoulder - m.hip;
 
+  // Detail on the garment, kept to the three things you would actually notice
+  // on a person across a room: the line down the front of a shirt, the band at
+  // the top of a pair of trousers, and the cuff where a sleeve stops. Not
+  // seams, not stitching — those are texture, and at this size texture is
+  // noise. These are silhouette and value, which read.
+  const placket = (z0, z1, out, wide, col) => {
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      const q0 = z0 + (z1 - z0) * (i / n), q1 = z0 + (z1 - z0) * ((i + 1) / n);
+      const at = (z, s) => {
+        const f = (z - collarZ) / (m.chest - m.hip - collarZ);
+        const dep = m.chestDeep * (0.86 + 0.10 * clamp(f, 0, 1));
+        return [dep * out, s * wide, z];
+      };
+      surface(ctx, [apply(torso, at(q0, -1)), apply(torso, at(q0, 1)),
+                    apply(torso, at(q1, 1)), apply(torso, at(q1, -1))],
+              col, { twoSided: true, bias: 0.997 });
+    }
+  };
+  // A button placket down the middle of a shirt, a shade off the body of it.
+  placket(m.waist - m.hip + m.H * 0.02, collarZ - m.H * 0.012,
+          1.02, m.chestHalf * 0.085, shade(h.top, 0.93));
+  // The waistband, which is what makes a top look tucked into something.
+  sweep(ctx, torso, [
+    { p: [0, 0, m.waist - m.hip - m.H * 0.028], rx: m.hipHalf * 0.96,
+      ry: m.hipDeep * 0.97, square: 0.34 },
+    { p: [0, 0, m.waist - m.hip - m.H * 0.008], rx: m.hipHalf * 0.98,
+      ry: m.hipDeep * 0.99, square: 0.34 },
+  ], shade(h.trousers, 0.86), { sides: S + 2, open: true });
+
   // ---- neck and head ----------------------------------------------------
   const neckBase = joint(torso, [m.chestDeep * 0.05, 0, collarZ + m.H * 0.010]);
   sweep(ctx, neckBase, [
-    { p: [0, 0, m.H * 0.006], rx: m.neckR * 1.06, ry: m.neckR * 1.10 },
-    { p: [0, 0, m.H * 0.030], rx: m.neckR * 0.98, ry: m.neckR * 1.02 },
+    { p: [0, 0, m.H * 0.014], rx: m.neckR * 1.00, ry: m.neckR * 1.04 },
+    { p: [0, 0, m.H * 0.034], rx: m.neckR * 0.97, ry: m.neckR * 1.01 },
     { p: [0, 0, m.chin - m.shoulder - m.H * 0.024], rx: m.neckR * 0.92,
       ry: m.neckR * 0.96 },
   ], shade(h.skin, 0.95), { sides: S + 2, openHi: true });
@@ -841,13 +1067,13 @@ export function drawHuman(out, cam, p, h, {
   // rather than a separate ball stuck on top of the seam.
   const sleeve = h.female ? 0.55 : 0.42;      // how far down the sleeve stops
   for (const [i, s] of [-1, 1].entries()) {
-    const asym = pose.asym && s < 0;          // one arm does it, not both
+    const acts = !pose.asym || s > 0;         // a one-armed pose uses one arm
     const armLen = m.shoulder - m.wrist;
     const shoulder = joint(torso,
       [m.chestDeep * 0.04, s * m.shoulderHalf * 0.80, collarZ - m.H * 0.030],
-      mul(rotRoll(s * (asym ? 0.1 : pose.armRoll)),
+      mul(rotRoll(s * (acts ? pose.armRoll : 0.10)),
           rotPitch(pose.stride ? (i ? pose.armPitch : -pose.armPitch)
-                               : (asym ? 0.06 : pose.armPitch))));
+                               : (acts ? pose.armPitch : 0.06))));
 
     const upper = armLen * 0.47, lower = armLen * 0.53;
 
@@ -855,7 +1081,8 @@ export function drawHuman(out, cam, p, h, {
     // just inside the torso so the two never part company, and it is barely
     // wider than the arm below it — a big cap here is the single thing that
     // makes a figure look armoured.
-    const bendA = Math.abs(asym ? 0.06 : pose.armPitch) + Math.abs(pose.armRoll);
+    const bendA = Math.abs(acts ? pose.armPitch : 0.06) +
+                  Math.abs(acts ? pose.armRoll : 0.10);
     if (bendA > 0.45) {
       jointBall(ctx, shoulder, [0, 0, 0], m.upperArm * 0.98, h.top, S);
     }
@@ -873,10 +1100,10 @@ export function drawHuman(out, cam, p, h, {
 
     // The elbow is its own frame, so a bend is a bend rather than a crease.
     const elbow = joint(shoulder, [0, 0, -upper],
-                        rotPitch(asym ? 0.05 : pose.elbow));
+                        rotPitch(acts ? pose.elbow : 0.16));
     const skinArm = h.skin;
     // The elbow fills its own seam, and sits inside both runs while straight.
-    if (Math.abs(asym ? 0.05 : pose.elbow) > 0.45) {
+    if (Math.abs(acts ? pose.elbow : 0.16) > 0.45) {
       jointBall(ctx, elbow, [0, 0, 0], m.upperArm * 0.82, h.top, S);
     }
     const stop = lower * (1 - sleeve);              // where the sleeve ends
@@ -887,8 +1114,10 @@ export function drawHuman(out, cam, p, h, {
         colour: h.top },
       // The sleeve stops and the arm carries on. That step is the silhouette
       // of a rolled sleeve, and it costs one station.
-      { p: [0, 0, -stop], rx: m.foreArm * 0.97, ry: m.foreArm * 0.95,
-        colour: h.top },
+      { p: [0, 0, -stop + m.foreArm * 0.16], rx: m.foreArm * 1.05,
+        ry: m.foreArm * 1.03, colour: shade(h.top, 0.9) },
+      { p: [0, 0, -stop], rx: m.foreArm * 1.02, ry: m.foreArm * 1.00,
+        colour: shade(h.top, 0.9) },
       { p: [0, 0, -stop - m.foreArm * 0.12], rx: m.foreArm * 0.80,
         ry: m.foreArm * 0.78, colour: skinArm },
       { p: [0, 0, -lower * 0.88], rx: m.wristR * 1.08, ry: m.wristR * 1.02,
@@ -909,19 +1138,28 @@ export function drawHuman(out, cam, p, h, {
       const thighL = m.crotch - m.knee + m.thigh * 0.4;
       const shinL = m.knee - m.ankle;
 
+      // A hip that has swung needs its own fill, exactly as a shoulder does:
+      // nothing here is skinned, so the outside of a bend opens up otherwise
+      // and you can see straight into the trouser leg.
+      if (Math.abs(swing) > 0.2) {
+        jointBall(ctx, hip, [0, 0, 0], m.thigh * 1.02, h.trousers, S);
+      }
       sweep(ctx, hip, [
         { p: [0, 0, m.thigh * 0.5], rx: m.thigh * 1.10, ry: m.thigh * 1.06 },
         { p: [0, 0, -thighL * 0.45], rx: m.thigh * 0.94, ry: m.thigh * 0.94 },
         { p: [0, 0, -thighL], rx: m.calf * 1.14, ry: m.calf * 1.12 },
-      ], h.trousers, { sides: S });
+      ], h.trousers, { sides: S, openHi: true });
 
       const knee = joint(hip, [0, 0, -thighL], rotPitch(-(pose.knee || 0)));
+      if (Math.abs(pose.knee || 0) > 0.2) {
+        jointBall(ctx, knee, [0, 0, 0], m.calf * 1.10, h.trousers, S);
+      }
       sweep(ctx, knee, [
         { p: [0, 0, m.calf * 0.55], rx: m.calf * 1.13, ry: m.calf * 1.11 },
         { p: [-m.calf * 0.14, 0, -shinL * 0.3], rx: m.calf, ry: m.calf * 1.06 },
         { p: [0, 0, -shinL * 0.86], rx: m.ankleR * 1.16, ry: m.ankleR * 1.2 },
         { p: [0, 0, -shinL], rx: m.ankleR * 1.02, ry: m.ankleR * 1.05 },
-      ], h.trousers, { sides: S });
+      ], h.trousers, { sides: S, openLo: true });
 
       foot(ctx, joint(knee, [0, 0, -shinL - m.ankleR * 0.2]), m, h.shoes);
     }

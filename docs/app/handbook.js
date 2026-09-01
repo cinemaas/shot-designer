@@ -206,8 +206,13 @@ the character panel opens on the left.</p>
 on their mark on the plan, so you can pick the red one out of a room at a
 glance. It is not their skin — a green character does not have a green face.</dd>
 <dt>Skin</dt><dd>Eight tones. Face, ears, neck and hands, and nothing else.</dd>
-<dt>Hair</dt><dd>Colour and style, on their own again. Short and ponytail are
-the two built out properly; medium, long, bun and bald are there as well.</dd>
+<dt>Name</dt><dd>Type it at the top of the panel. It labels them on the plan,
+names them in the brief, and joins the cast list so you can drop them into
+another scene.</dd>
+<dt>Hair</dt><dd>Colour and style, on their own again. Eleven cuts: short,
+medium, long, ponytail and bun, plus afro, short coils, braids, locs and
+cornrows — hair that grows in a coil is a different shape, not a darker version
+of one that hangs, so they are built as different shapes.</dd>
 <dt>Build</dt><dd>Presentation, build and real height. Change the height and the
 proportions change with it rather than the whole person being scaled — a tall
 person is longer in the leg, not bigger all over.</dd>
@@ -322,6 +327,18 @@ shot. <kbd>Esc</kbd> always leaves you with nothing armed.</p>
 something an agent sent. It reads fine to you and means nothing to the app:
 no 3D, no lens height against a real wall, no brief that knows the size of the
 room. Tracing turns the picture into geometry.</p>
+<h4>Letting it find them</h4>
+<p><b>Find The Walls…</b> on the background reads them off the picture. A
+floorplan is mostly paper, its walls are the darkest thing on it, and they run
+square — which is enough to pick them out in about a second, against the few
+minutes it takes to click a scene by hand.</p>
+<p>What it finds is drawn over the plan in blue and applied only when you say
+so. It will also offer you a dimension line, the border of the drawing, or the
+edge of the table somebody photographed the plan on; those are quicker to
+delete than the rest were to draw. It reads straight walls, not curves or
+diagonals. Set the scale first, or they arrive at whatever size the picture
+is.</p>
+<h4>Tracing them yourself</h4>
 <p>Right-click the background and pick <b>Trace Walls…</b>, or press
 <kbd>⇧W</kbd>. It offers to set the scale first — drag a line along something
 whose length you know, a door is three feet — because a wall traced at the

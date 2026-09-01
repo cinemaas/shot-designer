@@ -1,12 +1,12 @@
 // Drawing, in scene units. Every constant here was measured off a diagram the
 // real the plan is measured in, so shapes land where the numbers say.
 
-import { FXG } from "./assets.js?v=f5fff69f";
+import { FXG } from "./assets.js?v=64492301";
 import { KEY_TO_FXG, KEY_TO_LABEL, CAMERA_COLORS, SKIN_TONES, HAIR_COLOURS,
-  } from "./catalog.js?v=f5fff69f";
-import { EXTRA_SVG } from "./props.js?v=f5fff69f";
-import { GAUGE } from "./track.js?v=f5fff69f";
-import * as H from "./hcw.js?v=f5fff69f";
+  } from "./catalog.js?v=64492301";
+import { EXTRA_SVG } from "./props.js?v=64492301";
+import { GAUGE } from "./track.js?v=64492301";
+import * as H from "./hcw.js?v=64492301";
 
 export const STROKE = 3;            // the app draws almost every outline at 3
 export const CHAR_R = 20;
@@ -294,15 +294,20 @@ function drawPlanFigure(obj, color, female) {
       fill: hairCol, stroke: "none",
     }));
     // A ponytail points backwards, which from above is the clearest statement
-    // of facing anybody could ask for.
+    // of facing anybody could ask for — but only if it reads as a tail rather
+    // than as a blob stuck on the back of somebody's head. So it tapers, and
+    // it grows out of the hair instead of sitting behind it.
     if (hairStyle === "ponytail") {
-      g.append(el("ellipse", {
-        cx: hx - headR * 1.62, cy: 0, rx: headR * 0.62, ry: headR * 0.34,
-        fill: shade(hairCol, 0.9), stroke: "none",
+      const bx = hx - headR * 0.95;
+      g.append(el("path", {
+        d: `M${bx},${-headR * 0.42} ` +
+           `Q${bx - headR * 0.85},${-headR * 0.30} ${bx - headR * 1.5},0 ` +
+           `Q${bx - headR * 0.85},${headR * 0.30} ${bx},${headR * 0.42} Z`,
+        fill: shade(hairCol, 0.92), stroke: "none",
       }));
     }
     if (hairStyle === "bun") {
-      g.append(el("circle", { cx: hx - headR * 1.15, cy: 0, r: headR * 0.5,
+      g.append(el("circle", { cx: hx - headR * 1.02, cy: 0, r: headR * 0.44,
         fill: shade(hairCol, 1.12), stroke: "none" }));
     }
   }
@@ -694,24 +699,51 @@ function mimeOf(b64) {
   return "image/jpeg";
 }
 
+/**
+ * Background pictures, kept rather than rebuilt.
+ *
+ * The plan is redrawn from nothing on every click, and a floorplan made fresh
+ * each time is a floorplan the browser has to decode again — laid out at a
+ * guessed size until it knows the real one, then snapping to it. That is the
+ * flicker: a re-decode and a jump, several times a second, under everything
+ * else you are trying to look at.
+ *
+ * So the element survives. Each background object keeps its own node, and a
+ * redraw moves that node into the new layer instead of making another one.
+ * Appending a node that already has a parent moves it, so there is nothing to
+ * tidy up; a picture that leaves the scene simply stops being asked for.
+ */
+const bgNodes = new Map();
+
 function drawBackground(obj, pictures) {
   const g = el("g");
   const data = pictures[H.get(obj, "pictureUniqueID")];
   if (!data) return g;
-  const href = data.startsWith("data:") ? data : `data:${mimeOf(data)};base64,` + data;
-  const img = el("image", { href, x: -400, y: -300, width: 800, height: 600 });
+  const id = H.get(obj, "uniqueID") + ":" + H.get(obj, "pictureUniqueID");
+
+  let img = bgNodes.get(id);
+  if (!img) {
+    const href = data.startsWith("data:") ? data
+               : `data:${mimeOf(data)};base64,` + data;
+    img = el("image", { href, x: -400, y: -300, width: 800, height: 600 });
+    // Its real dimensions, once — and they stay put from then on.
+    const probe = new Image();
+    probe.onload = () => {
+      img.setAttribute("x", -probe.naturalWidth / 2);
+      img.setAttribute("y", -probe.naturalHeight / 2);
+      img.setAttribute("width", probe.naturalWidth);
+      img.setAttribute("height", probe.naturalHeight);
+    };
+    probe.src = href;
+    bgNodes.set(id, img);
+    if (bgNodes.size > 40) bgNodes.delete(bgNodes.keys().next().value);
+  }
   g.append(img);
-  // Swap in the picture's real dimensions as soon as the browser knows them.
-  const probe = new Image();
-  probe.onload = () => {
-    img.setAttribute("x", -probe.naturalWidth / 2);
-    img.setAttribute("y", -probe.naturalHeight / 2);
-    img.setAttribute("width", probe.naturalWidth);
-    img.setAttribute("height", probe.naturalHeight);
-  };
-  probe.src = href;
   return g;
 }
+
+/** Let go of the kept pictures — a different scene has different ones. */
+export function forgetPictures() { bgNodes.clear(); }
 
 /** A storyboard frame pinned to the plan, in its black surround. */
 function drawStoryboard(obj, pictures) {

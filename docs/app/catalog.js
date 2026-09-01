@@ -119,7 +119,13 @@ export const HAIR_COLOURS = [
 
 export const HAIR_STYLES = [
   ["short", "Short"], ["ponytail", "Ponytail"], ["medium", "Medium"],
-  ["long", "Long"], ["bun", "Bun"], ["bald", "Bald"],
+  ["long", "Long"], ["bun", "Bun"],
+  // Hair that grows in a coil is a different shape, not a darker version of
+  // the same one, and a cast you can only build out of one kind of hair is a
+  // cast that leaves people out. These are silhouettes in their own right.
+  ["afro", "Afro"], ["coils", "Short Coils"], ["braids", "Braids"],
+  ["locs", "Locs"], ["cornrows", "Cornrows"],
+  ["bald", "Bald"],
 ];
 
 export const BUILDS = [["slight", "Slight"], ["average", "Average"],

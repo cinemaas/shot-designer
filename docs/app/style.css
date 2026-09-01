@@ -508,7 +508,13 @@ body.view-only #stage { cursor: grab; }
   text-transform: uppercase; opacity: .55; font-weight: 700;
 }
 #charpanel h4:first-child { margin-top: 0; }
-#charpanel .who { font-weight: 650; font-size: 12px; margin-bottom: 2px; }
+#charpanel .who {
+  font-weight: 650; font-size: 12px; margin: 0 0 4px; width: 100%;
+  padding: 3px 5px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: inherit; font-family: inherit;
+}
+#charpanel .who:hover { border-color: var(--hair); }
+#charpanel .who:focus { border-color: var(--sel); outline: none; background: var(--bg); }
 #charpanel .sw { display: flex; flex-wrap: wrap; gap: 4px; }
 #charpanel .sw button {
   width: 20px; height: 20px; border-radius: 4px; padding: 0;
