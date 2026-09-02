@@ -31,8 +31,8 @@
 //
 // Everything below is in feet off the road.
 
-import { surface, lightFor } from "./human.js?v=7ea68e44";
-import { UNITS_PER_FOOT } from "./catalog.js?v=7ea68e44";
+import { surface, lightFor } from "./human.js?v=7266f2d6";
+import { UNITS_PER_FOOT } from "./catalog.js?v=7266f2d6";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -79,13 +79,13 @@ const BODY = [
  * saloon's, and is most of what makes the silhouette read as the right vehicle.
  */
 // An Explorer's windscreen starts well forward and its D-pillar is nearly
-// upright — a long roof between them is what makes it a three-row car rather
-// than a hatchback with delusions.
+// upright — a long flat roof between them is what makes it a full-size SUV
+// rather than a hatchback with delusions.
 const CABIN = [
   { at:  0.50, w: 0.93, z: BELT },        // base of the windscreen
   { at:  0.28, w: 0.91, z: 4.86 },
   { at:  0.14, w: 0.89, z: ROOF },        // top of the windscreen
-  { at: -0.70, w: 0.89, z: ROOF },        // roof runs flat, all three rows
+  { at: -0.70, w: 0.89, z: ROOF },        // roof runs flat over both rows
   { at: -0.82, w: 0.90, z: 5.44 },
   { at: -0.92, w: 0.92, z: BELT },        // tailgate glass, nearly upright
 ];
@@ -122,18 +122,32 @@ export function drawCar(out, cam, p, {
   const dark = "#2f3337";
 
   // --- the body ------------------------------------------------------------
+  //
+  // Every panel is oriented against a point inside the car rather than against
+  // the order its corners happen to be listed in. Winding is not reliable on a
+  // surface that changes section as it goes: some facets end up wound the other
+  // way, get culled as though they were the far side, and leave holes you can
+  // see straight through the bodywork.
   const rings = BODY.map((st) =>
     ringOf(st.at, W2 * st.w, ft(st.low), ft(st.top), st.tuck, L, SIDES)
       .map(world));
+  const cores = BODY.map((st) =>
+    world([st.at * L, 0, ft((st.low + st.top) / 2)]));
   for (let i = 0; i < rings.length - 1; i++) {
     const lo = rings[i], hi = rings[i + 1];
+    const core = [
+      (cores[i][0] + cores[i + 1][0]) / 2,
+      (cores[i][1] + cores[i + 1][1]) / 2,
+      (cores[i][2] + cores[i + 1][2]) / 2,
+    ];
     for (let k = 0; k < SIDES; k++) {
       const j = (k + 1) % SIDES;
-      surface(ctx, [lo[k], lo[j], hi[j], hi[k]], colour);
+      surface(ctx, [lo[k], lo[j], hi[j], hi[k]], colour, { outward: core });
     }
   }
-  surface(ctx, rings[0].slice().reverse(), colour, { ao: 0.94 });
-  surface(ctx, rings[rings.length - 1], colour, { ao: 0.94 });
+  surface(ctx, rings[0], colour, { ao: 0.94, outward: cores[1] });
+  surface(ctx, rings[rings.length - 1], colour,
+          { ao: 0.94, outward: cores[cores.length - 2] });
 
   // --- the cabin -----------------------------------------------------------
   // Opaque roof, opaque pillars, glass between them. The roof being metal is
@@ -166,7 +180,8 @@ export function drawCar(out, cam, p, {
       surface(ctx, [
         world([(at - thick) * L, y, ft(z0)]), world([(at + thick) * L, y, ft(z0)]),
         world([(at + thick) * L, y, ft(z1)]), world([(at - thick) * L, y, ft(z1)]),
-      ], colour, { twoSided: true, ao: 0.95, bias: 0.996 });
+      ], colour, { outward: world([0, 0, ft((BELT + ROOF) / 2)]), ao: 0.95,
+                   bias: 0.996 });
     }
   };
   pillar(0.32, 0.915, BELT, ROOF - 0.62, 0.032);   // A
@@ -199,13 +214,15 @@ export function drawCar(out, cam, p, {
         }
         return ring;
       };
+      const hub = world([cx, cy, cz]);
       const inner = face(-side * ft(WHEEL_W) / 2, ft(WHEEL_R));
       const outer = face(side * ft(WHEEL_W) / 2, ft(WHEEL_R));
       for (let i = 0; i < N; i++) {
         const j = (i + 1) % N;
-        surface(ctx, [inner[i], inner[j], outer[j], outer[i]], tyre);
+        surface(ctx, [inner[i], inner[j], outer[j], outer[i]], tyre,
+                { outward: hub });
       }
-      surface(ctx, outer, tyre, { ao: 0.9 });
+      surface(ctx, outer, tyre, { ao: 0.9, outward: hub });
       surface(ctx, face(side * ft(WHEEL_W) / 2 + side, ft(WHEEL_R) * 0.56), rim,
               { ao: 1.1 });
     }
@@ -220,7 +237,7 @@ export function drawCar(out, cam, p, {
         world([at * L, y + ft(wideFt) / 2, ft(z) - ft(tallFt) / 2]),
         world([at * L, y + ft(wideFt) / 2, ft(z) + ft(tallFt) / 2]),
         world([at * L, y - ft(wideFt) / 2, ft(z) + ft(tallFt) / 2]),
-      ], fill, { twoSided: true, bias: 0.993 });
+      ], fill, { outward: world([0, 0, ft(2.6)]), bias: 0.996 });
     }
   };
   panel(0.985, 0.60, 3.10, 1.30, 0.46, "#f4f2e8");    // headlights

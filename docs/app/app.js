@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=7ea68e44";
-import * as H from "./hcw.js?v=7ea68e44";
-import * as R from "./render.js?v=7ea68e44";
-import { FXG } from "./assets.js?v=7ea68e44";
-import * as B from "./blocking.js?v=7ea68e44";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=7ea68e44";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7ea68e44";
-import { HANDBOOK } from "./handbook.js?v=7ea68e44";
+import { BRAND, SLUG } from "./brand.js?v=7266f2d6";
+import * as H from "./hcw.js?v=7266f2d6";
+import * as R from "./render.js?v=7266f2d6";
+import { FXG } from "./assets.js?v=7266f2d6";
+import * as B from "./blocking.js?v=7266f2d6";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=7266f2d6";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7266f2d6";
+import { HANDBOOK } from "./handbook.js?v=7266f2d6";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=7ea68e44";
-import * as V3 from "./view3d.js?v=7ea68e44";
-import * as HU from "./human.js?v=7ea68e44";
-import { findWalls } from "./trace.js?v=7ea68e44";
-import { blenderScript } from "./blender.js?v=7ea68e44";
-import * as TR from "./track.js?v=7ea68e44";
-import * as RIG from "./rigs.js?v=7ea68e44";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=7ea68e44";
-import { Library } from "./library.js?v=7ea68e44";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=7266f2d6";
+import * as V3 from "./view3d.js?v=7266f2d6";
+import * as HU from "./human.js?v=7266f2d6";
+import { findWalls } from "./trace.js?v=7266f2d6";
+import { blenderScript } from "./blender.js?v=7266f2d6";
+import * as TR from "./track.js?v=7266f2d6";
+import * as RIG from "./rigs.js?v=7266f2d6";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=7266f2d6";
+import { Library } from "./library.js?v=7266f2d6";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=7ea68e44";
+} from "./catalog.js?v=7266f2d6";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -5267,12 +5267,10 @@ function addCamera(at) {
  * in feet would land on the bonnet the moment that fit changed.
  */
 const CAR_SEATS = [
-  { label: "Driver",          fx:  0.126, fy: -0.168 },
-  { label: "Front passenger", fx:  0.126, fy:  0.168 },
-  { label: "Second row left", fx: -0.030, fy: -0.168 },
-  { label: "Second row right", fx: -0.030, fy:  0.168 },
-  { label: "Third row left",  fx: -0.175, fy: -0.168 },
-  { label: "Third row right", fx: -0.175, fy:  0.168 },
+  { label: "Driver",          fx:  0.130, fy: -0.168 },
+  { label: "Front passenger", fx:  0.130, fy:  0.168 },
+  { label: "Rear left",       fx: -0.055, fy: -0.168 },
+  { label: "Rear right",      fx: -0.055, fy:  0.168 },
 ];
 
 // An SUV seats you high. A hip point about a foot and a half off the road puts

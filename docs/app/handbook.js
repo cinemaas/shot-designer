@@ -209,10 +209,13 @@ the old format was twenty-three feet eight — a stretch limousine — and twent
 the cars in this library had been scaled down by hand to correct it, most to
 between fifteen and seventeen feet. It is drawn at its real size now, and those
 hand-sized ones were rescaled so they kept the size somebody gave them.</p>
+<p>Four seats over two rows, with load space behind.</p>
 <p>Down the lens it is two masses lofted from real sections: a body from the
 sill to the beltline with the wheels standing in open arches, and a cabin above
 it, upright, glazed between opaque pillars under a metal roof. A and B and C and
-D pillars are drawn because they are what a camera has to shoot around.</p>
+D pillars are drawn because they are what a camera has to shoot around. The
+bodywork is solid — you see through the glass and nothing else, which is the
+point of glazing it at all.</p>
 <h4>People in a car</h4>
 <p><b>Seat Someone…</b> on a car puts them in one of the four seats: driver,
 front passenger, or either side in the back. Somebody already selected gets
