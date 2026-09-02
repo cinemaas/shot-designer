@@ -7,14 +7,14 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=0e441aba";
-import * as R from "./render.js?v=0e441aba";
-import * as HU from "./human.js?v=0e441aba";
-import { drawCar, EXPLORER } from "./car.js?v=0e441aba";
-import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=0e441aba";
+import * as H from "./hcw.js?v=b5a29a5b";
+import * as R from "./render.js?v=b5a29a5b";
+import * as HU from "./human.js?v=b5a29a5b";
+import { drawCar, FOURRUNNER, SEATS, SEATED_PELVIS } from "./car.js?v=b5a29a5b";
+import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=b5a29a5b";
 
-export { HAND_PROPS, LOOKED_AT };
-import { fieldOfView } from "./optics.js?v=0e441aba";
+export { HAND_PROPS, LOOKED_AT, FOURRUNNER, SEATS, SEATED_PELVIS };
+import { fieldOfView } from "./optics.js?v=b5a29a5b";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -89,7 +89,11 @@ export const STATURE = { any: ft(5.67), male: ft(5.83), female: ft(5.42) };
 
 export const POSTURES = {
   stand: { label: "Standing", eye: ft(4.72), top: STATURE.any, lying: false },
-  sit:   { label: "Sitting",  eye: ft(3.55), top: ft(4.3), lying: false },
+  // Taken off the drawn figure rather than guessed at: a seated pelvis lands
+  // at 0.312 of a body's height, and eye and crown follow from there. The old
+  // numbers here were half a foot short of the person the lens draws, which
+  // put every seated eyeline and every "can the camera see her" wrong.
+  sit:   { label: "Sitting",  eye: ft(4.03), top: ft(4.41), lying: false },
   lie:   { label: "Lying Down", eye: ft(0.75), top: ft(1.15), lying: true,
            length: ft(6), width: ft(1.7) },
 };
@@ -326,14 +330,27 @@ export function build(cam, objects, scene, opts = {}) {
       // cabin as glass, so you can see them.
       if (key === "CAR") {
         // Lofted properly in car.js, and lit the way people are.
+        // Whoever is in it, and where they have their seat on its track, so
+        // the seat is drawn under the person rather than at the factory
+        // setting with them sitting four inches off it.
+        const order = ["Driver", "Front passenger", "Rear left", "Rear right"];
+        const slides = order.map((label) => {
+          const who = objects.find((q) => q.tag === "Character"
+            && H.get(q, "inVehicle") === H.get(o, "uniqueID")
+            && H.get(q, "vehicleSeat") === label);
+          return who ? Math.max(-SEATS.slide,
+                                Math.min(SEATS.slide, H.getNum(who, "seatSlide", 0)))
+                     : 0;
+        });
         drawCar(out, cam, p, {
           facing: a,
+          slides,
           len: (b.width * sx) / UNITS_PER_FOOT,
           // The plan symbol is drawn to the mirrors, because that is the width
           // that has to clear a doorway. The bodywork is narrower than that,
           // and building it to the mirror line makes a wide, soft car.
           wide: (b.height * sy) / UNITS_PER_FOOT
-                * (EXPLORER.wide / EXPLORER.mirrors),
+                * (FOURRUNNER.wide / FOURRUNNER.mirrors),
           detail: Math.hypot(cam.x - p.x, cam.y - p.y) > ft(90) ? 0 : 1,
         });
         continue;

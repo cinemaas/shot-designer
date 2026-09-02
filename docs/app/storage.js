@@ -1,4 +1,4 @@
-import { SLUG } from "./brand.js?v=0e441aba";
+import { SLUG } from "./brand.js?v=b5a29a5b";
 // Where scenes live.
 //
 // Served from localhost, the app reads and writes the real "Shot Designer

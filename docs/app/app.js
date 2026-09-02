@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=0e441aba";
-import * as H from "./hcw.js?v=0e441aba";
-import * as R from "./render.js?v=0e441aba";
-import { FXG } from "./assets.js?v=0e441aba";
-import * as B from "./blocking.js?v=0e441aba";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=0e441aba";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=0e441aba";
-import { HANDBOOK } from "./handbook.js?v=0e441aba";
+import { BRAND, SLUG } from "./brand.js?v=b5a29a5b";
+import * as H from "./hcw.js?v=b5a29a5b";
+import * as R from "./render.js?v=b5a29a5b";
+import { FXG } from "./assets.js?v=b5a29a5b";
+import * as B from "./blocking.js?v=b5a29a5b";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=b5a29a5b";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=b5a29a5b";
+import { HANDBOOK } from "./handbook.js?v=b5a29a5b";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=0e441aba";
-import * as V3 from "./view3d.js?v=0e441aba";
-import * as HU from "./human.js?v=0e441aba";
-import { findWalls } from "./trace.js?v=0e441aba";
-import { blenderScript } from "./blender.js?v=0e441aba";
-import * as TR from "./track.js?v=0e441aba";
-import * as RIG from "./rigs.js?v=0e441aba";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=0e441aba";
-import { Library } from "./library.js?v=0e441aba";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=b5a29a5b";
+import * as V3 from "./view3d.js?v=b5a29a5b";
+import * as HU from "./human.js?v=b5a29a5b";
+import { findWalls } from "./trace.js?v=b5a29a5b";
+import { blenderScript } from "./blender.js?v=b5a29a5b";
+import * as TR from "./track.js?v=b5a29a5b";
+import * as RIG from "./rigs.js?v=b5a29a5b";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=b5a29a5b";
+import { Library } from "./library.js?v=b5a29a5b";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=0e441aba";
+} from "./catalog.js?v=b5a29a5b";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1366,9 +1366,24 @@ function renderCharPanel() {
   // Standing on something. A slider because the useful values are all small and
   // you find them by looking, not by knowing: a step is eight inches, an apple
   // box a foot, a bed two, a kitchen counter three.
-  slider("Off the floor", 0, 8, 0.05, H.getNum(obj, "elevation", 0),
-    (v) => (v ? `${Math.floor(v)}'${Math.round((v % 1) * 12)}"` : "floor"),
-    (v) => H.set(obj, "elevation", +v.toFixed(2)));
+  const inSeat = seatOf(obj);
+  if (inSeat) {
+    // Where they have the seat on its track. Ten inches of travel, which is
+    // what a real one has, and enough to make or break an over-the-shoulder:
+    // slid back the driver clears the B pillar, slid forward they are up
+    // against the windscreen.
+    slider("Seat", -SEAT_TRAVEL, SEAT_TRAVEL, 0.02, slideOf(obj),
+      (v) => (Math.abs(v) < 0.02 ? "middle of the track"
+        : `${Math.round(Math.abs(v) * 12)}" ${v > 0 ? "forward" : "back"}`),
+      (v) => H.set(obj, "seatSlide", +v.toFixed(2)));
+  } else {
+    // Standing on something. A slider because the useful values are all small
+    // and you find them by looking, not by knowing: a step is eight inches, an
+    // apple box a foot, a bed two, a kitchen counter three.
+    slider("Off the floor", 0, 8, 0.05, H.getNum(obj, "elevation", 0),
+      (v) => (v ? `${Math.floor(v)}'${Math.round((v % 1) * 12)}"` : "floor"),
+      (v) => H.set(obj, "elevation", +v.toFixed(2)));
+  }
   slider("Height", 4.5, 7, 0.02,
     H.getNum(obj, "heightFt", 0) || (H.getBool(obj, "female") ? 5.5 : 5.9),
     (v) => `${Math.floor(v)}'${Math.round((v % 1) * 12)}"`,
@@ -3179,6 +3194,7 @@ stage.addEventListener("pointerup", (ev) => {
     for (const o of drag.origins) {
       if (RIG.isRig(o.obj) && !RIG.ridesTrack(o.obj)) snapRigToNearestTrack(o.obj);
       if (!drag.freeDrop && o.obj.tag === "Character") snapToSeat(o.obj);
+      if (!drag.freeDrop && o.obj.tag === "Camera") mountCamera(o.obj);
       if (!drag.freeDrop) snapToWall(o.obj);
       if (o.obj.tag === "Wall") reseatWallKit();
     }
@@ -5291,22 +5307,19 @@ function addCamera(at) {
 // Where the seats are in each vehicle, in feet from the middle of its plan
 // symbol: `fwd` along its length, `side` across from the centreline.
 //
+// The car's own figures come from the model of it, so the seats a person snaps
+// into and the seats the lens sees them sitting in cannot drift apart.
+//
 // In feet rather than as a fraction of the symbol, because these have to land
 // on the seats drawn in the symbol itself — a driver sitting an inch off the
 // square drawn for them is the first thing anybody notices — and the two
 // symbols are different sizes, so one set of fractions cannot serve both.
-//
-// Both rows sit between their pillars rather than on them: the front row
-// behind the A pillar and ahead of the B, the back row between the B and the
-// C. Placed by eye they creep forward, which puts the driver in the windscreen
-// instead of under the roof, and then every over-the-shoulder through the
-// glass is framed on somebody sitting on the dashboard.
 const VEHICLE_SEATS = {
   CAR: [
-    { label: "Driver",          fwd:  1.08, side: -1.25 },
-    { label: "Front passenger", fwd:  1.08, side:  1.25 },
-    { label: "Rear left",       fwd: -1.99, side: -1.25 },
-    { label: "Rear right",      fwd: -1.99, side:  1.25 },
+    { label: "Driver",          fwd: V3.SEATS.frontFwd, side: -V3.SEATS.frontSide },
+    { label: "Front passenger", fwd: V3.SEATS.frontFwd, side:  V3.SEATS.frontSide },
+    { label: "Rear left",       fwd: V3.SEATS.rearFwd,  side: -V3.SEATS.rearSide },
+    { label: "Rear right",      fwd: V3.SEATS.rearFwd,  side:  V3.SEATS.rearSide },
   ],
   CARINTERIOR: [
     { label: "Driver",          fwd:  0.70, side: -1.30 },
@@ -5320,18 +5333,38 @@ const VEHICLE_SEATS = {
 const seatsIn = (o) =>
   (o.tag === "GenericProp" && VEHICLE_SEATS[H.get(o, "objectKey")]) || null;
 
-// An SUV seats you high, which is why you shoot into one differently from a
-// saloon — but the number to write down is not the height of the seat off the
-// road, which is the obvious answer and the wrong one. Sitting already
-// includes a chair, measured from the floor the chair stands on, so adding the
-// seat height on top counts it twice and puts a head through the roof.
-//
-// What is left to add is how much higher a car seat is than the office chair
-// `sit` assumes. Work it from the eye: sitting puts an eye 3ft 6in up, and a
-// driver's eye in an Explorer is about 4ft 8in off the ground. The difference
-// is the lift, and it leaves five inches of headroom under the roof — which is
-// what the real car has.
-const SEAT_HEIGHT = 1.1;
+/**
+ * How far a seat is slid on its track, in feet, forward positive.
+ *
+ * Real seats move about ten inches, and where a driver has theirs is the
+ * difference between a clean over-the-shoulder and a head in the windscreen —
+ * so it is a control rather than a constant. Kept on the person and not on the
+ * car, because it travels with them when they change seats.
+ */
+const SEAT_TRAVEL = V3.SEATS.slide;
+const slideOf = (o) =>
+  Math.max(-SEAT_TRAVEL, Math.min(SEAT_TRAVEL, H.getNum(o, "seatSlide", 0)));
+
+/**
+ * How far off the floor to lift somebody so their hip lands on the seat.
+ *
+ * Not a constant, and not the height of the cushion off the road, which is the
+ * obvious answer and the wrong one twice over. Sitting already includes a
+ * chair, measured from the floor the chair stands on — so the cushion height
+ * counts it twice and puts a head through the roof. And how far a person has
+ * to come up to reach a given hip point depends on how tall they are, because
+ * a seated pelvis is a fixed fraction of a body.
+ *
+ * Work it from the car instead: a 4Runner's H-point is 2ft 6in off the road,
+ * everybody's hip goes there, and what differs between a tall driver and a
+ * short one is how much headroom is left — which is what happens in the real
+ * car and is the thing worth being able to see.
+ */
+function seatLift(who) {
+  const tall = H.getNum(who, "heightFt", 0)
+    || (H.getBool(who, "female") ? 5.5 : 5.9);
+  return Math.max(0, +(V3.SEATS.hpoint - V3.SEATED_PELVIS * tall).toFixed(3));
+}
 
 /** The seat a character is in, if they are in one. */
 const seatOf = (o) => {
@@ -5344,13 +5377,55 @@ const seatOf = (o) => {
 };
 
 /** Where a seat is, in the world, given where the vehicle currently is. */
-function seatPoint(car, seat) {
+function seatPoint(car, seat, slide = 0) {
   const sx = H.getNum(car, "objectScaleX", 1), sy = H.getNum(car, "objectScaleY", 1);
   const a = R.angleOf(car);
-  const lx = seat.fwd * UNITS_PER_FOOT * sx, ly = seat.side * UNITS_PER_FOOT * sy;
+  const lx = (seat.fwd + slide) * UNITS_PER_FOOT * sx,
+        ly = seat.side * UNITS_PER_FOOT * sy;
   return { x: round(H.getNum(car, "x") + lx * Math.cos(a) - ly * Math.sin(a)),
            y: round(H.getNum(car, "y") + lx * Math.sin(a) + ly * Math.cos(a)),
            a };
+}
+
+/**
+ * Anything bolted to a vehicle rather than sitting in a seat.
+ *
+ * Cameras do not go in seats. A camera on a car goes on a hostess tray off the
+ * bonnet, on a door mount, on a hood mount low over the grille, on a suction
+ * cup on the far glass, on a sled slung off the side — anywhere, at any angle,
+ * and the useful ones are mostly not even over the bodywork. So there are no
+ * slots: a camera keeps its own offset from the middle of the car and its own
+ * angle relative to it, whatever those happen to be, and rides along.
+ *
+ * Stored in feet so it survives the car being rescaled, and as an offset from
+ * the car rather than a position in the world so that driving the car takes
+ * the rig with it.
+ */
+const ridesWith = (o) => {
+  const car = byID(H.get(o, "onVehicle"));
+  return car && car !== o ? car : null;
+};
+
+/** Bolt something to a vehicle, keeping exactly where it is now. */
+function rideAlong(o, car) {
+  const a = R.angleOf(car);
+  const dx = H.getNum(o, "x") - H.getNum(car, "x");
+  const dy = H.getNum(o, "y") - H.getNum(car, "y");
+  H.set(o, "onVehicle", idOf(car));
+  H.set(o, "rideFwd", +(( dx * Math.cos(a) + dy * Math.sin(a)) / UNITS_PER_FOOT).toFixed(3));
+  H.set(o, "rideSide", +((-dx * Math.sin(a) + dy * Math.cos(a)) / UNITS_PER_FOOT).toFixed(3));
+  H.set(o, "rideTurn", +(R.angleOf(o) - a).toFixed(5));
+}
+
+/** Where a thing bolted to a vehicle is now, given where the vehicle is. */
+function ridePoint(o, car) {
+  const a = R.angleOf(car);
+  const sx = H.getNum(car, "objectScaleX", 1), sy = H.getNum(car, "objectScaleY", 1);
+  const lx = H.getNum(o, "rideFwd") * UNITS_PER_FOOT * sx;
+  const ly = H.getNum(o, "rideSide") * UNITS_PER_FOOT * sy;
+  return { x: round(H.getNum(car, "x") + lx * Math.cos(a) - ly * Math.sin(a)),
+           y: round(H.getNum(car, "y") + lx * Math.sin(a) + ly * Math.cos(a)),
+           a: a + H.getNum(o, "rideTurn") };
 }
 
 /**
@@ -5370,8 +5445,27 @@ function reflowVehicles() {
   for (const o of objects()) {
     if (held.has(idOf(o))) continue;
     const in2 = seatOf(o);
-    if (!in2) continue;
-    const at = seatPoint(in2.car, in2.seat);
+    if (in2) {
+      const at = seatPoint(in2.car, in2.seat, slideOf(o));
+      H.set(o, "x", at.x);
+      H.set(o, "y", at.y);
+      R.setAngle(o, at.a);
+      // Their hip belongs on the cushion however tall they are, so the lift
+      // is recomputed rather than remembered — otherwise dragging the height
+      // slider sinks a tall passenger into the seat or floats a short one
+      // above it.
+      const lift = seatLift(o);
+      if (Math.abs(H.getNum(o, "elevation", 0) - lift) > 0.005) {
+        H.set(o, "elevation", lift);
+      }
+      continue;
+    }
+    // A camera on a dolly already has something telling it where to be. Two
+    // parents would fight over it every frame.
+    if (RIG.rigParentID(o)) continue;
+    const car = ridesWith(o);
+    if (!car) continue;
+    const at = ridePoint(o, car);
     H.set(o, "x", at.x);
     H.set(o, "y", at.y);
     R.setAngle(o, at.a);
@@ -5386,6 +5480,60 @@ function reflowVehicles() {
  * arithmetic. Dragging them onto the car is the obvious gesture, so it is the
  * one that works.
  */
+/**
+ * The nearest vehicle to something, for the menu.
+ *
+ * A hostess tray puts the camera several feet clear of the bodywork, so "the
+ * car it is on" cannot mean "the car it is over" once you are past dropping it
+ * there. Within about a car's length is close enough to mean it.
+ */
+function nearestVehicle(o) {
+  let best = null, bestD = UNITS_PER_FOOT * 18;
+  for (const car of objects()) {
+    if (!seatsIn(car) || !onPage(car, S.page)) continue;
+    const d = Math.hypot(H.getNum(car, "x") - H.getNum(o, "x"),
+                         H.getNum(car, "y") - H.getNum(o, "y"));
+    if (d < bestD) { best = car; bestD = d; }
+  }
+  return best;
+}
+
+/** The vehicle whose footprint a point falls inside, if any. */
+function vehicleUnder(x, y) {
+  for (const car of objects()) {
+    if (!seatsIn(car) || !onPage(car, S.page)) continue;
+    const b = R.artBounds(H.get(car, "objectKey"));
+    const sx = H.getNum(car, "objectScaleX", 1), sy = H.getNum(car, "objectScaleY", 1);
+    const a = R.angleOf(car);
+    const dx = x - H.getNum(car, "x"), dy = y - H.getNum(car, "y");
+    const lx = dx * Math.cos(a) + dy * Math.sin(a);
+    const ly = -dx * Math.sin(a) + dy * Math.cos(a);
+    if (Math.abs(lx) <= (b.width * sx) / 2 && Math.abs(ly) <= (b.height * sy) / 2) {
+      return car;
+    }
+  }
+  return null;
+}
+
+/**
+ * A camera dropped on a car gets bolted to it.
+ *
+ * Once it is bolted on it stays bolted on wherever you drag it, which is the
+ * point: you put it on the car to say it travels with the car, and then you
+ * put it where the mount actually goes — out past the wing on a tray, off the
+ * back on a low mount, wherever. Only the menu takes it off again.
+ */
+function mountCamera(o) {
+  if (o.tag !== "Camera" || RIG.rigParentID(o)) return false;
+  const already = ridesWith(o);
+  if (already) { rideAlong(o, already); return true; }
+  const car = vehicleUnder(H.getNum(o, "x"), H.getNum(o, "y"));
+  if (!car) return false;
+  rideAlong(o, car);
+  toast(`Riding with the ${labelForKey(H.get(car, "objectKey")).toLowerCase()}`);
+  return true;
+}
+
 function snapToSeat(who) {
   if (who.tag !== "Character") return false;
   const x = H.getNum(who, "x"), y = H.getNum(who, "y");
@@ -5412,11 +5560,11 @@ function snapToSeat(who) {
       if (d < bestD) { best = seat; bestD = d; }
     }
     if (!best) { toast("Every seat in that one is taken", 5000); return false; }
-    const at = seatPoint(car, best);
+    const at = seatPoint(car, best, slideOf(who));
     H.set(who, "x", at.x); H.set(who, "y", at.y);
     R.setAngle(who, at.a);
     H.set(who, "posture", "sit");
-    H.set(who, "elevation", SEAT_HEIGHT);
+    H.set(who, "elevation", seatLift(who));
     H.set(who, "inVehicle", idOf(car));
     H.set(who, "vehicleSeat", best.label);
     forgetCharPanel();
@@ -5489,7 +5637,7 @@ function seatInVehicle(car) {
           H.set(who, "y", at.y);
           R.setAngle(who, a);
           H.set(who, "posture", "sit");
-          H.set(who, "elevation", SEAT_HEIGHT);
+          H.set(who, "elevation", seatLift(who));
           H.set(who, "inVehicle", idOf(car));
           H.set(who, "vehicleSeat", seat.label);
           reindex();
@@ -5880,6 +6028,23 @@ function objectMenu(obj, x, y) {
       { label: "Height & Tilt…", run: () => cameraRig3D(obj) },
       { label: "Tilt Up", run: () => setTilt(obj, "tiltUp") },
       { label: "Tilt Down", run: () => setTilt(obj, "tiltDown") },
+      ...(RIG.rigParentID(obj) ? [] : ridesWith(obj) ? [{
+        label: `Stop Riding The ${labelForKey(H.get(ridesWith(obj), "objectKey"))}`,
+        run: () => {
+          mark("unmount");
+          H.set(obj, "onVehicle", "");
+          toast("Off the car");
+          draw(); syncChrome();
+        },
+      }] : nearestVehicle(obj) ? [{
+        label: `Ride With The ${labelForKey(H.get(nearestVehicle(obj), "objectKey"))}`,
+        run: () => {
+          mark("mount");
+          rideAlong(obj, nearestVehicle(obj));
+          toast("Riding with the car");
+          draw(); syncChrome();
+        },
+      }] : []),
       { head: "Colour" },
       ...CAMERA_COLORS.map(([name, col], i) => ({
         label: name, swatch: "#" + col.toString(16).padStart(6, "0"),
