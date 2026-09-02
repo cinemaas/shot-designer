@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=5a7e4379";
-import * as H from "./hcw.js?v=5a7e4379";
-import * as R from "./render.js?v=5a7e4379";
-import { FXG } from "./assets.js?v=5a7e4379";
-import * as B from "./blocking.js?v=5a7e4379";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=5a7e4379";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=5a7e4379";
-import { HANDBOOK } from "./handbook.js?v=5a7e4379";
+import { BRAND, SLUG } from "./brand.js?v=7ea68e44";
+import * as H from "./hcw.js?v=7ea68e44";
+import * as R from "./render.js?v=7ea68e44";
+import { FXG } from "./assets.js?v=7ea68e44";
+import * as B from "./blocking.js?v=7ea68e44";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=7ea68e44";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7ea68e44";
+import { HANDBOOK } from "./handbook.js?v=7ea68e44";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=5a7e4379";
-import * as V3 from "./view3d.js?v=5a7e4379";
-import * as HU from "./human.js?v=5a7e4379";
-import { findWalls } from "./trace.js?v=5a7e4379";
-import { blenderScript } from "./blender.js?v=5a7e4379";
-import * as TR from "./track.js?v=5a7e4379";
-import * as RIG from "./rigs.js?v=5a7e4379";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=5a7e4379";
-import { Library } from "./library.js?v=5a7e4379";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=7ea68e44";
+import * as V3 from "./view3d.js?v=7ea68e44";
+import * as HU from "./human.js?v=7ea68e44";
+import { findWalls } from "./trace.js?v=7ea68e44";
+import { blenderScript } from "./blender.js?v=7ea68e44";
+import * as TR from "./track.js?v=7ea68e44";
+import * as RIG from "./rigs.js?v=7ea68e44";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=7ea68e44";
+import { Library } from "./library.js?v=7ea68e44";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=5a7e4379";
+} from "./catalog.js?v=7ea68e44";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1054,6 +1054,7 @@ function renderLensView() {
       d, fill: shape.fill, stroke: shape.stroke,
       "stroke-width": shape.width == null ? 1 : shape.width,
       "stroke-linejoin": "round",
+      ...(shape.opacity == null ? {} : { opacity: shape.opacity }),
     }));
   }
 
@@ -5266,13 +5267,17 @@ function addCamera(at) {
  * in feet would land on the bonnet the moment that fit changed.
  */
 const CAR_SEATS = [
-  { label: "Driver",          fx:  0.067, fy: -0.192 },
-  { label: "Front passenger", fx:  0.067, fy:  0.192 },
-  { label: "Rear left",       fx: -0.127, fy: -0.192 },
-  { label: "Rear right",      fx: -0.127, fy:  0.192 },
+  { label: "Driver",          fx:  0.126, fy: -0.168 },
+  { label: "Front passenger", fx:  0.126, fy:  0.168 },
+  { label: "Second row left", fx: -0.030, fy: -0.168 },
+  { label: "Second row right", fx: -0.030, fy:  0.168 },
+  { label: "Third row left",  fx: -0.175, fy: -0.168 },
+  { label: "Third row right", fx: -0.175, fy:  0.168 },
 ];
 
-// How high to lift somebody so they sit in a car rather than on it.
+// An SUV seats you high. A hip point about a foot and a half off the road puts
+// a seated head just under a 5ft 10 roofline, which is where it is in a real
+// one — and is why you shoot into an SUV differently from a saloon.
 //
 // Not the height of the seat off the road, which is the obvious answer and the
 // wrong one: sitting already includes a chair, measured from the floor the
@@ -5280,7 +5285,7 @@ const CAR_SEATS = [
 // head through the roof. What is left to add is the difference between an
 // office chair and a car seat, which is small — and the number that matters is
 // the one that lands a seated crown just under a 4ft 8in roofline.
-const SEAT_HEIGHT = 0.35;
+const SEAT_HEIGHT = 1.35;
 
 /**
  * Put somebody in the car.

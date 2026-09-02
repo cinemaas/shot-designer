@@ -23,8 +23,8 @@
 // green face, and it is a mistake the data model here cannot express.
 
 import { UNITS_PER_FOOT, SKIN_TONES, HAIR_COLOURS, HAIR_STYLES,
-         BUILDS, HAND_PROPS } from "./catalog.js?v=5a7e4379";
-import { project } from "./view3d.js?v=5a7e4379";
+         BUILDS, HAND_PROPS } from "./catalog.js?v=7ea68e44";
+import { project } from "./view3d.js?v=7ea68e44";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -147,9 +147,9 @@ function measures(h) {
  * the whole reason for doing it this way: a pose is then data, and a shoulder
  * cannot come adrift from the arm it is holding.
  */
-const frame = (o, m) => ({ o, m });
+export const frame = (o, m) => ({ o, m });
 
-const apply = (fr, [f, s, u]) => [
+export const apply = (fr, [f, s, u]) => [
   fr.o[0] + fr.m[0][0] * f + fr.m[0][1] * s + fr.m[0][2] * u,
   fr.o[1] + fr.m[1][0] * f + fr.m[1][1] * s + fr.m[1][2] * u,
   fr.o[2] + fr.m[2][0] * f + fr.m[2][1] * s + fr.m[2][2] * u,
@@ -194,8 +194,9 @@ const joint = (parent, offset, rot) =>
  * of a limb out of the depth sort entirely, so it can never surface through
  * the near side.
  */
-function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1,
-                                       outward = null, inward = null } = {}) {
+export function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1,
+                                       outward = null, inward = null,
+                                       alpha = 1 } = {}) {
   const { cam, out, light } = ctx;
   const [a, b, c] = verts;
   const d = verts[3] || verts[2];
@@ -249,9 +250,13 @@ function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1,
 
   const pts = verts.map((v) => project(cam, v[0], v[1], v[2]));
   if (pts.some((v) => !v)) return;
+  // Colours are shaded as hex, so anything see-through carries its alpha
+  // separately rather than as an rgba() string — one of which cannot be shaded
+  // at all, and comes out black if you try.
   const f = shade(colour, lit);
   out.push({
     pts, fill: f, stroke: f, width: 1,
+    ...(alpha < 1 ? { opacity: alpha } : {}),
     depth: pts.reduce((t, v) => t + v.depth, 0) / pts.length * bias,
   });
 }
@@ -265,7 +270,7 @@ function surface(ctx, verts, colour, { twoSided = false, bias = 1, ao = 1,
  * either side, which is what stops a bent elbow opening a wedge on the outside
  * of the bend and pinching on the inside.
  */
-function sweep(ctx, fr, stations, colour, opts = {}) {
+export function sweep(ctx, fr, stations, colour, opts = {}) {
   const sides = opts.sides || 10;
   const rings = [];
   let carried = null;
@@ -975,6 +980,23 @@ export const POSES = {
  * is the same body whoever it belongs to: what changes is proportion, clothing
  * and hair.
  */
+/**
+ * The light everything solid is lit by.
+ *
+ * Weighted towards the camera rather than towards the ceiling. A light that is
+ * mostly overhead lands almost equally on every vertical surface, so a neck, a
+ * torso and the flank of a car all come out one flat value and a curved thing
+ * reads as a slab. Leaning it towards the viewer puts a lit side and a turned
+ * side on everything standing up.
+ */
+export function lightFor(cam, p) {
+  const dx = cam.x - p.x, dy = cam.y - p.y;
+  const dl = Math.hypot(dx, dy) || 1;
+  const v = [dx / dl * 0.66 - 0.22, dy / dl * 0.66 + 0.20, 0.54];
+  const L = Math.hypot(...v);
+  return v.map((c) => c / L);
+}
+
 export function drawHuman(out, cam, p, h, {
   facing = 0, lift = 0, pose = RELAXED, seated = false, lying = false,
   detail = 1, held = null, heldSide = "right", heldColour = "#3d444b",
@@ -996,7 +1018,8 @@ export function drawHuman(out, cam, p, h, {
   // one. Not a lighting engine — one direction and a floor under it.
   const dx = cam.x - p.x, dy = cam.y - p.y;
   const dl = Math.hypot(dx, dy) || 1;
-  const light = (() => {
+  const light = lightFor(cam, p);
+  void (() => {
     // Weighted towards the camera rather than towards the ceiling. A light
     // that is mostly overhead lands almost equally on every vertical surface,
     // so a neck and a torso and a trouser leg all come out one flat value and
@@ -1006,7 +1029,7 @@ export function drawHuman(out, cam, p, h, {
     const v = [dx / dl * 0.66 - 0.22, dy / dl * 0.66 + 0.20, 0.54];
     const L = Math.hypot(...v);
     return v.map((c) => c / L);
-  })();
+  });
 
   const ctx = { cam, out, light };
   const S = lod.sides;

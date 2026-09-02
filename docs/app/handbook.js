@@ -199,16 +199,20 @@ this machine: the page never sees it, and it cannot reach a share link or a
 published library. Without one you are offered the other route — the frame saved
 and the brief copied, ready to paste wherever you like.</p>
 <h4>Cars</h4>
-<p>A car is fifteen feet by six, which is a saloon. The symbol inherited from
+<p>The car is a Ford Explorer, built to the published figures: 16ft 6.8 long,
+6ft 6.9 across the body, 7ft 5.3 over the mirrors, 5ft 9.9 to the roof, on a 9ft
+11 wheelbase and 30in wheels. A specific car rather than a generic one, because
+a specific one has numbers you can check — and because it is what turns up as a
+picture car more than anything else its size.</p>
+<p>The symbol inherited from the old format was twenty-three feet eight. The symbol inherited from
 the old format was twenty-three feet eight — a stretch limousine — and twenty of
 the cars in this library had been scaled down by hand to correct it, most to
 between fifteen and seventeen feet. It is drawn at its real size now, and those
 hand-sized ones were rescaled so they kept the size somebody gave them.</p>
-<p>Down the lens it is three masses, which is what a car has been since the
-1930s: a bonnet low at the front, a cabin standing up in the middle, a boot low
-at the back, with a glasshouse that leans in as it rises. The outline follows
-the plan symbol's own silhouette, so the car you see from above and the car you
-see through the lens are the same car.</p>
+<p>Down the lens it is two masses lofted from real sections: a body from the
+sill to the beltline with the wheels standing in open arches, and a cabin above
+it, upright, glazed between opaque pillars under a metal roof. A and B and C and
+D pillars are drawn because they are what a camera has to shoot around.</p>
 <h4>People in a car</h4>
 <p><b>Seat Someone…</b> on a car puts them in one of the four seats: driver,
 front passenger, or either side in the back. Somebody already selected gets
