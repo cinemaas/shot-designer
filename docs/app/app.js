@@ -1,25 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=160a4cb6";
-import * as H from "./hcw.js?v=160a4cb6";
-import * as R from "./render.js?v=160a4cb6";
-import { FXG } from "./assets.js?v=160a4cb6";
-import * as B from "./blocking.js?v=160a4cb6";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=160a4cb6";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=160a4cb6";
-import { HANDBOOK } from "./handbook.js?v=160a4cb6";
+import { BRAND, SLUG } from "./brand.js?v=ee4a46de";
+import * as H from "./hcw.js?v=ee4a46de";
+import * as R from "./render.js?v=ee4a46de";
+import { FXG } from "./assets.js?v=ee4a46de";
+import * as B from "./blocking.js?v=ee4a46de";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=ee4a46de";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ee4a46de";
+import { HANDBOOK } from "./handbook.js?v=ee4a46de";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=160a4cb6";
-import * as V3 from "./view3d.js?v=160a4cb6";
-import { makeBoard } from "./show.js?v=160a4cb6";
-import * as HU from "./human.js?v=160a4cb6";
-import { findWalls } from "./trace.js?v=160a4cb6";
-import { blenderScript } from "./blender.js?v=160a4cb6";
-import * as TR from "./track.js?v=160a4cb6";
-import * as RIG from "./rigs.js?v=160a4cb6";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=160a4cb6";
-import { Library } from "./library.js?v=160a4cb6";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=ee4a46de";
+import * as V3 from "./view3d.js?v=ee4a46de";
+import { makeBoard } from "./show.js?v=ee4a46de";
+import * as SET from "./sets.js?v=ee4a46de";
+import * as HU from "./human.js?v=ee4a46de";
+import { findWalls } from "./trace.js?v=ee4a46de";
+import { blenderScript } from "./blender.js?v=ee4a46de";
+import * as TR from "./track.js?v=ee4a46de";
+import * as RIG from "./rigs.js?v=ee4a46de";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=ee4a46de";
+import { Library } from "./library.js?v=ee4a46de";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -27,7 +28,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=160a4cb6";
+} from "./catalog.js?v=ee4a46de";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -4995,10 +4996,15 @@ function mainMenu(x, y) {
     { head: "Scene" },
     { label: "New Scene", key: "⌘N", run: newScene },
     { label: "Open Scene…", key: "⌘O", run: openDialog },
+    { label: "Start In A Set…", run: () => setDialog("new"), disabled: !isLocal() },
     { label: "The Board…", key: "⌘B", run: openBoard, disabled: !isLocal() },
     { label: S.path ? "Save" : "Save…", key: "⌘S", run: () => saveScene(false) },
     { label: "Save As…", key: "⇧⌘S", run: () => saveScene(true) },
     { label: "Duplicate Scene…", disabled: !S.path, run: duplicateScene },
+    "-",
+    { head: "Sets" },
+    { label: "Save The Set…", run: saveSet, disabled: !isLocal() },
+    { label: "Add A Set…", run: () => setDialog("add"), disabled: !isLocal() },
     "-",
     { head: "Export" },
     { label: "Export As PNG", key: "⌘E", run: exportPNG },
@@ -7443,6 +7449,123 @@ async function openFromCloud() {
     list.append(d);
   }
   const ui = sheet({ title: "Open Scene", sub: "From the cloud", body: list, okLabel: "Close" });
+}
+
+// ------------------------------------------------------------------- sets
+//
+// The way to reuse a room at the moment is to find a scene with that room in
+// it, save it under a new name, and delete the people, the cameras, the moves
+// and the lights until only the room is left. That is a lot of deleting to get
+// back to something already drawn, and every pass through it is a chance to
+// leave a camera behind or take a wall away with you.
+
+async function saveSet() {
+  if (!isLocal()) return toast("Sets are kept in the scenes folder on your Mac");
+  const here = objects();
+  const walls = here.filter((o) => o.tag === "Wall").length;
+  const plan = here.some((o) => o.tag === "Background");
+  if (!here.some((o) => SET.inSet(o, { grip: true }))) {
+    return toast("There is no set in this scene to save");
+  }
+  const suggested = (S.path || "")
+    .split("/").pop().replace(/\.hcw$/i, "").trim() || "New set";
+
+  sheet({
+    title: "Save The Set",
+    sub: "The room and what stands in it. The cast, the cameras, the rigs and "
+       + "the moves are left behind.",
+    fields: [
+      { name: "name", label: "Called", type: "text", value: suggested },
+      { name: "grip", label: "Include the lighting and grip", type: "check",
+        value: false },
+    ],
+    onOK: async ({ name, grip }) => {
+      const cut = SET.extract(S.doc, { grip: !!grip });
+      try {
+        const r = await api("/api/set", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, from: S.path || "", ...cut }),
+        });
+        toast(`Saved the set “${r.name}” — ${cut.summary}`);
+      } catch (e) { toast("Could not save the set: " + e.message); }
+    },
+  });
+  return { walls, plan };
+}
+
+/** Pick a set: either to start a scene in it, or to add it to this one. */
+async function setDialog(mode) {
+  if (!isLocal()) return toast("Sets are kept in the scenes folder on your Mac");
+  let sets = [];
+  try { ({ sets } = await api("/api/sets")); }
+  catch (e) { return toast("Could not read your sets: " + e.message); }
+
+  const list = document.createElement("div");
+  list.className = "browse";
+  if (!sets.length) {
+    const d = document.createElement("div");
+    d.textContent = "No sets saved yet. Draw a room, then Scene → Save The Set.";
+    list.append(d);
+  }
+  for (const st of sets) {
+    const d = document.createElement("div");
+    d.innerHTML = `<span>🧱</span><span>${st.name}</span>`;
+    const note = document.createElement("span");
+    note.className = "sz";
+    note.textContent = st.summary || "";
+    d.append(note);
+    d.onclick = async () => {
+      ui.close();
+      let full;
+      try { full = await api("/api/set?name=" + encodeURIComponent(st.name)); }
+      catch (e) { return toast("Could not open that set: " + e.message); }
+
+      if (mode === "new") {
+        if (S.dirty && !confirm("Discard unsaved changes?")) return;
+        S.doc = SET.newScene(full);
+        S.path = null; S.dirty = true; S.sel.clear(); S.slice = 0;
+        S.undo.length = 0; S.redo.length = 0;
+        R.forgetPictures();
+        reindex(); fitToContent(); draw(); syncChrome();
+        toast(`New scene in “${st.name}”`);
+      } else {
+        mark("add a set");
+        const { count, droppedPlan } = SET.place(S.doc, full);
+        R.forgetPictures();
+        reindex(); draw(); syncChrome();
+        toast(`Added “${st.name}” — ${count} pieces`
+          + (droppedPlan ? ", keeping the floorplan already here" : ""), 6000);
+      }
+    };
+    list.append(d);
+  }
+
+  // Somewhere to get rid of one, since there is nowhere else it would live.
+  if (sets.length) {
+    const bin = document.createElement("div");
+    bin.innerHTML = "<span>🗑</span><span>Delete a set…</span>";
+    bin.onclick = () => {
+      ui.close();
+      const which = prompt("Delete which set?\n\n" + sets.map((s2) => s2.name).join("\n"));
+      if (!which) return;
+      api("/api/set", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: which, action: "delete" }),
+      }).then(() => toast("Deleted " + which))
+        .catch((e) => toast("Could not delete: " + e.message));
+    };
+    list.append(bin);
+  }
+
+  const ui = sheet({
+    title: mode === "new" ? "Start In A Set" : "Add A Set",
+    sub: mode === "new"
+      ? "A new scene with this room already standing in it."
+      : "Dropped into this scene, on top of what is already here.",
+    body: list, okLabel: "Close",
+  });
 }
 
 /**

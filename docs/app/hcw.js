@@ -16,6 +16,20 @@ export function parseXML(src) {
   return fromDOM(doc.documentElement);
 }
 
+/**
+ * A run of sibling elements, rather than a whole document.
+ *
+ * Saved sets are stored as the objects alone, so they need parsing without a
+ * document around them. Wrapping them in one element and handing back its
+ * children is the whole of it.
+ */
+export function parseFragment(src) {
+  return parseXML("<Fragment>" + src + "</Fragment>").children;
+}
+
+/** One element, round-tripped through text — the simplest deep copy there is. */
+export const parseNode = (src) => parseFragment(src)[0];
+
 function fromDOM(el) {
   const node = { tag: el.tagName, children: [], text: null };
   let text = "";
