@@ -1,24 +1,25 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=b5a29a5b";
-import * as H from "./hcw.js?v=b5a29a5b";
-import * as R from "./render.js?v=b5a29a5b";
-import { FXG } from "./assets.js?v=b5a29a5b";
-import * as B from "./blocking.js?v=b5a29a5b";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=b5a29a5b";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=b5a29a5b";
-import { HANDBOOK } from "./handbook.js?v=b5a29a5b";
+import { BRAND, SLUG } from "./brand.js?v=160a4cb6";
+import * as H from "./hcw.js?v=160a4cb6";
+import * as R from "./render.js?v=160a4cb6";
+import { FXG } from "./assets.js?v=160a4cb6";
+import * as B from "./blocking.js?v=160a4cb6";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=160a4cb6";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=160a4cb6";
+import { HANDBOOK } from "./handbook.js?v=160a4cb6";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=b5a29a5b";
-import * as V3 from "./view3d.js?v=b5a29a5b";
-import * as HU from "./human.js?v=b5a29a5b";
-import { findWalls } from "./trace.js?v=b5a29a5b";
-import { blenderScript } from "./blender.js?v=b5a29a5b";
-import * as TR from "./track.js?v=b5a29a5b";
-import * as RIG from "./rigs.js?v=b5a29a5b";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=b5a29a5b";
-import { Library } from "./library.js?v=b5a29a5b";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=160a4cb6";
+import * as V3 from "./view3d.js?v=160a4cb6";
+import { makeBoard } from "./show.js?v=160a4cb6";
+import * as HU from "./human.js?v=160a4cb6";
+import { findWalls } from "./trace.js?v=160a4cb6";
+import { blenderScript } from "./blender.js?v=160a4cb6";
+import * as TR from "./track.js?v=160a4cb6";
+import * as RIG from "./rigs.js?v=160a4cb6";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=160a4cb6";
+import { Library } from "./library.js?v=160a4cb6";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +27,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=b5a29a5b";
+} from "./catalog.js?v=160a4cb6";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -4390,6 +4391,9 @@ window.addEventListener("keydown", (ev) => {
   if (cmd && (k === "=" || k === "+")) { ev.preventDefault(); return zoomStep(1.25); }
   if (cmd && k === "-") { ev.preventDefault(); return zoomStep(0.8); }
   if (cmd && k === "0") { ev.preventDefault(); return fitToContent(); }
+  if (cmd && k === "b") { ev.preventDefault(); return openBoard(); }
+
+  if (k === "escape" && !$("#board").hidden) { ev.preventDefault(); return closeBoard(); }
 
   if (k === "escape" && !$("#handbook").hidden) {
     $("#handbook").hidden = true;
@@ -4991,6 +4995,7 @@ function mainMenu(x, y) {
     { head: "Scene" },
     { label: "New Scene", key: "⌘N", run: newScene },
     { label: "Open Scene…", key: "⌘O", run: openDialog },
+    { label: "The Board…", key: "⌘B", run: openBoard, disabled: !isLocal() },
     { label: S.path ? "Save" : "Save…", key: "⌘S", run: () => saveScene(false) },
     { label: "Save As…", key: "⇧⌘S", run: () => saveScene(true) },
     { label: "Duplicate Scene…", disabled: !S.path, run: duplicateScene },
@@ -7438,6 +7443,48 @@ async function openFromCloud() {
     list.append(d);
   }
   const ui = sheet({ title: "Open Scene", sub: "From the cloud", body: list, okLabel: "Close" });
+}
+
+/**
+ * The board.
+ *
+ * Kept out of the plan entirely — it is a different question. The plan answers
+ * "where does the camera go"; the board answers "what are we shooting on
+ * Tuesday, and how much of it is still owed". Neither belongs inside the other,
+ * and the original's answer to the second question was a folder.
+ */
+let board = null;
+
+async function openBoard() {
+  if (!isLocal()) return toast("The board reads the scenes folder on your Mac");
+  const box = $("#board");
+  box.hidden = false;
+  document.body.classList.add("boarding");
+  if (!board) {
+    board = makeBoard({
+      api,
+      toast,
+      close: closeBoard,
+      // Opening a shot means opening its scene and putting you behind that
+      // camera, because that is the only reason to click a shot on a board.
+      openScene: async (path, camID) => {
+        closeBoard();
+        await loadScene(path);
+        if (!camID) return;
+        const cam = byID(camID);
+        if (!cam) return toast("That camera is not in the scene any more");
+        S.sel = new Set([camID]);
+        S.lensView = true;
+        draw(); syncChrome();
+      },
+    });
+  }
+  await board.mount(box);
+}
+
+function closeBoard() {
+  $("#board").hidden = true;
+  document.body.classList.remove("boarding");
 }
 
 async function loadScene(path) {

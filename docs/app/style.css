@@ -303,7 +303,7 @@ html, body {
 #toast {
   position: absolute; left: 50%; bottom: calc(var(--bar-h) + 18px);
   transform: translateX(-50%); background: #16181ae8; color: #fff;
-  padding: 9px 16px; border-radius: 7px; font-size: 13px; z-index: 40;
+  padding: 9px 16px; border-radius: 7px; font-size: 13px; z-index: 70;
 }
 
 /* --- collaboration ------------------------------------------------------- */
@@ -549,4 +549,139 @@ body.view-only #stage { cursor: grab; }
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; font-weight: 600; color: var(--sel);
   pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- the board
+
+   A production, laid out as a list you can read across a room rather than as a
+   table you have to squint at. One line per scene, its setups folded under it,
+   and days you can drag scenes between. Nothing here is a grid of small cells:
+   a schedule gets read at arm's length on a phone in a car park. */
+
+body.boarding #stage { pointer-events: none; }
+
+#board {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--paper); color: var(--text);
+  display: flex; flex-direction: column;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.bd-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--panel-line);
+  background: var(--panel);
+}
+.bd-title {
+  font-size: 17px; font-weight: 650; min-width: 180px; flex: 1 1 180px;
+  border: 0; background: transparent; color: var(--text);
+}
+.bd-tabs { display: flex; gap: 2px; }
+.bd-tabs button {
+  border: 0; background: var(--panel-line); color: var(--text);
+  padding: 5px 11px; border-radius: 6px; cursor: pointer; font-size: 12px;
+}
+.bd-tabs button.on { background: var(--ink); color: #fff; }
+.bd-find {
+  flex: 1 1 200px; min-width: 140px;
+  border: 1px solid var(--field-line); border-radius: 6px;
+  padding: 5px 9px; background: var(--field); color: var(--text);
+}
+.bd-tools { display: flex; gap: 6px; }
+.bd-tools button {
+  border: 1px solid var(--field-line); background: var(--field); color: var(--text);
+  padding: 5px 11px; border-radius: 6px; cursor: pointer; font-size: 12px;
+}
+.bd-tools button:hover { background: var(--hover); }
+.bd-close { font-weight: 600; }
+
+.bd-body { flex: 1; overflow: auto; padding: 6px 14px 40px; }
+.bd-empty, .bd-none { color: var(--dim); padding: 10px 4px; }
+
+.bd-group { margin: 14px 0; border-radius: 8px; }
+.bd-group.over { background: var(--hover); outline: 2px dashed var(--sel); }
+.bd-group h3 {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 4px; padding: 6px 4px;
+  font-size: 13px; font-weight: 650; letter-spacing: .02em;
+  border-bottom: 1px solid var(--panel-line);
+}
+.bd-daylabel { font-weight: 650; font-size: 13px; width: 8em; }
+.bd-date { width: 9.5em; }
+.bd-count { color: var(--dim); font-weight: 400; }
+.bd-x {
+  margin-left: auto; border: 0; background: transparent; color: var(--dim);
+  cursor: pointer; font-size: 15px; line-height: 1;
+}
+.bd-x:hover { color: var(--text); }
+
+.bd-rows { display: flex; flex-direction: column; }
+.bd-scene { border-bottom: 1px solid var(--panel-line); }
+.bd-scene.done .bd-slug { text-decoration: line-through; color: var(--dim); }
+/* A grid rather than a flex row, so the setup counts and the cast line up
+   down the page. Ragged columns are what makes a long list unreadable. */
+.bd-line {
+  display: grid; align-items: center; gap: 8px; padding: 4px 2px;
+  grid-template-columns: 18px 4.5em minmax(140px, 1fr) 8.5em minmax(0, 15em) 7.5em auto;
+}
+.bd-line.has-day {
+  grid-template-columns: 18px 4.5em minmax(140px, 1fr) 8.5em minmax(0, 15em) 7.5em 8em auto;
+}
+.bd-shot { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
+.bd-slugcell { min-width: 0; display: flex; flex-direction: column; }
+.bd-where {
+  font-size: 11px; color: var(--dim); padding-left: 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bd-line:hover { background: var(--hover); }
+.bd-line[draggable="true"] { cursor: grab; }
+
+.bd-twist {
+  border: 0; background: transparent; color: var(--dim);
+  cursor: pointer; width: 18px; font-size: 11px;
+}
+#board .cell {
+  border: 1px solid transparent; border-radius: 5px;
+  padding: 3px 6px; background: transparent; color: var(--text);
+  font: inherit;
+}
+#board .cell:hover { border-color: var(--panel-line); }
+#board .cell:focus { border-color: var(--sel); background: var(--field); outline: none; }
+#board select.cell { border-color: var(--panel-line); }
+
+.bd-num { width: 4em; text-align: right; }
+.bd-slug { width: 100%; font-weight: 500; }
+.bd-meta { color: var(--dim); display: flex; gap: 6px; align-items: center;
+  white-space: nowrap; justify-content: flex-end; }
+.bd-tag {
+  background: var(--panel-line); border-radius: 4px; padding: 1px 5px; font-size: 11px;
+}
+.bd-cast { display: flex; gap: 3px; overflow: hidden; }
+.bd-cast .chip {
+  background: var(--panel-line); border-radius: 999px;
+  padding: 1px 7px; font-size: 11px; color: var(--text);
+}
+.bd-status { width: 7.5em; }
+.bd-daypick { width: 8em; }
+.bd-open {
+  border: 1px solid var(--field-line); background: var(--field); color: var(--text);
+  border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px;
+}
+.bd-open:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.bd-shots { padding: 2px 0 8px 30px; }
+.bd-shot { border-top: 1px dotted var(--panel-line); }
+.bd-shot.done .bd-shotname { text-decoration: line-through; color: var(--dim); }
+.bd-shotname {
+  flex: 1 1 200px; text-align: left; border: 0; background: transparent;
+  color: var(--ink); cursor: pointer; font: inherit; padding: 3px 4px;
+  border-radius: 5px;
+}
+.bd-shotname:hover { background: var(--panel-line); }
+.bd-note { flex: 1 1 160px; color: var(--dim); }
+
+@media (max-width: 860px) {
+  .bd-line { grid-template-columns: 18px 4.5em minmax(100px, 1fr) 7.5em auto; }
+  .bd-line.has-day { grid-template-columns: 18px 4.5em minmax(90px, 1fr) 7.5em 8em auto; }
+  .bd-meta, .bd-cast { display: none; }
 }

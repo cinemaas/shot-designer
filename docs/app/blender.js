@@ -15,11 +15,11 @@
 // how it should look. That is the other half of the job and it belongs to
 // whoever opens the file.
 
-import * as H from "./hcw.js?v=b5a29a5b";
-import * as R from "./render.js?v=b5a29a5b";
-import * as V3 from "./view3d.js?v=b5a29a5b";
-import { UNITS_PER_FOOT } from "./catalog.js?v=b5a29a5b";
-import { projectedAspect } from "./optics.js?v=b5a29a5b";
+import * as H from "./hcw.js?v=160a4cb6";
+import * as R from "./render.js?v=160a4cb6";
+import * as V3 from "./view3d.js?v=160a4cb6";
+import { UNITS_PER_FOOT } from "./catalog.js?v=160a4cb6";
+import { projectedAspect } from "./optics.js?v=160a4cb6";
 
 // Scene units are twentieths of a foot. Blender works in metres.
 const M = (u) => +(u / UNITS_PER_FOOT * 0.3048).toFixed(4);
