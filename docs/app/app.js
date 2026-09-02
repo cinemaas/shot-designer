@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=33586abd";
-import * as H from "./hcw.js?v=33586abd";
-import * as R from "./render.js?v=33586abd";
-import { FXG } from "./assets.js?v=33586abd";
-import * as B from "./blocking.js?v=33586abd";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=33586abd";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=33586abd";
-import { HANDBOOK } from "./handbook.js?v=33586abd";
+import { BRAND, SLUG } from "./brand.js?v=35720c34";
+import * as H from "./hcw.js?v=35720c34";
+import * as R from "./render.js?v=35720c34";
+import { FXG } from "./assets.js?v=35720c34";
+import * as B from "./blocking.js?v=35720c34";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=35720c34";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=35720c34";
+import { HANDBOOK } from "./handbook.js?v=35720c34";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=33586abd";
-import * as V3 from "./view3d.js?v=33586abd";
-import * as HU from "./human.js?v=33586abd";
-import { findWalls } from "./trace.js?v=33586abd";
-import { blenderScript } from "./blender.js?v=33586abd";
-import * as TR from "./track.js?v=33586abd";
-import * as RIG from "./rigs.js?v=33586abd";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=33586abd";
-import { Library } from "./library.js?v=33586abd";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=35720c34";
+import * as V3 from "./view3d.js?v=35720c34";
+import * as HU from "./human.js?v=35720c34";
+import { findWalls } from "./trace.js?v=35720c34";
+import { blenderScript } from "./blender.js?v=35720c34";
+import * as TR from "./track.js?v=35720c34";
+import * as RIG from "./rigs.js?v=35720c34";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=35720c34";
+import { Library } from "./library.js?v=35720c34";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=33586abd";
+} from "./catalog.js?v=35720c34";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -5258,6 +5258,102 @@ function addCamera(at) {
  * everything on every page, it is offered a scale, and it is offered to have
  * its walls read off it. A plan you cannot measure against is a picture.
  */
+/**
+ * Where the seats are in a car, as fractions of its own footprint.
+ *
+ * Fractions rather than distances, because the symbol is fitted to the size the
+ * format expects rather than to the size it was drawn at — and a seat measured
+ * in feet would land on the bonnet the moment that fit changed.
+ */
+const CAR_SEATS = [
+  { label: "Driver",          fx:  0.067, fy: -0.192 },
+  { label: "Front passenger", fx:  0.067, fy:  0.192 },
+  { label: "Rear left",       fx: -0.127, fy: -0.192 },
+  { label: "Rear right",      fx: -0.127, fy:  0.192 },
+];
+
+// A car seat is about a foot off the road once you have climbed up into it,
+// which puts a seated head just under the roofline rather than through it.
+const SEAT_HEIGHT = 1.1;
+
+/**
+ * Put somebody in the car.
+ *
+ * A person inside a vehicle is a shot you plan all the time and could not
+ * describe here at all: you could stand a character on top of a car, or beside
+ * it, but not in it. Seating them is three things at once — the seat's place on
+ * the floor, sitting rather than standing, and a foot of height so they are on
+ * the seat and not under it — and doing any one of them by hand and forgetting
+ * the others is how you end up with somebody kneeling in a footwell.
+ */
+function seatInVehicle(car) {
+  const b = R.artBounds(H.get(car, "objectKey"));
+  const sx = H.getNum(car, "objectScaleX", 1), sy = H.getNum(car, "objectScaleY", 1);
+  const a = R.angleOf(car);
+  const cs = Math.cos(a), sn = Math.sin(a);
+  const cx = H.getNum(car, "x"), cy = H.getNum(car, "y");
+
+  const taken = new Map();
+  for (const o of objects()) {
+    if (o.tag === "Character" && H.get(o, "inVehicle") === idOf(car)) {
+      taken.set(H.get(o, "vehicleSeat"), o);
+    }
+  }
+
+  showPopover(lastMenuAt.x, lastMenuAt.y, [
+    { head: "Who's in the car" },
+    ...CAR_SEATS.map((seat) => {
+      const sitting = taken.get(seat.label);
+      return {
+        label: seat.label + (sitting
+          ? ` — ${(H.get(sitting, "castName") || H.get(sitting, "colorName") || "someone")}`
+          : ""),
+        run: () => {
+          mark("seat in car");
+          const lx = b.width * seat.fx * sx, ly = b.height * seat.fy * sy;
+          const at = { x: round(cx + lx * cs - ly * sn),
+                       y: round(cy + lx * sn + ly * cs) };
+
+          // Somebody already selected gets moved into the seat; otherwise a new
+          // person is cast into it.
+          let who = [...S.sel].map(byID).find((o) => o?.tag === "Character");
+          if (sitting && sitting !== who) who = sitting;
+          if (!who) {
+            const used = objects().filter((o) => o.tag === "Character").length;
+            const [name, col] = CHARACTER_COLORS[used % CHARACTER_COLORS.length];
+            who = H.makeCharacter(at.x, at.y, {
+              color: col, colorName: name,
+              colorIndex: used % CHARACTER_COLORS.length,
+              female: used % 2 === 1, angle: a,
+            });
+            canvas().children.push(who);
+          }
+          H.set(who, "x", at.x);
+          H.set(who, "y", at.y);
+          R.setAngle(who, a);
+          H.set(who, "posture", "sit");
+          H.set(who, "elevation", SEAT_HEIGHT);
+          H.set(who, "inVehicle", idOf(car));
+          H.set(who, "vehicleSeat", seat.label);
+          reindex();
+          S.sel = new Set([idOf(who)]);
+          draw(); syncChrome();
+          toast(`In the ${seat.label.toLowerCase()}'s seat — sitting, a foot off the road`);
+        },
+      };
+    }),
+    ...(taken.size ? ["-", { label: "Empty The Car", run: () => {
+      mark("empty car");
+      for (const o of taken.values()) {
+        H.set(o, "inVehicle", ""); H.set(o, "vehicleSeat", "");
+        H.set(o, "elevation", 0); H.set(o, "posture", "stand");
+      }
+      draw(); syncChrome();
+      toast("Everybody out");
+    } }] : []),
+  ]);
+}
+
 function addBackgroundFromFile(file) {
   if (!file || !/^image\//.test(file.type)) {
     return toast("That isn't an image", 5000);
@@ -5646,6 +5742,8 @@ function objectMenu(obj, x, y) {
       { label: H.getBool(obj, "mirror") ? "Unflip Horizontally" : "Flip Horizontally", run: () => {
         mark("flip"); H.set(obj, "mirror", !H.getBool(obj, "mirror")); draw();
       } },
+      ...(H.get(obj, "objectKey") === "CAR" || H.get(obj, "objectKey") === "CARINTERIOR"
+        ? [{ label: "Seat Someone…", run: () => seatInVehicle(obj) }] : []),
       // A dolly gets its own move. It is the base that travels — the camera
       // on it goes along because it is attached, and keeps its own swing, its
       // own height and its own tilt while it does. Two things moving, set

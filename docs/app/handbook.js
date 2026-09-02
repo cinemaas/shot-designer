@@ -198,6 +198,14 @@ is how you get a handsome still of a different room.</p>
 this machine: the page never sees it, and it cannot reach a share link or a
 published library. Without one you are offered the other route — the frame saved
 and the brief copied, ready to paste wherever you like.</p>
+<h4>People in a car</h4>
+<p><b>Seat Someone…</b> on a car puts them in one of the four seats: driver,
+front passenger, or either side in the back. Somebody already selected gets
+moved in; otherwise a new person is cast into the seat.</p>
+<p>It is three things at once — the seat's place on the floor, sitting rather
+than standing, and a foot of height so they are on the seat and not under it —
+and getting two of the three right is how somebody ends up kneeling in a
+footwell. <b>Empty The Car</b> puts everybody back on their feet.</p>
 <h4>Who somebody is, and what they look like</h4>
 <p>These are two different settings and they never touch. Select somebody and
 the character panel opens on the left.</p>
