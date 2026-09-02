@@ -198,6 +198,17 @@ is how you get a handsome still of a different room.</p>
 this machine: the page never sees it, and it cannot reach a share link or a
 published library. Without one you are offered the other route — the frame saved
 and the brief copied, ready to paste wherever you like.</p>
+<h4>Cars</h4>
+<p>A car is fifteen feet by six, which is a saloon. The symbol inherited from
+the old format was twenty-three feet eight — a stretch limousine — and twenty of
+the cars in this library had been scaled down by hand to correct it, most to
+between fifteen and seventeen feet. It is drawn at its real size now, and those
+hand-sized ones were rescaled so they kept the size somebody gave them.</p>
+<p>Down the lens it is three masses, which is what a car has been since the
+1930s: a bonnet low at the front, a cabin standing up in the middle, a boot low
+at the back, with a glasshouse that leans in as it rises. The outline follows
+the plan symbol's own silhouette, so the car you see from above and the car you
+see through the lens are the same car.</p>
 <h4>People in a car</h4>
 <p><b>Seat Someone…</b> on a car puts them in one of the four seats: driver,
 front passenger, or either side in the back. Somebody already selected gets

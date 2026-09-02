@@ -1,24 +1,24 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=35720c34";
-import * as H from "./hcw.js?v=35720c34";
-import * as R from "./render.js?v=35720c34";
-import { FXG } from "./assets.js?v=35720c34";
-import * as B from "./blocking.js?v=35720c34";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=35720c34";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=35720c34";
-import { HANDBOOK } from "./handbook.js?v=35720c34";
+import { BRAND, SLUG } from "./brand.js?v=5a7e4379";
+import * as H from "./hcw.js?v=5a7e4379";
+import * as R from "./render.js?v=5a7e4379";
+import { FXG } from "./assets.js?v=5a7e4379";
+import * as B from "./blocking.js?v=5a7e4379";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=5a7e4379";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=5a7e4379";
+import { HANDBOOK } from "./handbook.js?v=5a7e4379";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=35720c34";
-import * as V3 from "./view3d.js?v=35720c34";
-import * as HU from "./human.js?v=35720c34";
-import { findWalls } from "./trace.js?v=35720c34";
-import { blenderScript } from "./blender.js?v=35720c34";
-import * as TR from "./track.js?v=35720c34";
-import * as RIG from "./rigs.js?v=35720c34";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=35720c34";
-import { Library } from "./library.js?v=35720c34";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=5a7e4379";
+import * as V3 from "./view3d.js?v=5a7e4379";
+import * as HU from "./human.js?v=5a7e4379";
+import { findWalls } from "./trace.js?v=5a7e4379";
+import { blenderScript } from "./blender.js?v=5a7e4379";
+import * as TR from "./track.js?v=5a7e4379";
+import * as RIG from "./rigs.js?v=5a7e4379";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=5a7e4379";
+import { Library } from "./library.js?v=5a7e4379";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -26,7 +26,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=35720c34";
+} from "./catalog.js?v=5a7e4379";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -5272,9 +5272,15 @@ const CAR_SEATS = [
   { label: "Rear right",      fx: -0.127, fy:  0.192 },
 ];
 
-// A car seat is about a foot off the road once you have climbed up into it,
-// which puts a seated head just under the roofline rather than through it.
-const SEAT_HEIGHT = 1.1;
+// How high to lift somebody so they sit in a car rather than on it.
+//
+// Not the height of the seat off the road, which is the obvious answer and the
+// wrong one: sitting already includes a chair, measured from the floor the
+// chair stands on. Adding the seat height on top counts it twice and puts a
+// head through the roof. What is left to add is the difference between an
+// office chair and a car seat, which is small — and the number that matters is
+// the one that lands a seated crown just under a 4ft 8in roofline.
+const SEAT_HEIGHT = 0.35;
 
 /**
  * Put somebody in the car.

@@ -7,13 +7,13 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=35720c34";
-import * as R from "./render.js?v=35720c34";
-import * as HU from "./human.js?v=35720c34";
-import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=35720c34";
+import * as H from "./hcw.js?v=5a7e4379";
+import * as R from "./render.js?v=5a7e4379";
+import * as HU from "./human.js?v=5a7e4379";
+import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=5a7e4379";
 
 export { HAND_PROPS, LOOKED_AT };
-import { fieldOfView } from "./optics.js?v=35720c34";
+import { fieldOfView } from "./optics.js?v=5a7e4379";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -323,13 +323,94 @@ export function build(cam, objects, scene, opts = {}) {
       // A car is mostly glass above the waistline, and the whole reason to put
       // a camera near one is the people inside it. Draw the body solid and the
       // cabin as glass, so you can see them.
-      if (key === "CAR" || key === "CARINTERIOR") {
-        const sill = ft(2.5), roof = ft(key === "CAR" ? 4.8 : 3.6);
-        if (key === "CAR") {
-          for (let i = 0; i < 4; i++) {
-            quad(corners[i], corners[(i + 1) % 4], sill, "#dfe4e9", "#9aa3ab");
-          }
+      if (key === "CAR") {
+        // A car, not a box with windows.
+        //
+        // Three masses, which is what a car has been since the 1930s: a bonnet
+        // low at the front, a cabin standing up in the middle, a boot low at
+        // the back. The outline follows the plan symbol's own silhouette
+        // rather than its bounding rectangle, so the shape you see from above
+        // and the shape you see down the lens are the same car.
+        //
+        // Scenes are shot in cars constantly, so this is worth the geometry:
+        // through a windscreen at a real ride height is a shot you either can
+        // or cannot judge, and a rectangular prism tells you nothing.
+        const L = (b.width / 2) * sx, W2 = (b.height / 2) * sy;
+        const put = (fwd, side) => ({
+          x: p.x + fwd * Math.cos(a) - side * Math.sin(a),
+          y: p.y + fwd * Math.sin(a) + side * Math.cos(a),
+        });
+        // Half the plan outline, nose first; the other half is its mirror.
+        const HALF = [[1, 0], [0.94, 0.52], [0.80, 0.82], [0.62, 0.97],
+                      [-0.62, 0.97], [-0.84, 0.84], [-0.96, 0.52], [-1, 0]];
+        const ring = [
+          ...HALF.map(([fx, fy]) => put(fx * L, -fy * W2)),
+          ...HALF.slice().reverse().map(([fx, fy]) => put(fx * L, fy * W2)),
+        ];
+
+        // How high the bodywork is at a given point along the car: sills all
+        // the way, a bonnet over the front, a roof over the cabin, a boot lid
+        // over the back.
+        const SILL = ft(2.15), BONNET = ft(2.75), BOOT = ft(3.05), ROOF = ft(4.7);
+        const heightAt = (fwd) => {
+          const f = fwd / L;
+          if (f > 0.22) return BONNET;
+          if (f > -0.30) return SILL;          // the cabin: glass sits on this
+          return BOOT;
+        };
+
+        const body = "#dfe4e9", edge = "#9aa3ab";
+        for (let i = 0; i < ring.length; i++) {
+          const q = ring[i], r = ring[(i + 1) % ring.length];
+          // back into local forward, to know which mass this side belongs to
+          const fq = (q.x - p.x) * Math.cos(a) + (q.y - p.y) * Math.sin(a);
+          const fr = (r.x - p.x) * Math.cos(a) + (r.y - p.y) * Math.sin(a);
+          quad(q, r, Math.min(heightAt(fq), heightAt(fr)), body, edge);
         }
+        // Lids on each mass, so it reads as solid rather than as a fence.
+        for (const [from, to, hgt] of [[0.22, 1, BONNET], [-0.30, 0.22, SILL],
+                                       [-1, -0.30, BOOT]]) {
+          const lid = [];
+          for (const [fx, fy] of HALF) {
+            if (fx <= to && fx >= from) lid.push(put(fx * L, -fy * W2));
+          }
+          for (const [fx, fy] of HALF.slice().reverse()) {
+            if (fx <= to && fx >= from) lid.push(put(fx * L, fy * W2));
+          }
+          if (lid.length < 3) continue;
+          const top = lid.map((q) => seen(q.x, q.y, hgt));
+          if (top.some((q) => !q)) continue;
+          out.push({ pts: top, fill: body, stroke: edge,
+                     depth: Math.min(...top.map((q) => q.depth)) - 0.01 });
+        }
+
+        // The glasshouse: a box that leans in as it rises, which is what makes
+        // a windscreen a windscreen and not a wall. Built from its own four
+        // corners top and bottom rather than filtered out of the body outline,
+        // because none of the body's corners land where a cabin starts.
+        const GLASS = "rgba(150,200,225,0.22)", MULLION = "#8fb6cc";
+        const lo = [[0.34, -0.92], [0.34, 0.92], [-0.46, 0.92], [-0.46, -0.92]]
+          .map(([fx, fy]) => put(fx * L, fy * W2));
+        const hi = [[0.16, -0.74], [0.16, 0.74], [-0.34, 0.74], [-0.34, -0.74]]
+          .map(([fx, fy]) => put(fx * L, fy * W2));
+        for (let i = 0; i < 4; i++) {
+          const j = (i + 1) % 4;
+          const face = [seen(lo[i].x, lo[i].y, SILL), seen(lo[j].x, lo[j].y, SILL),
+                        seen(hi[j].x, hi[j].y, ROOF), seen(hi[i].x, hi[i].y, ROOF)];
+          if (face.some((q) => !q)) continue;
+          out.push({ pts: face, fill: GLASS, stroke: MULLION, width: 1,
+                     depth: (face[0].depth + face[1].depth) / 2 });
+        }
+        const roof = hi.map((q) => seen(q.x, q.y, ROOF));
+        if (!roof.some((q) => !q)) {
+          out.push({ pts: roof, fill: "#e4eaee", stroke: MULLION, width: 1,
+                     depth: Math.min(...roof.map((q) => q.depth)) - 0.02 });
+        }
+        continue;
+      }
+
+      if (key === "CARINTERIOR") {
+        const sill = ft(2.5), roof = ft(3.6);
         for (let i = 0; i < 4; i++) {
           quad(corners[i], corners[(i + 1) % 4], roof,
                "rgba(150,200,225,0.18)", "#8fb6cc", sill);
