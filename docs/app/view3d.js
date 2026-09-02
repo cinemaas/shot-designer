@@ -7,14 +7,14 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=7266f2d6";
-import * as R from "./render.js?v=7266f2d6";
-import * as HU from "./human.js?v=7266f2d6";
-import { drawCar } from "./car.js?v=7266f2d6";
-import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=7266f2d6";
+import * as H from "./hcw.js?v=0e441aba";
+import * as R from "./render.js?v=0e441aba";
+import * as HU from "./human.js?v=0e441aba";
+import { drawCar, EXPLORER } from "./car.js?v=0e441aba";
+import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=0e441aba";
 
 export { HAND_PROPS, LOOKED_AT };
-import { fieldOfView } from "./optics.js?v=7266f2d6";
+import { fieldOfView } from "./optics.js?v=0e441aba";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -329,7 +329,11 @@ export function build(cam, objects, scene, opts = {}) {
         drawCar(out, cam, p, {
           facing: a,
           len: (b.width * sx) / UNITS_PER_FOOT,
-          wide: (b.height * sy) / UNITS_PER_FOOT,
+          // The plan symbol is drawn to the mirrors, because that is the width
+          // that has to clear a doorway. The bodywork is narrower than that,
+          // and building it to the mirror line makes a wide, soft car.
+          wide: (b.height * sy) / UNITS_PER_FOOT
+                * (EXPLORER.wide / EXPLORER.mirrors),
           detail: Math.hypot(cam.x - p.x, cam.y - p.y) > ft(90) ? 0 : 1,
         });
         continue;

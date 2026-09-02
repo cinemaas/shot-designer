@@ -31,8 +31,8 @@
 //
 // Everything below is in feet off the road.
 
-import { surface, lightFor } from "./human.js?v=7266f2d6";
-import { UNITS_PER_FOOT } from "./catalog.js?v=7266f2d6";
+import { surface, lightFor } from "./human.js?v=0e441aba";
+import { UNITS_PER_FOOT } from "./catalog.js?v=0e441aba";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -165,8 +165,36 @@ export function drawCar(out, cam, p, {
   for (let i = 0; i < cab.length - 1; i++) {
     const a = cab[i], b = cab[i + 1];
     const isRoof = a.roof && b.roof;
-    surface(ctx, [a.l, b.l, b.r, a.r], isRoof ? colour : GLASS,
-            isRoof ? { ao: 1.06 } : { twoSided: true, alpha: ALPHA, bias: 0.998 });
+    // The roof is drawn from both sides. A lens is usually below it, and a
+    // one-sided lid culls itself the moment you drop under it — which opens
+    // the cabin to the sky and turns the car into a convertible.
+    //
+    // It is also drawn in pieces. The painter's sort gives a face one depth,
+    // taken at its middle, and a roof is the largest face on the car: as one
+    // quad it sorts from the centre of the cabin, and everybody sitting in
+    // front of that centre paints over it — you look down at a closed car and
+    // see the passengers through the roof.
+    if (isRoof) {
+      const NU = detail < 1 ? 3 : 8, NV = detail < 1 ? 2 : 3;
+      const at = (u, v) => {
+        const l = [a.l[0] + (b.l[0] - a.l[0]) * u, a.l[1] + (b.l[1] - a.l[1]) * u,
+                   a.l[2] + (b.l[2] - a.l[2]) * u];
+        const r = [a.r[0] + (b.r[0] - a.r[0]) * u, a.r[1] + (b.r[1] - a.r[1]) * u,
+                   a.r[2] + (b.r[2] - a.r[2]) * u];
+        return [l[0] + (r[0] - l[0]) * v, l[1] + (r[1] - l[1]) * v,
+                l[2] + (r[2] - l[2]) * v];
+      };
+      for (let u = 0; u < NU; u++) {
+        for (let v = 0; v < NV; v++) {
+          surface(ctx, [at(u / NU, v / NV), at((u + 1) / NU, v / NV),
+                        at((u + 1) / NU, (v + 1) / NV), at(u / NU, (v + 1) / NV)],
+                  colour, { ao: 1.06, twoSided: true });
+        }
+      }
+    } else {
+      surface(ctx, [a.l, b.l, b.r, a.r], GLASS,
+              { twoSided: true, alpha: ALPHA, bias: 0.998 });
+    }
     for (const face of [[a.lb, b.lb, b.l, a.l], [a.rb, b.rb, b.r, a.r]]) {
       surface(ctx, face, GLASS, { twoSided: true, alpha: ALPHA, bias: 0.998 });
     }
@@ -189,15 +217,39 @@ export function drawCar(out, cam, p, {
   pillar(-0.40, 0.893, BELT, ROOF, 0.024);         // C
   pillar(-0.71, 0.895, BELT, ROOF, 0.036);         // D
 
-  // Roof rails, which say SUV more than any other single detail.
+  // Roof rails, which say SUV more than any other single detail. Built as a
+  // short chain of solid segments rather than one long ribbon: the painter's
+  // sort gives every face a single centroid depth, so a 14ft ribbon that runs
+  // past a passenger gets one depth for the whole length and punches straight
+  // through their head. Segments each sort where they actually are.
+  const RAIL_N = detail < 1 ? 3 : 7;
+  const railAt = (t) => ({
+    x: (0.16 + (-0.68 - 0.16) * t) * L,
+    z: ft(ROOF + 0.13 * t),
+  });
   for (const s of [-1, 1]) {
-    const y = s * W2 * 0.70;
-    surface(ctx, [
-      world([0.16 * L, y - ft(0.09), ft(ROOF)]),
-      world([0.16 * L, y + ft(0.09), ft(ROOF)]),
-      world([-0.68 * L, y + ft(0.09), ft(ROOF + 0.13)]),
-      world([-0.68 * L, y - ft(0.09), ft(ROOF + 0.13)]),
-    ], dark, { twoSided: true });
+    const y = s * W2 * 0.70, hw = ft(0.085), hi = ft(0.11);
+    const ring = (t) => {
+      const { x, z } = railAt(t);
+      return [
+        world([x, y - hw, z]), world([x, y + hw, z]),
+        world([x, y + hw, z + hi]), world([x, y - hw, z + hi]),
+      ];
+    };
+    const mid = (t) => {
+      const { x, z } = railAt(t);
+      return world([x, y, z + hi / 2]);
+    };
+    for (let i = 0; i < RAIL_N; i++) {
+      const a = ring(i / RAIL_N), b = ring((i + 1) / RAIL_N);
+      const core = mid((i + 0.5) / RAIL_N);
+      for (let k = 0; k < 4; k++) {
+        const j = (k + 1) % 4;
+        surface(ctx, [a[k], a[j], b[j], b[k]], dark, { outward: core });
+      }
+      if (i === 0) surface(ctx, a, dark, { outward: core });
+      if (i === RAIL_N - 1) surface(ctx, b, dark, { outward: core });
+    }
   }
 
   // --- wheels --------------------------------------------------------------
