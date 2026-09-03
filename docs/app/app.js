@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=ee4a46de";
-import * as H from "./hcw.js?v=ee4a46de";
-import * as R from "./render.js?v=ee4a46de";
-import { FXG } from "./assets.js?v=ee4a46de";
-import * as B from "./blocking.js?v=ee4a46de";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=ee4a46de";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=ee4a46de";
-import { HANDBOOK } from "./handbook.js?v=ee4a46de";
+import { BRAND, SLUG } from "./brand.js?v=1f1cab17";
+import * as H from "./hcw.js?v=1f1cab17";
+import * as R from "./render.js?v=1f1cab17";
+import { FXG } from "./assets.js?v=1f1cab17";
+import * as B from "./blocking.js?v=1f1cab17";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=1f1cab17";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1f1cab17";
+import { HANDBOOK } from "./handbook.js?v=1f1cab17";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=ee4a46de";
-import * as V3 from "./view3d.js?v=ee4a46de";
-import { makeBoard } from "./show.js?v=ee4a46de";
-import * as SET from "./sets.js?v=ee4a46de";
-import * as HU from "./human.js?v=ee4a46de";
-import { findWalls } from "./trace.js?v=ee4a46de";
-import { blenderScript } from "./blender.js?v=ee4a46de";
-import * as TR from "./track.js?v=ee4a46de";
-import * as RIG from "./rigs.js?v=ee4a46de";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=ee4a46de";
-import { Library } from "./library.js?v=ee4a46de";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=1f1cab17";
+import * as V3 from "./view3d.js?v=1f1cab17";
+import { makeBoard } from "./show.js?v=1f1cab17";
+import * as SET from "./sets.js?v=1f1cab17";
+import * as HU from "./human.js?v=1f1cab17";
+import { findWalls } from "./trace.js?v=1f1cab17";
+import { blenderScript } from "./blender.js?v=1f1cab17";
+import * as TR from "./track.js?v=1f1cab17";
+import * as RIG from "./rigs.js?v=1f1cab17";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=1f1cab17";
+import { Library } from "./library.js?v=1f1cab17";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -28,7 +28,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=ee4a46de";
+} from "./catalog.js?v=1f1cab17";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -2974,7 +2974,16 @@ stage.addEventListener("pointerdown", (ev) => {
     return;
   }
 
-  const hit = hitTest(pt, client);
+  let hit = hitTest(pt, client);
+  // On a plain dolly the camera sits on a riser directly over the base, so the
+  // two overlap and whichever is on top is what you grab. They are one object
+  // as far as moving goes — there is no arm between them — so grabbing either
+  // means the dolly, and the panel that comes up is the dolly's.
+  if (hit && hit.tag === "Camera" && !ev.altKey) {
+    const base = byID(RIG.rigParentID(hit));
+    const spec = base && RIG.rigSpec(base);
+    if (spec && !spec.arm && !spec.travel) hit = base;
+  }
   const extend = ev.shiftKey || ev.metaKey || ev.ctrlKey;
   if (ev.button === 1 || S.spaceDown) {
     drag = { mode: "pan", sx: ev.clientX, sy: ev.clientY, vx: S.view.x, vy: S.view.y };
@@ -2991,22 +3000,18 @@ stage.addEventListener("pointerdown", (ev) => {
     mark("move");
     if (S.sel.size === 1 && RIG.rigParentID(hit)) {
       drag = { mode: "rigcam", obj: hit, moved: false };
-    } else if (S.sel.size === 1 && RIG.ridesTrack(hit) && !RIG.rigParentID(hit)
-               && !ev.altKey) {
+    } else if (S.sel.size === 1 && RIG.ridesTrack(hit) && !RIG.rigParentID(hit)) {
+      // The base of a dolly is locked to its rails. There is no drag that
+      // takes it off — a grip cannot lift a loaded dolly off the track by
+      // accident either, and having it come off under the cursor meant a
+      // position you had already set stopped meaning anything.
       drag = { mode: "rigslide", obj: hit, moved: false };
     } else {
-      // ⌥ lifts a rig clear of its track rather than running it along.
-      let detached = false;
-      if (ev.altKey && RIG.ridesTrack(hit)) {
-        H.set(hit, "snapPath", "");
-        detached = true;
-        toast("Off the track — drop it near track to put it back on");
-      }
       // ⇧-drag turns it, wherever you grabbed it. You should never have to go
       // hunting for a handle to swivel a camera.
       drag = ev.shiftKey && S.sel.size === 1 && R.hasRotator(hit)
         ? { mode: "rotate", obj: hit, start: pt }
-        : { mode: "move", start: pt, moved: false, detached,
+        : { mode: "move", start: pt, moved: false,
             freeDrop: ev.altKey,          // ⌥ places it off the wall
             origins: [...S.sel].map((sid) => snapshotPos(byID(sid))) };
     }
@@ -3192,7 +3197,7 @@ stage.addEventListener("pointerup", (ev) => {
   }
   // Dropping a rig by track picks it up — unless this was the drag that
   // deliberately lifted it off, which would put it straight back.
-  if (drag?.mode === "move" && drag.moved && !drag.detached) {
+  if (drag?.mode === "move" && drag.moved) {
     for (const o of drag.origins) {
       if (RIG.isRig(o.obj) && !RIG.ridesTrack(o.obj)) snapRigToNearestTrack(o.obj);
       if (!drag.freeDrop && o.obj.tag === "Character") snapToSeat(o.obj);
@@ -4035,8 +4040,23 @@ function dragRigCamera(cam, pt) {
     const a = R.angleOf(rig);
     const along = (pt.x - ox) * Math.cos(a) + (pt.y - oy) * Math.sin(a);
     H.set(cam, "rigSlide", Math.max(-0.5, Math.min(0.5, along / spec.travel)));
+  } else if (RIG.ridesTrack(rig)) {
+    // A camera on a plain dolly has no travel of its own — it is bolted to a
+    // riser over the base. So dragging it is dragging the dolly, and a dolly
+    // on track goes exactly one place: along the track.
+    //
+    // This used to turn the dolly instead, which is why the whole rig felt
+    // broken: the camera sits on top of the base, so grabbing what looks like
+    // the dolly grabs the camera, and the dolly spun on the spot rather than
+    // running. There was no way to slide it, so there was no way to set the
+    // second position, so the move never existed.
+    const track = byID(H.get(rig, "snapPath"));
+    if (track) H.set(rig, "snapPercent", RIG.percentOnTrack(R.pointsOf(track), pt));
+    placeRigOnTrack(rig);
   } else {
-    R.setAngle(rig, Math.atan2(pt.y - oy, pt.x - ox));
+    // Off track, the same camera drags the whole rig around the floor.
+    H.set(rig, "x", round(pt.x));
+    H.set(rig, "y", round(pt.y));
   }
   const seat = RIG.cameraSeat(rig, cam);
   H.set(cam, "x", round(seat.x));
