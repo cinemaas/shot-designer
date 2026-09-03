@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=1f1cab17";
-import * as H from "./hcw.js?v=1f1cab17";
-import * as R from "./render.js?v=1f1cab17";
-import { FXG } from "./assets.js?v=1f1cab17";
-import * as B from "./blocking.js?v=1f1cab17";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=1f1cab17";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1f1cab17";
-import { HANDBOOK } from "./handbook.js?v=1f1cab17";
+import { BRAND, SLUG } from "./brand.js?v=7ad9c6e0";
+import * as H from "./hcw.js?v=7ad9c6e0";
+import * as R from "./render.js?v=7ad9c6e0";
+import { FXG } from "./assets.js?v=7ad9c6e0";
+import * as B from "./blocking.js?v=7ad9c6e0";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=7ad9c6e0";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7ad9c6e0";
+import { HANDBOOK } from "./handbook.js?v=7ad9c6e0";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=1f1cab17";
-import * as V3 from "./view3d.js?v=1f1cab17";
-import { makeBoard } from "./show.js?v=1f1cab17";
-import * as SET from "./sets.js?v=1f1cab17";
-import * as HU from "./human.js?v=1f1cab17";
-import { findWalls } from "./trace.js?v=1f1cab17";
-import { blenderScript } from "./blender.js?v=1f1cab17";
-import * as TR from "./track.js?v=1f1cab17";
-import * as RIG from "./rigs.js?v=1f1cab17";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=1f1cab17";
-import { Library } from "./library.js?v=1f1cab17";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=7ad9c6e0";
+import * as V3 from "./view3d.js?v=7ad9c6e0";
+import { makeBoard } from "./show.js?v=7ad9c6e0";
+import * as SET from "./sets.js?v=7ad9c6e0";
+import * as HU from "./human.js?v=7ad9c6e0";
+import { findWalls } from "./trace.js?v=7ad9c6e0";
+import { blenderScript } from "./blender.js?v=7ad9c6e0";
+import * as TR from "./track.js?v=7ad9c6e0";
+import * as RIG from "./rigs.js?v=7ad9c6e0";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=7ad9c6e0";
+import { Library } from "./library.js?v=7ad9c6e0";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -28,7 +28,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=1f1cab17";
+} from "./catalog.js?v=7ad9c6e0";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -3100,7 +3100,7 @@ stage.addEventListener("pointermove", (ev) => {
   }
   if (drag.mode === "rotate") {
     const a = Math.atan2(pt.y - H.getNum(drag.obj, "y"), pt.x - H.getNum(drag.obj, "x"));
-    R.setAngle(drag.obj, ev.shiftKey ? Math.round(a / (Math.PI / 12)) * (Math.PI / 12) : a);
+    turnOnBoard(drag.obj, ev.shiftKey ? Math.round(a / (Math.PI / 12)) * (Math.PI / 12) : a);
     return draw();
   }
   if (drag.mode === "movebend") {
@@ -4476,7 +4476,7 @@ window.addEventListener("keydown", (ev) => {
     if (S.sel.size > 1) return rotateGroup(d);
     for (const id of S.sel) {
       const o = byID(id);
-      if (R.hasRotator(o)) { mark("rotate"); R.setAngle(o, R.angleOf(o) + d); draw(); }
+      if (R.hasRotator(o)) { mark("rotate"); turnOnBoard(o, R.angleOf(o) + d); draw(); }
     }
     return;
   }
@@ -5448,6 +5448,25 @@ function rideAlong(o, car) {
   H.set(o, "rideTurn", +(R.angleOf(o) - a).toFixed(5));
 }
 
+/**
+ * Turn something, and if it is travelling on a vehicle, remember the turn as
+ * an angle relative to that vehicle.
+ *
+ * Everything on a car is put back where the car is on every redraw, facing
+ * however the car faces plus whatever offset is stored. Writing only the
+ * absolute angle therefore did nothing at all: the next frame overwrote it
+ * from the offset that had not changed. Which is why a camera locked to a car
+ * could not be panned and a passenger could not be turned to look at anybody —
+ * both snapped back before you let go of the handle.
+ */
+function turnOnBoard(o, a) {
+  R.setAngle(o, a);
+  const seat = seatOf(o);
+  const car = seat ? seat.car : ridesWith(o);
+  if (!car) return;
+  H.set(o, seat ? "seatTurn" : "rideTurn", +(a - R.angleOf(car)).toFixed(5));
+}
+
 /** Where a thing bolted to a vehicle is now, given where the vehicle is. */
 function ridePoint(o, car) {
   const a = R.angleOf(car);
@@ -5473,6 +5492,9 @@ function reflowVehicles() {
   // impossible to move at all.
   const held = new Set(
     (drag?.origins || []).map((o) => idOf(o.obj)));
+  // Whatever is being turned or slid right now is not put back either — a
+  // rotate drag carries its object in `obj` rather than in `origins`.
+  if (drag?.obj) held.add(idOf(drag.obj));
   for (const o of objects()) {
     if (held.has(idOf(o))) continue;
     const in2 = seatOf(o);
@@ -5480,7 +5502,10 @@ function reflowVehicles() {
       const at = seatPoint(in2.car, in2.seat, slideOf(o));
       H.set(o, "x", at.x);
       H.set(o, "y", at.y);
-      R.setAngle(o, at.a);
+      // Facing the way the car faces plus however they have been turned. A
+      // passenger talking to the driver is half the reason to put two people
+      // in a car, and it is the shot you are lining up when you ask for it.
+      R.setAngle(o, at.a + H.getNum(o, "seatTurn", 0));
       // Their hip belongs on the cushion however tall they are, so the lift
       // is recomputed rather than remembered — otherwise dragging the height
       // slider sinks a tall passenger into the seat or floats a short one
@@ -5591,7 +5616,15 @@ function snapToSeat(who) {
       if (d < bestD) { best = seat; bestD = d; }
     }
     if (!best) { toast("Every seat in that one is taken", 5000); return false; }
-    const at = seatPoint(car, best, slideOf(who));
+    // Dropped a little forward or back of the seat, they take the seat with
+    // them: that is what the runners are for, and nudging somebody up against
+    // the windscreen or back off the B pillar is the whole adjustment an
+    // over-the-shoulder in a car needs. Beyond the runners they simply sit at
+    // the end of the travel rather than snapping to the middle.
+    const wanted = (lx / (UNITS_PER_FOOT * sx)) - best.fwd;
+    const slide = Math.max(-SEAT_TRAVEL, Math.min(SEAT_TRAVEL, wanted));
+    H.set(who, "seatSlide", +slide.toFixed(2));
+    const at = seatPoint(car, best, slide);
     H.set(who, "x", at.x); H.set(who, "y", at.y);
     R.setAngle(who, at.a);
     H.set(who, "posture", "sit");

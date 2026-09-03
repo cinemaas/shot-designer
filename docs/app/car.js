@@ -36,8 +36,8 @@
 //
 // Everything below is in feet off the road.
 
-import { surface, lightFor } from "./human.js?v=1f1cab17";
-import { UNITS_PER_FOOT } from "./catalog.js?v=1f1cab17";
+import { surface, lightFor } from "./human.js?v=7ad9c6e0";
+import { UNITS_PER_FOOT } from "./catalog.js?v=7ad9c6e0";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -125,10 +125,17 @@ const BODY = [
  * flat over both rows and the tailgate glass stands nearly vertical, and those
  * two facts are what a camera has to work around.
  */
+// The header is the number that decides whether you can shoot into this car.
+// Put it too far aft and the roof starts behind the driver, which leaves them
+// sitting under the glass with the windscreen frame across their face — and a
+// hostess tray, which is a lens on the bonnet looking back, is exactly the
+// shot that lands on it. A 4Runner's screen is upright: 1ft 4 of run for 2ft 4
+// of rise, about 30 degrees off vertical, with the header a good foot ahead of
+// the driver's head.
 const CABIN = [
   { at:  0.42,  w: 0.94, z: BELT },        // cowl, base of the windscreen
-  { at:  0.26,  w: 0.92, z: 5.24 },
-  { at:  0.10,  w: 0.90, z: ROOF },        // header
+  { at:  0.34,  w: 0.93, z: 5.10 },
+  { at:  0.26,  w: 0.92, z: ROOF },        // header
   { at: -0.72,  w: 0.90, z: ROOF },        // roof runs flat over both rows
   { at: -0.86,  w: 0.91, z: 5.72 },
   { at: -0.96,  w: 0.93, z: BELT },        // backlight, nearly upright
@@ -249,20 +256,25 @@ export function drawCar(out, cam, p, {
   // Pillars: A at the windscreen, B between the rows, C behind the back door,
   // D at the corner of the tailgate. Thin opaque uprights, because that is
   // what they are and what they block.
-  const pillar = (at, w, z0, z1, thick) => {
+  // A pillar leaning the way the glass it holds up leans. Drawn upright — which
+  // is how these were — the A pillar becomes a post standing in the middle of
+  // the windscreen rather than its leading edge, and it lands across the face
+  // of whoever you are shooting through the glass.
+  const post = (at0, at1, w, z0, z1, thick) => {
     for (const s of [-1, 1]) {
       const y = s * W2 * w;
       surface(ctx, [
-        world([(at - thick) * L, y, ft(z0)]), world([(at + thick) * L, y, ft(z0)]),
-        world([(at + thick) * L, y, ft(z1)]), world([(at - thick) * L, y, ft(z1)]),
+        world([(at0 - thick) * L, y, ft(z0)]), world([(at0 + thick) * L, y, ft(z0)]),
+        world([(at1 + thick) * L, y, ft(z1)]), world([(at1 - thick) * L, y, ft(z1)]),
       ], colour, { outward: world([0, 0, ft((BELT + ROOF) / 2)]), ao: 0.95,
                    bias: 0.996 });
     }
   };
-  pillar(0.30, 0.925, BELT, ROOF - 0.55, 0.022);   // A
-  pillar(-0.05, 0.905, BELT, ROOF, 0.019);         // B
-  pillar(-0.45, 0.900, BELT, ROOF, 0.018);         // C
-  pillar(-0.78, 0.905, BELT, ROOF, 0.026);         // D
+  const pillar = (at, w, z0, z1, thick) => post(at, at, w, z0, z1, thick);
+  post(0.42, 0.26, 0.925, BELT, ROOF - 0.02, 0.020);   // A, raking with the glass
+  pillar(-0.05, 0.905, BELT, ROOF, 0.019);            // B
+  pillar(-0.45, 0.900, BELT, ROOF, 0.018);            // C
+  post(-0.96, -0.72, 0.905, BELT, ROOF, 0.024);       // D, raking with the backlight
 
   // Roof rails, which say SUV more than any other single detail. Built as a
   // short chain of solid segments rather than one long ribbon: the painter's
