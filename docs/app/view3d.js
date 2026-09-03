@@ -7,14 +7,14 @@
 // "does the sofa block her" with a director in ten seconds, not for looking
 // like the film.
 
-import * as H from "./hcw.js?v=7ad9c6e0";
-import * as R from "./render.js?v=7ad9c6e0";
-import * as HU from "./human.js?v=7ad9c6e0";
-import { drawCar, FOURRUNNER, SEATS, SEATED_PELVIS } from "./car.js?v=7ad9c6e0";
-import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=7ad9c6e0";
+import * as H from "./hcw.js?v=1806c92d";
+import * as R from "./render.js?v=1806c92d";
+import * as HU from "./human.js?v=1806c92d";
+import { drawCar, FOURRUNNER, SEATS, SEATED_PELVIS } from "./car.js?v=1806c92d";
+import { UNITS_PER_FOOT, HAND_PROPS, LOOKED_AT } from "./catalog.js?v=1806c92d";
 
 export { HAND_PROPS, LOOKED_AT, FOURRUNNER, SEATS, SEATED_PELVIS };
-import { fieldOfView } from "./optics.js?v=7ad9c6e0";
+import { fieldOfView } from "./optics.js?v=1806c92d";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -232,6 +232,51 @@ export function project(cam, x, y, z) {
  * Everything the camera can see, as flat shapes ready to paint back to front.
  * Each is { pts: [{u,v}], fill, stroke, depth }.
  */
+/**
+ * Is this thing worth building at all?
+ *
+ * Nothing here used to ask. Every character in the scene was built in full —
+ * skull, hair, limbs, upwards of a thousand facets each — and then most of
+ * them were thrown away by the projection because they were behind the lens or
+ * off the side of the frame. On a scene with a cast of seventeen that was 94%
+ * of the time it took to draw a frame, spent on people who were not in the
+ * shot.
+ *
+ * So: a bounding sphere, tested against the lens before anything is generated.
+ * Generous on purpose — the cost of drawing something you did not need to is a
+ * few facets, and the cost of culling something you did need is a hole in the
+ * frame, so the test errs towards drawing.
+ */
+const SLOP = ft(4);   // margin on every edge of the test, in case it is wrong
+
+function inShot(cam, x, y, radius, tall) {
+  const dx = x - cam.x, dy = y - cam.y;
+  const c = Math.cos(-cam.yaw), s = Math.sin(-cam.yaw);
+  const fwd = dx * c - dy * s;
+  const right = dx * s + dy * c;
+
+  // Behind the lens, by more than its own size.
+  if (fwd < -radius) return false;
+
+  // Wide of the frame. Measured at the far edge of the bounding sphere and with
+  // a margin on top, because the whole test is deliberately lopsided: drawing
+  // something you did not need to costs a few facets, and culling something you
+  // did need leaves a hole in the frame. When it is close, it is drawn.
+  const near = Math.max(fwd + radius, 1);
+  const halfW = cam.tanH * near + radius + SLOP;
+  if (Math.abs(right) > halfW) return false;
+
+  // Above or below it. Height is only ever positive-up from the floor, so the
+  // span to test runs from the floor to the top of the thing.
+  const up0 = -cam.z, up1 = (tall || 0) - cam.z;
+  const cp = Math.cos(-cam.pitch), sp = Math.sin(-cam.pitch);
+  const v0 = fwd * sp + up0 * cp, v1 = fwd * sp + up1 * cp;
+  const halfH = cam.tanV * near + radius + SLOP;
+  if (Math.min(v0, v1) > halfH || Math.max(v0, v1) < -halfH) return false;
+
+  return true;
+}
+
 export function build(cam, objects, scene, opts = {}) {
   const out = [];
   const seen = (x, y, z) => project(cam, x, y, z);
@@ -270,6 +315,11 @@ export function build(cam, objects, scene, opts = {}) {
 
     if (o.tag === "Character") {
       const p = opts.posOf ? opts.posOf(o) : { x: H.getNum(o, "x"), y: H.getNum(o, "y") };
+      // A person is about two feet across and stands under six; the elevation
+      // is added because somebody on a balcony is in shot when the floor they
+      // would be standing on is not.
+      const top = postureOf(o).top + elevationOf(o);
+      if (!inShot(cam, p.x, p.y, ft(1.6), top)) continue;
       const colour = "#" + (H.getNum(o, "color", 0xbbbbbb) >>> 0 & 0xffffff)
         .toString(16).padStart(6, "0");
       const face = opts.angleOf ? opts.angleOf(o) : null;
@@ -282,6 +332,9 @@ export function build(cam, objects, scene, opts = {}) {
       const p = { x: H.getNum(o, "x"), y: H.getNum(o, "y") };
       const b = R.artBounds(H.get(o, "objectKey"));
       const sx = H.getNum(o, "objectScaleX", 1), sy = H.getNum(o, "objectScaleY", 1);
+      // Half the diagonal of the plan symbol covers it at any rotation.
+      const reach = Math.hypot(b.width * sx, b.height * sy) / 2;
+      if (!inShot(cam, p.x, p.y, reach, baseOf(o) + heightOf(o))) continue;
       const a = R.angleOf(o);
       const hw = (b.width / 2) * sx, hd = (b.height / 2) * sy;
       const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, ly]) => ({

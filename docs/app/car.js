@@ -36,8 +36,8 @@
 //
 // Everything below is in feet off the road.
 
-import { surface, lightFor } from "./human.js?v=7ad9c6e0";
-import { UNITS_PER_FOOT } from "./catalog.js?v=7ad9c6e0";
+import { surface, lightFor } from "./human.js?v=1806c92d";
+import { UNITS_PER_FOOT } from "./catalog.js?v=1806c92d";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 

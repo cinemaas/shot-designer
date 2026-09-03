@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=7ad9c6e0";
-import * as H from "./hcw.js?v=7ad9c6e0";
-import * as R from "./render.js?v=7ad9c6e0";
-import { FXG } from "./assets.js?v=7ad9c6e0";
-import * as B from "./blocking.js?v=7ad9c6e0";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=7ad9c6e0";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=7ad9c6e0";
-import { HANDBOOK } from "./handbook.js?v=7ad9c6e0";
+import { BRAND, SLUG } from "./brand.js?v=1806c92d";
+import * as H from "./hcw.js?v=1806c92d";
+import * as R from "./render.js?v=1806c92d";
+import { FXG } from "./assets.js?v=1806c92d";
+import * as B from "./blocking.js?v=1806c92d";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=1806c92d";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1806c92d";
+import { HANDBOOK } from "./handbook.js?v=1806c92d";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=7ad9c6e0";
-import * as V3 from "./view3d.js?v=7ad9c6e0";
-import { makeBoard } from "./show.js?v=7ad9c6e0";
-import * as SET from "./sets.js?v=7ad9c6e0";
-import * as HU from "./human.js?v=7ad9c6e0";
-import { findWalls } from "./trace.js?v=7ad9c6e0";
-import { blenderScript } from "./blender.js?v=7ad9c6e0";
-import * as TR from "./track.js?v=7ad9c6e0";
-import * as RIG from "./rigs.js?v=7ad9c6e0";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=7ad9c6e0";
-import { Library } from "./library.js?v=7ad9c6e0";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=1806c92d";
+import * as V3 from "./view3d.js?v=1806c92d";
+import { makeBoard } from "./show.js?v=1806c92d";
+import * as SET from "./sets.js?v=1806c92d";
+import * as HU from "./human.js?v=1806c92d";
+import { findWalls } from "./trace.js?v=1806c92d";
+import { blenderScript } from "./blender.js?v=1806c92d";
+import * as TR from "./track.js?v=1806c92d";
+import * as RIG from "./rigs.js?v=1806c92d";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=1806c92d";
+import { Library } from "./library.js?v=1806c92d";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -28,7 +28,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=7ad9c6e0";
+} from "./catalog.js?v=1806c92d";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");

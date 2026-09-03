@@ -23,8 +23,8 @@
 // green face, and it is a mistake the data model here cannot express.
 
 import { UNITS_PER_FOOT, SKIN_TONES, HAIR_COLOURS, HAIR_STYLES,
-         BUILDS, HAND_PROPS } from "./catalog.js?v=7ad9c6e0";
-import { project } from "./view3d.js?v=7ad9c6e0";
+         BUILDS, HAND_PROPS } from "./catalog.js?v=1806c92d";
+import { project } from "./view3d.js?v=1806c92d";
 
 const ft = (n) => n * UNITS_PER_FOOT;
 
@@ -47,11 +47,36 @@ const hex = (c) => {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 };
 
-/** A colour at a brightness, kept off both ends so nothing goes to mud. */
+/**
+ * A colour at a brightness, kept off both ends so nothing goes to mud.
+ *
+ * Memoised, because this is the hottest thing in the renderer by a distance.
+ * It runs once per facet — twenty people in a wide shot is sixteen thousand
+ * facets — and each call parsed a string and built four more. That is a
+ * hundred thousand short-lived strings a frame, which is most of what the
+ * garbage collector was doing while you tried to drag a camera.
+ *
+ * The brightness is quantised on the way in. Nobody can see a 256th of a stop
+ * and it turns an unbounded key space into a small one: a scene has a handful
+ * of colours in it, so the table settles within the first frame and every
+ * frame after that is lookups.
+ */
+const shadeCache = new Map();
 const shade = (c, k) => {
+  const q = Math.round(clamp(k, 0, 4) * 128);
+  const key = c + "|" + q;
+  const hit = shadeCache.get(key);
+  if (hit !== undefined) return hit;
   const [r, g, b] = hex(c);
-  const f = (x) => clamp(Math.round(x * k), 12, 255).toString(16).padStart(2, "0");
-  return "#" + f(r) + f(g) + f(b);
+  const kk = q / 128;
+  const f = (x) => clamp(Math.round(x * kk), 12, 255).toString(16).padStart(2, "0");
+  const out = "#" + f(r) + f(g) + f(b);
+  // A cap, so a pathological scene cannot grow this without bound. Cleared
+  // rather than evicted one at a time: it refills in a frame and the bookkeeping
+  // for anything cleverer costs more than the misses do.
+  if (shadeCache.size > 40000) shadeCache.clear();
+  shadeCache.set(key, out);
+  return out;
 };
 
 /**
@@ -1006,8 +1031,18 @@ export function drawHuman(out, cam, p, h, {
   // How much of a person is worth drawing from here. Close up you want the
   // face; from across a room you want a silhouette, and the difference is a
   // lot of polygons nobody can see.
+  //
+  // Decided by how much of the frame they fill rather than by how far away
+  // they are, because those are not the same question. Somebody twenty feet
+  // out is a full-length figure on a 200mm and a speck on a 14mm, and judging
+  // it on distance alone means building a face nobody can see on the wide and
+  // refusing to build one on the long — which is exactly the shot where the
+  // face is the point.
   const dist = Math.hypot(cam.x - p.x, cam.y - p.y);
-  const near = dist < m.H * 13, far = dist > m.H * 34;
+  const share = cam.tanV
+    ? m.H / Math.max(1, dist) / (2 * cam.tanV)   // fraction of frame height
+    : m.H * 13 / Math.max(1, dist) / 13;
+  const near = share > 0.22, far = share < 0.075;
   const lod = far ? { lat: 7, lon: 10, sides: 7, face: false }
     : near ? { lat: 18, lon: 28, sides: 22, face: true }
     : { lat: 12, lon: 18, sides: 13, face: true };

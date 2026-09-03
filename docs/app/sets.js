@@ -19,8 +19,8 @@
 // people keep and others would be annoyed to inherit — so that is a choice
 // rather than a rule, and it is off by default.
 
-import * as H from "./hcw.js?v=7ad9c6e0";
-import { LIGHTING, PRODUCTION, ANNOTATION } from "./catalog.js?v=7ad9c6e0";
+import * as H from "./hcw.js?v=1806c92d";
+import { LIGHTING, PRODUCTION, ANNOTATION } from "./catalog.js?v=1806c92d";
 
 const GRIP = new Set([...LIGHTING, ...PRODUCTION].map(([k]) => k));
 const MARKUP = new Set(ANNOTATION.map(([k]) => k));
