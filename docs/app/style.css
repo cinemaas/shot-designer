@@ -685,3 +685,13 @@ body.boarding #stage { pointer-events: none; }
   .bd-line.has-day { grid-template-columns: 18px 4.5em minmax(90px, 1fr) 7.5em 8em auto; }
   .bd-meta, .bd-cast { display: none; }
 }
+
+/* The look chooser on a still: a row of names, one of them lit. */
+.looks { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.looks button {
+  padding: 7px 11px; border: 1px solid #d3d8de; border-radius: 7px;
+  background: #fff; font: inherit; font-size: 12.5px; color: #2b3138;
+  cursor: pointer;
+}
+.looks button:hover { border-color: #9fa8b2; }
+.looks button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }

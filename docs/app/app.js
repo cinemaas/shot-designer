@@ -1,26 +1,26 @@
 // Marks — overheads, blocking and shot lists for people who shoot.
 // reading and writing the same .hcw scene files.
 
-import { BRAND, SLUG } from "./brand.js?v=1806c92d";
-import * as H from "./hcw.js?v=1806c92d";
-import * as R from "./render.js?v=1806c92d";
-import { FXG } from "./assets.js?v=1806c92d";
-import * as B from "./blocking.js?v=1806c92d";
-import { byCategory, EXTRA_LABEL } from "./props.js?v=1806c92d";
-import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=1806c92d";
-import { HANDBOOK } from "./handbook.js?v=1806c92d";
+import { BRAND, SLUG } from "./brand.js?v=4b38ac57";
+import * as H from "./hcw.js?v=4b38ac57";
+import * as R from "./render.js?v=4b38ac57";
+import { FXG } from "./assets.js?v=4b38ac57";
+import * as B from "./blocking.js?v=4b38ac57";
+import { byCategory, EXTRA_LABEL } from "./props.js?v=4b38ac57";
+import { castOf, parseShot, describe, placeFor, standardCoverage, LENSES } from "./shots.js?v=4b38ac57";
+import { HANDBOOK } from "./handbook.js?v=4b38ac57";
 import { FORMATS, GATES, SQUEEZES, gateOf, projectedAspect,
-         fieldOfView, formatKey, findFormat } from "./optics.js?v=1806c92d";
-import * as V3 from "./view3d.js?v=1806c92d";
-import { makeBoard } from "./show.js?v=1806c92d";
-import * as SET from "./sets.js?v=1806c92d";
-import * as HU from "./human.js?v=1806c92d";
-import { findWalls } from "./trace.js?v=1806c92d";
-import { blenderScript } from "./blender.js?v=1806c92d";
-import * as TR from "./track.js?v=1806c92d";
-import * as RIG from "./rigs.js?v=1806c92d";
-import { Cloud, sceneId, connectLive } from "./storage.js?v=1806c92d";
-import { Library } from "./library.js?v=1806c92d";
+         fieldOfView, formatKey, findFormat } from "./optics.js?v=4b38ac57";
+import * as V3 from "./view3d.js?v=4b38ac57";
+import { makeBoard } from "./show.js?v=4b38ac57";
+import * as SET from "./sets.js?v=4b38ac57";
+import * as HU from "./human.js?v=4b38ac57";
+import { findWalls } from "./trace.js?v=4b38ac57";
+import { blenderScript } from "./blender.js?v=4b38ac57";
+import * as TR from "./track.js?v=4b38ac57";
+import * as RIG from "./rigs.js?v=4b38ac57";
+import { Cloud, sceneId, connectLive } from "./storage.js?v=4b38ac57";
+import { Library } from "./library.js?v=4b38ac57";
 import {
   PROPS, FURNITURE, VEHICLES, NATURE, PRODUCTION, ANNOTATION,
   LOOKED_AT, CARRIED,
@@ -28,7 +28,7 @@ import {
   CHARACTER_COLORS, CAMERA_COLORS, SHOT_SIZES, SHOT_FUNCTIONS, LAYERS,
   SCENERY_LAYERS,
   GRID, UNITS_PER_FOOT, feet,
-} from "./catalog.js?v=1806c92d";
+} from "./catalog.js?v=4b38ac57";
 
 const $ = (s) => document.querySelector(s);
 const stage = $("#stage"), world = $("#world"), hud = $("#hud");
@@ -1806,6 +1806,114 @@ async function frameToStoryboard(cam, svg, W, HGT, mm, fmt) {
  * off whatever the camera is rigged on, and who is where measured from the
  * camera rather than described by eye.
  */
+/**
+ * The look to render it in.
+ *
+ * A wireframe and a list of positions describe a shot but not a film. Left to
+ * itself the model returns a well-lit estate agent's photograph of the room,
+ * which is the one thing a director does not need to see — they can already
+ * picture that. What they cannot picture is the thing you are proposing.
+ *
+ * These are written the way a DP would say them rather than as camera specs,
+ * because that is what an image model actually responds to.
+ */
+const LOOKS = {
+  blockbuster: {
+    label: "Blockbuster",
+    note: "Big-budget feature look. Deep contrast, rich shadow, strong key "
+        + "with a hard edge, cool ambient against warm practicals, "
+        + "anamorphic feel, gentle halation on the highlights.",
+  },
+  moody: {
+    label: "Moody / dramatic",
+    note: "Low key and dramatic. One clear source, most of the frame falling "
+        + "into shadow, faces half lit, deep blacks with detail held in them. "
+        + "Restrained colour.",
+  },
+  naturalistic: {
+    label: "Naturalistic",
+    note: "Available light. Soft directional daylight from the windows, "
+        + "believable falloff, muted natural colour, nothing that looks lit.",
+  },
+  golden: {
+    label: "Golden hour",
+    note: "Late warm sun, low and raking, long shadows, glow and flare through "
+        + "the frame, warm highlights against cool shadow.",
+  },
+  noir: {
+    label: "Hard / noir",
+    note: "Hard single source, sharp-edged shadows, strong pools of light and "
+        + "dark, high contrast, near-monochrome palette.",
+  },
+  clean: {
+    label: "Clean / commercial",
+    note: "Bright, even, high-key. Soft large sources, minimal shadow, clean "
+        + "modern colour. Product and comedy lighting.",
+  },
+  plain: {
+    label: "No look — just the room",
+    note: "",
+  },
+};
+
+const lookKey = () => {
+  try { return localStorage.getItem("sd.look") || "blockbuster"; }
+  catch { return "blockbuster"; }
+};
+const setLook = (k) => {
+  try { localStorage.setItem("sd.look", k); } catch { /* private window */ }
+};
+
+/**
+ * What somebody looks like, for the brief.
+ *
+ * The prompt has always known this person is called Jeff. What it has never
+ * said is what Jeff looks like, so every still invented a different one — and
+ * a set of frames where the same character is a different human being in each
+ * is worse than no frames at all.
+ *
+ * The cast record is the fix: appearance is set once for the production and
+ * every brief in it says the same thing.
+ */
+function lookOfCast(o) {
+  const name = (H.get(o, "castName") || "").trim();
+  const entry = name && CAST.find(
+    (c) => (c.name || "").toLowerCase() === name.toLowerCase());
+  const bits = [];
+
+  const said = (entry && entry.described) || H.get(o, "described") || "";
+  if (said) bits.push(said.trim().replace(/\.$/, ""));
+
+  // Falls back to what the figure itself is wearing and built like, so a
+  // character nobody has written a line about still comes out consistent.
+  if (!said) {
+    const build = H.get(o, "build") || "";
+    const hair = (H.get(o, "hairStyle") || "").replace(/_/g, " ");
+    const who = H.getBool(o, "female") ? "woman" : "man";
+    bits.push([build, who].filter(Boolean).join(" "));
+    if (hair && hair !== "bald") bits.push(hair + " hair");
+  }
+  return bits.filter(Boolean).join(", ");
+}
+
+/** How tight the shot is, named rather than left to be inferred. */
+function sizeOf(cam, dist, mm, fmt) {
+  // Frame height at that distance, against a standing figure. The name a
+  // director would use, which the model understands far better than a lens
+  // length and a distance it has to do the trigonometry on.
+  const fov = fieldOfView(mm > 0 ? mm : 32, fmt, fmt.squeeze);
+  const frameH = 2 * Math.tan(fov.v / 2) * dist;
+  const person = V3.STATURE.any;
+  const share = person / Math.max(1, frameH);
+  return share > 2.2 ? "extreme close-up"
+    : share > 1.35 ? "close-up"
+    : share > 0.95 ? "medium close-up"
+    : share > 0.62 ? "medium shot"
+    : share > 0.42 ? "medium wide"
+    : share > 0.24 ? "wide shot"
+    : "very wide shot";
+}
+
 function shotBrief(cam, view, mm, fmt, lensFt) {
   const p = drawnPos(cam);
   const a = R.angleOf(cam);
@@ -1836,7 +1944,10 @@ function shotBrief(cam, view, mm, fmt, lensFt) {
       const raised = up > 0 ? `, ${up} ft off the floor` : "";
       const has = V3.heldOf(o);
       const holding = has && has.w ? `, holding a ${has.label.toLowerCase()}` : "";
-      return `${nameOf(o)} — ${posture}${raised}${holding}, ${side}, ` +
+      const looks = lookOfCast(o);
+      const size = sizeOf(cam, dist, mm, fmt);
+      return `${nameOf(o)}${looks ? ` (${looks})` : ""} — ${size}, ` +
+             `${posture}${raised}${holding}, ${side}, ` +
              `${feet(dist)} from lens, ${facing}`;
     })
     .filter(Boolean);
@@ -1864,8 +1975,12 @@ function shotBrief(cam, view, mm, fmt, lensFt) {
   const rig = rigID ? byID(rigID) : null;
   const support = rig ? RIG.rigSpec(rig)?.label : "sticks";
 
+  const look = LOOKS[lookKey()] || LOOKS.blockbuster;
+
   return [
     `Photoreal film still. ${shotName(cam) || "Shot"}.`,
+    look.note ? `` : undefined,
+    look.note ? `Look: ${look.note}` : undefined,
     ``,
     `Camera: ${mm > 0 ? mm + "mm" : "32mm"} on ${formatKey(fmt)}, ` +
       `lens ${lensFt.toFixed(1)} ft off the floor, on ${support}. ` +
@@ -1875,8 +1990,12 @@ function shotBrief(cam, view, mm, fmt, lensFt) {
     ...people.map((t) => `  - ${t}`),
     seen.length ? `Dressing in the room: ${seen.join(", ").toLowerCase()}.` : "",
     ``,
-    `Match the attached overhead frame exactly for camera position, lens height,`,
-    `and where everybody stands. Keep the geometry; make the room real.`,
+    `Match the attached frame exactly for camera position, lens height, and`,
+    `where everybody stands. Keep the geometry; make the room real.`,
+    people.length > 0
+      ? `The people are described above — draw those people, not new ones. `
+        + `Their appearance has to stay the same from shot to shot.`
+      : undefined,
   ].filter((l) => l !== undefined).join("\n");
 }
 
@@ -1908,11 +2027,15 @@ async function copyBrief(cam, view, mm, fmt, lensFt) {
  * card beside its camera, so a beat sheet ends up with the plan and the look
  * of the shot on the same page.
  */
-async function makeStill(a) {
+async function makeStill(a, { asked = false } = {}) {
   const { cam, svg, W, H: HGT, mm, fmt, lensFt, view } = a;
   let have = {};
   try { ({ keys: have } = await api("/api/keys")); } catch { /* offline or cloud */ }
   if (!have.openai) return offerKey(a);
+
+  // Which look, asked once per still rather than buried in a settings page —
+  // it is the decision you are actually making, and it changes every time.
+  if (!asked) return chooseLook(a);
 
   toast("Making the still — this takes a minute…", 180000);
   try {
@@ -1939,6 +2062,34 @@ async function makeStill(a) {
 }
 
 /** No key yet: offer to add one, or do it the way you already do it by hand. */
+/** Pick the look, then go. Remembered, so the next one defaults to it. */
+function chooseLook(a) {
+  const box = document.createElement("div");
+  box.className = "looks";
+  let picked = lookKey();
+  const buttons = [];
+  for (const [key, look] of Object.entries(LOOKS)) {
+    const b = document.createElement("button");
+    b.textContent = look.label;
+    b.className = key === picked ? "on" : "";
+    b.title = look.note || "The room as it is, with no look imposed";
+    b.onclick = () => {
+      picked = key;
+      for (const other of buttons) other.className = other === b ? "on" : "";
+    };
+    buttons.push(b);
+    box.append(b);
+  }
+  sheet({
+    title: "Make a still from this frame",
+    sub: "The frame goes up as a reference and comes back as a picture. "
+       + "Pick how it should look.",
+    body: box,
+    okLabel: "Make it",
+    onOK: () => { setLook(picked); makeStill(a, { asked: true }); },
+  });
+}
+
 function offerKey(a) {
   const { close, box } = sheet({
     title: "Make a still from this frame",
@@ -1952,7 +2103,7 @@ function offerKey(a) {
       if (!key.trim()) return;
       try {
         await post("/api/keys", { name: "openai", value: key.trim() });
-        makeStill(a);
+        makeStill(a);          // which asks for the look next
       } catch (e) { toast("Could not save the key: " + e.message, 6000); }
     },
   });
@@ -5048,7 +5199,9 @@ function mainMenu(x, y) {
     "-",
     { label: Cloud.connected ? "Cloud…" : "Connect to Cloud…", run: () => cloudMenu(x, y) },
     { label: "Camera Package…", run: packageDialog },
-    { label: "Image Generation…", run: imageKeyDialog },
+    { label: isLocal() ? "Image Generation…"
+                       : "Image Generation… (only on your own Mac)",
+      run: imageKeyDialog, disabled: !isLocal() },
     { label: "Workspaces…", run: () => workspaceMenu(x, y) },
     { label: "Appearance…", run: () => themeMenu(x, y) },
     { label: "Handbook", key: "?", run: openHandbook },
@@ -7418,7 +7571,18 @@ const withWorkspace = (url) => {
 
 const api = async (url, opts) => {
   const r = await fetch(withWorkspace(url), opts);
-  const j = await r.json();
+  // A hosted copy has no server behind it, so every /api call lands on the
+  // host's own 404 page. Parsing that as JSON gives "Unexpected token '<'",
+  // which tells you nothing about what actually went wrong.
+  const text = await r.text();
+  let j;
+  try { j = JSON.parse(text); }
+  catch {
+    throw new Error(
+      isLocal() ? `the app server returned ${r.status}, not an answer`
+                : "this copy is the read-only one on the web — it has no server "
+                  + "behind it. Open the app on your own Mac to do that.");
+  }
   if (j.error) throw new Error(j.error);
   return j;
 };
